@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- Bootstrap CSS -->
+    <link href="lib/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <script type="text/javascript" src="lib/jquery-3.6.0.min.js"></script>
+    <script type="text/javascript" src="lib/bootstrap.min.js" integrity="sha384-B0UglyR+jN6CkvvICOB2joaf5I4l3gm9GU6Hc1og6Ls7i6U/mkkaduKaBhlAXv9k" crossorigin="anonymous"></script>
+    <script type="text/javascript" src="lib/crypto-js.min.js"></script>
+    <script type="text/javascript" src="lib/commonWS.js"></script>
+    <script type="text/javascript" src="lib/chart.js"></script>
+    <script type="text/javascript" src="lib/moment.js"></script>
+    <script type="text/javascript" src="lib/chart-adapter-moment.js"></script>
+    <script type="text/javascript">
+        let Switches = [
+            <% Object.keys(switches).forEach(function(prop) { %>
+                "<%- switches[prop].Name%>",
+            <% }); %>
+        ]
+        let servers = ["wbs.chilton.tv"];
+    </script>
+    <script type="text/javascript" src="ui.js"></script>
+
+    <title>Argos</title>
+    <link id="favicon_48" rel="icon" href="media/network-48.png" sizes="48x48">
+    <link id="favicon_96" rel="icon" href="media/network-96.png" sizes="96x96">
+</head>
+
+<body class="bg-dark">
+    <div class="container-fluid bg-dark">
+        <div class="row mt-1">
+            <div class="btn-group">
+                <div class="w-auto" id="broken"></div>
+                <div class="w-auto ms-2" id="webBroken"></div>
+            </div>
+        </div>
+        <div class="row mt-3">
+            <div class="col-md-3 text-light text-muted" id="col-alive">
+                <h4>Missing devices</h4>
+                <span class="text-muted">Last updated <span id="lastAlive"></span></span>
+                <table id="alive" class="table table-dark text-muted">
+                    <thead>
+                        <th scope="col">Name</th>
+                        <% Object.keys(switches).forEach(function(prop) { %>
+                            <th scope="col"><%- switches[prop].Name%></th>
+                        <% }); %>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+            <div class="col-md-4 text-light text-muted" id="col-mac">
+                <h4>MAC flap</h4>
+                <span class="text-muted">Last updated <span id="lastMac"></span></span>
+                <table id="mac" class="table table-dark text-muted">
+                    <thead>
+                        <th scope="col">Switch</th>
+                        <th scope="col">Port</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">Phy State</th>
+                        <th scope="col">Last Change</th>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+            <div class="col-md-5 text-light text-muted" id="col-phy">
+                <h4>PHY FEC uncorrected errors</h4>
+                <span class="text-muted">Last updated <span id="lastPhy"></span></span>
+                <table id="phy" class="table table-dark text-muted">
+                    <thead>
+                        <th scope="col">Switch</th>
+                        <th scope="col">Port</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">Changes</th>
+                        <th scope="col">Last Change</th>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="row mt-5">
+            <div class="col-md-4 text-light text-muted" id="col-ups">
+                <h4>UPS status</h4>
+                <span class="text-muted">Last updated <span id="lastUps"></span></span>
+                <table id="ups" class="table table-dark text-muted">
+                    <thead>
+                        <th scope="col">Name</th>
+                        <th scope="col">Input</th>
+                        <th scope="col">Output</th>
+                        <th scope="col">Autonomy</th>
+                        <th scope="col">Load</th>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+            <div class="col-md-4 text-light text-muted" id="col-tra">
+                <h4>Low fibre RX</h4>
+                <span class="text-muted">Last updated <span id="lastTra"></span></span>
+                <table id="tra" class="table table-dark text-muted">
+                    <thead>
+                        <th scope="col">Switch</th>
+                        <th scope="col">Port</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">RX power</th>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="row mt-5">
+            <div class="col-md-4 text-light" id="col-ping">
+                <h4>Argos to internet pings</h4>
+                <span class="text-muted">Last updated <span id="lastPing"></span></span>
+                <canvas id="pingChart"></canvas>
+                <div class="buttonBox">
+                  <button class="pingBut btn btn-secondary btn-sm" data-time="2419200">Last Month</button>
+                  <button class="pingBut btn btn-secondary btn-sm" data-time="604800">Last Week</button>
+                  <button class="pingBut btn btn-secondary btn-sm" data-time="172800">2 Days</button>
+                  <button class="pingBut btn btn-secondary btn-sm" data-time="86400">1 Day</button>
+                  <button class="pingBut btn btn-secondary btn-sm" data-time="43200">12 Hours</button>
+                  <button class="pingBut btn btn-secondary btn-sm" data-time="21600">6 Hours</button>
+                  <button class="pingBut btn btn-secondary btn-sm" data-time="7200">2 Hours</button>
+                  <button class="pingBut btn btn-secondary btn-sm" data-time="1800">30 Mins</button>
+                </div>
+            </div>
+            <div class="col-md-4 text-light" id="col-hot">
+                <h4>IQ Frame Temperatures</h4>
+                <span class="text-muted">Last updated <span id="lastHot"></span></span>
+                <canvas id="tempChart"></canvas>
+                <div class="buttonBox">
+                  <button class="tempBut btn btn-secondary btn-sm" data-time="2419200">Last Month</button>
+                  <button class="tempBut btn btn-secondary btn-sm" data-time="604800">Last Week</button>
+                  <button class="tempBut btn btn-secondary btn-sm" data-time="172800">2 Days</button>
+                  <button class="tempBut btn btn-secondary btn-sm" data-time="86400">1 Day</button>
+                  <button class="tempBut btn btn-secondary btn-sm" data-time="43200">12 Hours</button>
+                  <button class="tempBut btn btn-secondary btn-sm" data-time="21600">6 Hours</button>
+                  <button class="tempBut btn btn-secondary btn-sm" data-time="7200">2 Hours</button>
+                </div>
+            </div>
+            <div class="col-md-4 text-light" id="col-online">
+                <h4>Argos boots</h4>
+                <canvas id="bootChart"></canvas>
+                <pre class="infoBox" id="bootTime"></pre>
+            </div>
+        </div>
+        <div class="row mt-5 justify-content-md-center">
+            <div class="col-md-auto">
+                <button type="button" class="btn btn-danger btn-lg" id="cut">CUT TRANSMISSION</button>
+            </div>
+        </div>
+        <div style="position: fixed; bottom: 0px; right: 0px;"><img src="media/argos_gray.png"></div>
+    </body>
+
+</html>

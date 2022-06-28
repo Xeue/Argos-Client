@@ -1,0 +1,101 @@
+.disconnected::after {
+  background-color: rgb(0, 0, 0);
+  background-color: rgba(0, 0, 0, .46);
+  color: #fff;
+  content: "Disconnected";
+  font-size: 600%;
+  font-weight: 700;
+  height: 100%;
+  left: 0;
+  line-height: 80vh;
+  position: fixed;
+  text-align: center;
+  top: 0;
+  width: 100%;
+  z-index: 3;
+}
+
+body {
+  background-color: #000;
+  font-family: raleway;
+  font-variant-numeric: lining-nums
+}
+
+h1 {
+  color: #fff;
+  margin-left: 10px;
+  margin-top: 5px;
+}
+
+.panel {
+  flex: 1;
+  min-width: 400px;
+  padding: 10px;
+}
+
+#tempChart,
+#pingChart {
+  height: auto !important;
+  width: 100% !important;
+}
+
+.tempBut,
+.pingBut {
+  background: rgb(61, 61, 61);
+  border: none;
+  border-radius: 5px;
+  border-top: 1px rgb(47, 47, 47) solid;
+  box-sizing: border-box;
+  color: rgb(255, 255, 255);
+  cursor: pointer;
+  min-width: 50px;
+  padding: .3em .6em;
+  transition: .2s;
+}
+
+.pingBut:hover,
+.tempBut:hover {
+  background-color: rgb(22, 22, 22);
+  border-top: 1px rgb(47, 47, 47) solid;
+}
+
+.buttonBox {
+  margin-left: 10px;
+}
+
+.infoBox {
+  background: #3a3a3a;
+  border: 1px solid #4f4f4f;
+  border-radius: 5px;
+  color: #c4c4c4;
+  font-family: monospace;
+  margin: 10px;
+  padding: 10px;
+  width: fit-content;
+}
+
+#t_indicatior {
+  display: flex;
+  flex-wrap: wrap;
+  height: 100%;
+  left: 0;
+  overflow: auto;
+  position: fixed;
+  top: 0;
+  width: 100%;
+}
+
+.hidden {
+  left: 0 !important;
+  opacity: 0;
+  pointer-events: none
+}
+
+.hide {
+  border: 0 !important;
+  font-size: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 0 !important;
+}
