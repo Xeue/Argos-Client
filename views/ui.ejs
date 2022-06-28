@@ -7,9 +7,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <!-- Bootstrap CSS -->
-    <link href="lib/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="lib/bootstrap.min.css" rel="stylesheet">
+    <link href="css/ui.css" rel="stylesheet">
     <script type="text/javascript" src="lib/jquery-3.6.0.min.js"></script>
-    <script type="text/javascript" src="lib/bootstrap.min.js" integrity="sha384-B0UglyR+jN6CkvvICOB2joaf5I4l3gm9GU6Hc1og6Ls7i6U/mkkaduKaBhlAXv9k" crossorigin="anonymous"></script>
+    <script type="text/javascript" src="lib/bootstrap.min.js"></script>
+    <script type="text/javascript" src="lib/ejs.js"></script>
     <script type="text/javascript" src="lib/crypto-js.min.js"></script>
     <script type="text/javascript" src="lib/commonWS.js"></script>
     <script type="text/javascript" src="lib/chart.js"></script>
@@ -26,19 +28,22 @@
     <script type="text/javascript" src="ui.js"></script>
 
     <title>Argos</title>
-    <link id="favicon_48" rel="icon" href="media/network-48.png" sizes="48x48">
-    <link id="favicon_96" rel="icon" href="media/network-96.png" sizes="96x96">
+    <link id="favicon_48" rel="icon" href="img/icon/network-48.png" sizes="48x48">
+    <link id="favicon_96" rel="icon" href="img/icon/network-96.png" sizes="96x96">
 </head>
 
 <body class="bg-dark">
-    <div class="container-fluid bg-dark">
-        <div class="row mt-1">
+    <div id="loading" class="hidden"></div>
+
+    <main class="container-fluid bg-dark">
+        <section class="row mt-1">
             <div class="btn-group">
                 <div class="w-auto" id="broken"></div>
                 <div class="w-auto ms-2" id="webBroken"></div>
             </div>
-        </div>
-        <div class="row mt-3">
+            <button id="toggleConfig"></button>
+        </section>
+        <section class="row mt-3">
             <div class="col-md-3 text-light text-muted" id="col-alive">
                 <h4>Missing devices</h4>
                 <span class="text-muted">Last updated <span id="lastAlive"></span></span>
@@ -85,8 +90,8 @@
                     </tbody>
                 </table>
             </div>
-        </div>
-        <div class="row mt-5">
+        </section>
+        <section class="row mt-5">
             <div class="col-md-4 text-light text-muted" id="col-ups">
                 <h4>UPS status</h4>
                 <span class="text-muted">Last updated <span id="lastUps"></span></span>
@@ -117,8 +122,8 @@
                     </tbody>
                 </table>
             </div>
-        </div>
-        <div class="row mt-5">
+        </section>
+        <section class="row mt-5">
             <div class="col-md-4 text-light" id="col-ping">
                 <h4>Argos to internet pings</h4>
                 <span class="text-muted">Last updated <span id="lastPing"></span></span>
@@ -153,13 +158,31 @@
                 <canvas id="bootChart"></canvas>
                 <pre class="infoBox" id="bootTime"></pre>
             </div>
-        </div>
-        <div class="row mt-5 justify-content-md-center">
+        </section>
+        <section class="row mt-5 justify-content-md-center">
             <div class="col-md-auto">
                 <button type="button" class="btn btn-danger btn-lg" id="cut">CUT TRANSMISSION</button>
             </div>
-        </div>
-        <div style="position: fixed; bottom: 0px; right: 0px;"><img src="media/argos_gray.png"></div>
-    </body>
+        </section>
+    </main>
+    
+    <article id="config" class="hidden">
+        <section class="bg-dark container text-light">
+            <div class="row mt-2">
+                <h3>Edit Devices</h3>
+            </div>
+            <div class="row mt-3">
+                <h4>Devices</h4>
+                <section id="configDevicesCont" class="mb-2">
+                    <button class="btn btn-primary collapsed" type="button" data-toggle="collapse" data-target="#configDevicesRaw">Show Raw</button>
+                    <pre id="configDevicesRaw" class="collapse mt-2"></pre>
+                </section>
+                <section id="configDevices" class="row"></section>
+            </div>
+        </section>
+    </article>
+
+    <figure style="position: fixed; bottom: 0px; right: 0px;"><img src="media/argos_gray.png"></figure>
+</body>
 
 </html>

@@ -1,0 +1,57 @@
+#toggleConfig {
+    background-image: url("../img/cog.svg");
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 100%;
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    height: 40px;
+    width: 40px;
+    opacity: 0.5;
+    transition: 0.3s;
+    border-radius: 40px;
+    cursor: pointer;
+    z-index: 2;
+    background-color: transparent;
+    border: none;
+    margin: 5px;
+}
+
+#toggleConfig:hover {
+    opacity: 1;
+}
+
+.rotate {
+    transform: rotateZ(72deg);
+}
+
+#config {
+  position: fixed;
+  background: rgba(0,0,0,0.5);
+  opacity: 1;
+  transition: 0.3s;
+  display: grid;
+  place-items: center;
+  inset: 0;
+}
+#config.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#loading {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0,0,0,0.5);
+  background-image: url("/media/loading.svg");
+  background-repeat: no-repeat;
+  background-position: center;
+  opacity: 1;
+  transition: 0.3s;
+}
+
+#loading.hidden {
+  opacity: 0;
+  pointer-events: none;
+}

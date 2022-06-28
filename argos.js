@@ -19,7 +19,14 @@ const https = require('https');
 const fs = require('fs');
 require('./logs.js')();
 
-const config = JSON.parse(fs.readFileSync(__dirname + "/config.conf"));
+
+let config;
+try {
+    config = JSON.parse(fs.readFileSync(__dirname + "/config.conf"));
+} catch (error) {
+    log("There is an error with the config file or it doesn't exist, please check it", "E");
+    process.exit(1);
+}
 const loggingLevel = config.loggingLevel ? config.loggingLevel : "W";
 const port = config.port ? config.port : 3000;
 const warningTemperature = config.warningTemperature ? config.warningTemperature : 30;
@@ -72,13 +79,18 @@ printHeader(asci);
 
 
 function loadData(file) {
-    let dataRaw = fs.readFileSync(`${__dirname}/data/${file}.json`);
-    let data;
     try {
-        data = JSON.parse(dataRaw);
-        return data;
+        let dataRaw = fs.readFileSync(`${__dirname}/data/${file}.json`);
+        let data;
+        try {
+            data = JSON.parse(dataRaw);
+            return data;
+        } catch (error) {
+            logObj(`There is an error with the syntax of the JSON in ${file}.json file`, error, "E");
+            return [];
+        }
     } catch (error) {
-        logObj(`There is an error with the syntax of the JSON in ${file}.json file`, error, "W");
+        logObj(`Cloud not read the file ${file}.json, does it exist and does it have the right permissions?`, error, "E");
         return [];
     }
 };
@@ -142,6 +154,29 @@ app.get('/mac', (req, res) => {
 app.get('/devices', (req, res) => {
     log("Request for devices data", "D");
     res.send(JSON.stringify(data.devices))
+})
+
+app.get('/getConfig', (req, res) => {
+    log("Request for devices config", "D");
+    let catagory = req.query.catagory;
+    let data;
+    switch (catagory) {
+        case "switches":
+            data = switches();
+            break;
+        case "frames":
+            data = frames();
+            break;
+        case "ups":
+            data = ups();
+            break;
+        case "devices":
+            data = devices();
+            break;
+        default:
+            break;
+    }
+    res.send(JSON.stringify(data))
 })
 
 

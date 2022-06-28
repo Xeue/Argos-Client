@@ -10,20 +10,17 @@ let b = {};
 let a = {};
 let pings = {};
 let boots = {};
+let lastBroken = true
+let lastTra = -1
+let lastAlive = -1
+let lastMac = -1
+let lastPhy = -1
+let lastUps = -1
+let lastUpsHash = ""
 
 function socketDoOpen() {
   console.log("Registering as client");
   sendData({"command":"register"});
-}
-
-function waitForPing() {
-  pingTimeout = setTimeout(function(){
-    pings[new Date()] = 0;
-    pingChart.data.datasets[0].data[new Date()] = 0;
-    pingChart.update();
-    $("#pingTime").html("Late ping?");
-    waitForPing();
-  }, 10000);
 }
 
 function socketDoMessage(packet, header, payload, e) {
@@ -40,7 +37,6 @@ function socketDoMessage(packet, header, payload, e) {
             $("#pingTime").html(datePing);
           }
           pingChart.update();
-          waitForPing();
           break;
         case "boot":
           let dateBoot = new Date(payload.time);
@@ -240,28 +236,6 @@ function renderBootChart(boots) {
 
 }
 
-
-socketConnect("Browser");
-
-$(document).ready(function() {
-    updateTempchart("7200");
-    updatePingChart("7200");
-    $(document).click(function(e) {
-        $trg = $(e.target);
-        if ($trg.hasClass("tempBut")) {
-            let time = parseInt($trg.data("time"));
-            updateTempchart(time);
-        } else if ($trg.hasClass("pingBut")) {
-            let time = parseInt($trg.data("time"));
-            updatePingChart(time);
-        }
-    });
-
-  renderPingChart(pings);
-  renderBootChart(boots);
-  renderTempChart(f,m,b,a);
-});
-
 function updateTempchart(time) {
     let to = new Date().getTime()/1000;
     let from = to - time;
@@ -340,23 +314,6 @@ function saySomething(text) {
     }
 }
 
-$(document).ready(function () {
-    getBroken()
-    getDevices()
-    getMac()
-    getPhy()
-    getUps()
-    getFibre()
-
-    setInterval(updateLast, 1000)
-
-    $('button#cut').on('click', () => {
-        let audio = new Audio('media/cut.ogg')
-        audio.play()
-    })
-});
-
-let lastTra = -1
 function getFibre() {
     $.getJSON(`${server}fibre`, function (data) {
         $('table#tra tbody').empty()
@@ -386,7 +343,6 @@ function getFibre() {
     });
 }
 
-let lastBroken = true
 function getBroken() {
     $.get(`${server}broken`, function (data) {
         lastBroken = false
@@ -402,7 +358,6 @@ function getBroken() {
     })
 }
 
-let lastAlive = -1
 function getDevices() {
     $.getJSON(`${server}devices`, function (data) {
         $('table#alive tbody').empty()
@@ -428,7 +383,6 @@ function getDevices() {
     });
 }
 
-let lastMac = -1
 function getMac() {
     $.getJSON(`${server}mac`, function (data) {
         $('table#mac tbody').empty()
@@ -458,7 +412,6 @@ function getMac() {
     })
 }
 
-let lastPhy = -1
 function getPhy() {
     $.getJSON(`${server}phy`, function (data) {
         $('table#phy tbody').empty()
@@ -488,8 +441,6 @@ function getPhy() {
     })
 }
 
-let lastUps = -1
-let lastUpsHash = ""
 function getUps() {
     $.getJSON(`${server}ups`, function (data) {
         let hash = CryptoJS.MD5(JSON.stringify(data)).toString()
@@ -569,4 +520,84 @@ function prettifyTime(time) {
             return minutes + "minutes, " + seconds + " seconds ago"
         }
     }
+}
+
+function loading(state) {
+  if (state) {
+    $("#loading").removeClass("hidden");
+  } else {
+    $("#loading").addClass("hidden");
+  }
+}
+
+$(document).ready(function() {
+  socketConnect("Browser");
+  updateTempchart("7200");
+  updatePingChart("7200");
+  renderPingChart(pings);
+  renderBootChart(boots);
+  renderTempChart(f,m,b,a);
+  getBroken()
+  getDevices()
+  getMac()
+  getPhy()
+  getUps()
+  getFibre()
+  setInterval(updateLast, 1000)
+
+  $(document).click(function(e) {
+    $trg = $(e.target);
+    if ($trg.hasClass("tempBut")) {
+      let time = parseInt($trg.data("time"));
+      updateTempchart(time);
+    } else if ($trg.hasClass("pingBut")) {
+      let time = parseInt($trg.data("time"));
+      updatePingChart(time);
+    } else if ($trg.is("#toggleConfig")) {
+      $trg.toggleClass("rotate");
+      loading(true);
+      let promises = [
+        getConfig("switches"),
+        getConfig("frames"),
+        getConfig("ups"),
+        getConfig("devices")
+      ]
+      Promise.allSettled(promises).then(values => {
+        loading(false);
+        $("#config").toggleClass("hidden");
+        renderDevices(values[3].value);
+      }).catch(error => {
+        console.log(error);
+      })
+
+    }
+  });
+
+  $('button#cut').on('click', () => {
+    let audio = new Audio('media/cut.ogg')
+    audio.play()
+  })
+
+});
+
+function getConfig(catagory) {
+  return $.getJSON(`${server}getConfig?catagory=${catagory}`);
+}
+
+function renderDevices(devicesData) {
+  $("#configDevicesRaw").html(JSON.stringify(devicesData, undefined, 2));
+  let devices = `<% for(i = 0; i < devices.length; i++) { %>
+        <div class="card text-white bg-secondary mb-2 col-2 ms-2">
+          <!--<img class="card-img-top" src="..." alt="Card image cap">-->
+          <div class="card-body">
+            <h5 class="card-title"><%-devices[i].name%></h5>
+            <h6 class="card-subtitle">
+              Slots <%-devices[i].start%> to <%-devices[i].end%>
+            </h6>
+            <div class="card-text"><%-devices[i].description%></div>
+            <button type="button" class="btn btn-danger">Edit</button>
+          </div>
+        </div>
+        <% } %>`;
+  $("#configDevices").html(ejs.render(devices, {devices: devicesData}));
 }
