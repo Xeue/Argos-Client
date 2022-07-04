@@ -34,6 +34,7 @@
   display: grid;
   place-items: center;
   inset: 0;
+  padding: 20px;
 }
 #config.hidden {
   opacity: 0;
@@ -54,4 +55,8 @@
 #loading.hidden {
   opacity: 0;
   pointer-events: none;
+}
+
+td {
+  vertical-align: middle;
 }

@@ -1,22 +1,21 @@
 const fs = require('fs');
 
-let r = "\x1b[31m";
-let g = "\x1b[32m";
-let y = "\x1b[33m";
-let b = "\x1b[34m";
-let p = "\x1b[35m";
-let c = "\x1b[36m";
-let w = "\x1b[37m";
-let reset = "\x1b[0m";
-let dim = "\x1b[2m";
-let bright = "\x1b[1m";
-
 module.exports = function (){
-    let createLogFile = true;
-    let logsFileName = "Test";
-    let configLocation = __dirname;
-    let loggingLevel = "A";
-    let debugLineNum = true;
+    this.r = "\x1b[31m";
+    this.g = "\x1b[32m";
+    this.y = "\x1b[33m";
+    this.b = "\x1b[34m";
+    this.p = "\x1b[35m";
+    this.c = "\x1b[36m";
+    this.w = "\x1b[37m";
+    this.reset = "\x1b[0m";
+    this.dim = "\x1b[2m";
+    this.bright = "\x1b[1m";
+    this.createLogFile = true;
+    this.logsFileName = "Test";
+    this.configLocation = __dirname;
+    this.loggingLevel = "A";
+    this.debugLineNum = true;
 
     this.setLogsConf = function(conf) {
         createLogFile = conf?.createLogFile;
@@ -29,7 +28,7 @@ module.exports = function (){
     this.printHeader = function(asci) {
         console.log('\033[2J');
         console.log('\033c');
-        for (let index = 0; index < asci.length; index++) {
+        for (this.index = 0; index < asci.length; index++) {
             const line = asci[index];
             console.log(line);
             logFile(line, true);
@@ -58,23 +57,23 @@ module.exports = function (){
     },
 
     this.log = function(message, level, lineNumInp) {
-        let e = new Error();
-        let stack = e.stack.toString().split(/\r\n|\n/);
-        let parentModFilename = module.parent.filename.split(/\\|\//).pop()
-        let lineNum = '('+stack[2].substr(stack[2].indexOf(parentModFilename)+parentModFilename.length+1);
+        this.e = new Error();
+        this.stack = e.stack.toString().split(/\r\n|\n/);
+        this.parentModFilename = module.parent.filename.split(/\\|\//).pop()
+        this.lineNum = '('+stack[2].substr(stack[2].indexOf(parentModFilename)+parentModFilename.length+1);
         if (typeof lineNumInp !== "undefined") {
             lineNum = lineNumInp;
         }
         if (lineNum[lineNum.length - 1] !== ")") {
             lineNum += ")";
         }
-        let timeNow = new Date();
-        let hours = String(timeNow.getHours()).padStart(2, "0");
-        let minutes = String(timeNow.getMinutes()).padStart(2, "0");
-        let seconds = String(timeNow.getSeconds()).padStart(2, "0");
-        let millis = String(timeNow.getMilliseconds()).padStart(3, "0");
+        this.timeNow = new Date();
+        this.hours = String(timeNow.getHours()).padStart(2, "0");
+        this.minutes = String(timeNow.getMinutes()).padStart(2, "0");
+        this.seconds = String(timeNow.getSeconds()).padStart(2, "0");
+        this.millis = String(timeNow.getMilliseconds()).padStart(3, "0");
 
-        let timeString = `${hours}:${minutes}:${seconds}.${millis}`;
+        this.timeString = `${hours}:${minutes}:${seconds}.${millis}`;
 
         if (typeof message === "undefined") {
             log(`Log message from line ${p}${lineNum}${reset} is not defined`, "E");
@@ -98,13 +97,14 @@ module.exports = function (){
         message = message.replace(/undefined/g, y + "undefined" + w);
 
         const regexp = / \((.*?):(.[0-9]*):(.[0-9]*)\)"/g;
-        let matches = message.matchAll(regexp);
-        for (let match of matches) {
+        this.matches = message.matchAll(regexp);
+        for (this.match of matches) {
             message = message.replace(match[0], `" [${y}${match[1]}${reset}] ${p}(${match[2]}:${match[3]})${reset}`);
         }
 
         switch (level) {
             case "A":
+            case "I":
                 if (loggingLevel == "A") { //White
                     logSend(`[${timeString}]${w}  INFO: ${dim}${message}${bright} ${p}${lineNum}${reset}`);
                 }
@@ -115,6 +115,7 @@ module.exports = function (){
                 }
                 break;
             case "S":
+            case "N":
                 if (loggingLevel == "A" || loggingLevel == "D") { //Blue
                     logSend(`[${timeString}]${b} NETWK: ${w}${message} ${p}${lineNum}${reset}`);
                 }
@@ -130,18 +131,19 @@ module.exports = function (){
             case "H": //Green
                 logSend(`[${timeString}]${g}  HELP: ${w}${message}`);
                 break;
+            case "C":
             default: //Green
                 logSend(`[${timeString}]${g}  CORE: ${w}${message} ${p}${lineNum}${reset}`);
         }
     },
 
     this.logObj = function(message, obj, level) {
-        let e = new Error();
-        let stack = e.stack.toString().split(/\r\n|\n/);
-        let parentModFilename = module.parent.filename.split(/\\|\//).pop()
-        let lineNum = '('+stack[2].substr(stack[2].indexOf(parentModFilename)+parentModFilename.length+1);
+        this.e = new Error();
+        this.stack = e.stack.toString().split(/\r\n|\n/);
+        this.parentModFilename = module.parent.filename.split(/\\|\//).pop()
+        this.lineNum = '('+stack[2].substr(stack[2].indexOf(parentModFilename)+parentModFilename.length+1);
 
-        let combined = `${message}: ${JSON.stringify(obj, null, 4)}`;
+        this.combined = `${message}: ${JSON.stringify(obj, null, 4)}`;
         log(combined, level, lineNum);
     }
 
@@ -152,7 +154,7 @@ module.exports = function (){
     
     this.logFile = function(msg, sync = false) {
         if (createLogFile) {
-            let dir = `${configLocation}/logs`;
+            this.dir = `${configLocation}/logs`;
     
             if (!fs.existsSync(dir)) {
                 fs.mkdirSync(dir, {
@@ -160,13 +162,13 @@ module.exports = function (){
                 });
             }
     
-            let today = new Date();
-            let dd = String(today.getDate()).padStart(2, '0');
-            let mm = String(today.getMonth() + 1).padStart(2, '0');
-            let yyyy = today.getFullYear();
+            this.today = new Date();
+            this.dd = String(today.getDate()).padStart(2, '0');
+            this.mm = String(today.getMonth() + 1).padStart(2, '0');
+            this.yyyy = today.getFullYear();
     
-            let fileName = `${dir}/${logsFileName}-[${yyyy}-${mm}-${dd}].log`;
-            let data = msg.replaceAll(r, "").replaceAll(g, "").replaceAll(y, "").replaceAll(b, "").replaceAll(p, "").replaceAll(c, "").replaceAll(w, "").replaceAll(reset, "").replaceAll(dim, "").replaceAll(bright, "") + "\n";
+            this.fileName = `${dir}/${logsFileName}-[${yyyy}-${mm}-${dd}].log`;
+            this.data = msg.replaceAll(r, "").replaceAll(g, "").replaceAll(y, "").replaceAll(b, "").replaceAll(p, "").replaceAll(c, "").replaceAll(w, "").replaceAll(reset, "").replaceAll(dim, "").replaceAll(bright, "") + "\n";
     
             if (sync) {
                 try {

@@ -27,22 +27,22 @@ try {
     log("There is an error with the config file or it doesn't exist, please check it", "E");
     process.exit(1);
 }
-const loggingLevel = config.loggingLevel ? config.loggingLevel : "W";
-const port = config.port ? config.port : 3000;
-const warningTemperature = config.warningTemperature ? config.warningTemperature : 30;
-const webEnabled = config.webEnabled ? config.webEnabled : false;
-const webEndpoint = config.webEndpoint;
-const textsEnabled = config.textsEnabled ? config.textsEnabled : false;
-const awsAccessKeyId = config.awsAccessKeyId;
-const awsSecretAccessKey = config.awsSecretAccessKey;
-const awsRegion = config.awsRegion;
-const devMode = config.devMode ? config.devMode : false;
+config.loggingLevel = config.loggingLevel ? config.loggingLevel : "W";
+config.port = config.port ? config.port : 3000;
+config.warningTemperature = config.warningTemperature ? config.warningTemperature : 30;
+config.webEnabled = config.webEnabled ? config.webEnabled : false;
+config.webEndpoint = config.webEndpoint;
+config.textsEnabled = config.textsEnabled ? config.textsEnabled : false;
+config.awsAccessKeyId = config.awsAccessKeyId;
+config.awsSecretAccessKey = config.awsSecretAccessKey;
+config.awsRegion = config.awsRegion;
+config.devMode = config.devMode ? config.devMode : false;
 
 const logsConfig = {
     "createLogFile": true,
     "logsFileName": "ArgosLogging",
     "configLocation": __dirname,
-    "loggingLevel": loggingLevel,
+    "loggingLevel": config.loggingLevel,
     "debugLineNum": true
 }
 setLogsConf(logsConfig);
@@ -65,15 +65,15 @@ const upsFrequency = 30;
 const devicesFrequency = 30;
 const tempFrequency = minutes(5);
 
-let awsCredentials = new AWS.Credentials(awsAccessKeyId, awsSecretAccessKey);
-if (textsEnabled) {
-    AWS.config.update({ region: awsRegion});
+let awsCredentials = new AWS.Credentials(config.awsAccessKeyId, config.awsSecretAccessKey);
+if (config.textsEnabled) {
+    AWS.config.update({ region: config.awsRegion});
     AWS.config.credentials = awsCredentials;
 }
 
 
 printHeader(asci);
-
+printConfig();
 
 /* Data */
 
@@ -94,18 +94,41 @@ function loadData(file) {
         return [];
     }
 };
+function writeData(file, data) {
+    try {
+        fs.writeFileSync(`${__dirname}/data/${file}.json`, JSON.stringify(data, undefined, 2));
+    } catch (error) {
+        logObj(`Cloud not write the file ${file}.json, do we have permission to access the file?`, error, "E");
+    }
+}
 
-function switches() {
-    return loadData("Switches");
+function switches(object) {
+    if (typeof object === "undefined") {
+        return loadData("Switches");
+    } else {
+        writeData("Switches", object);
+    }
 }
-function frames() {
-    return loadData("Frames");
+function frames(object) {
+    if (typeof object === "undefined") {
+        return loadData("Frames");
+    } else {
+        writeData("Frames", object);
+    }
 }
-function ups() {
-    return loadData("Ups");
+function ups(object) {
+    if (typeof object === "undefined") {
+        return loadData("Ups");
+    } else {
+        writeData("Ups", object);
+    }
 }
-function devices() {
-    return loadData("Devices");
+function devices(object) {
+    if (typeof object === "undefined") {
+        return loadData("Devices");
+    } else {
+        writeData("Devices", object);
+    }
 }
 
 
@@ -113,10 +136,11 @@ function devices() {
 
 app.set('views', __dirname + '/views');
 app.set('view engine', 'ejs');
+app.use(express.json());
 app.use(express.static('public'))
 
-app.listen(port, "0.0.0.0", () => {
-    log(`Argos can be accessed at http://localhost:${port}`, "C");
+app.listen(config.port, "0.0.0.0", () => {
+    log(`Argos can be accessed at http://localhost:${config.port}`, "C");
 })
 
 app.get('/',  (req, res) =>  {
@@ -179,6 +203,26 @@ app.get('/getConfig', (req, res) => {
     res.send(JSON.stringify(data))
 })
 
+app.post('/setswitches', (req, res) => {
+    log("Request to set switches config data", "D");
+    switches(req.body)
+    res.send("Done");
+})
+app.post('/setdevices', (req, res) => {
+    log("Request to set devices config data", "D");
+    devices(req.body)
+    res.send("Done");
+})
+app.post('/setups', (req, res) => {
+    log("Request to set ups config data", "D");
+    ups(req.body)
+    res.send("Done");
+})
+app.post('/setframes', (req, res) => {
+    log("Request to set frames config data", "D");
+    frames(req.body)
+    res.send("Done");
+})
 
 /* Request definitions */
 
@@ -590,15 +634,15 @@ function webLogTemp() {
 		} else {
 			tempAvg = tempSum / tempValid;
 			log(`Average temperature = ${tempAvg} deg C`, "D");
-			log(`Warning temperature = ${warningTemperature} deg C`, "D");
+			log(`Warning temperature = ${config.warningTemperature} deg C`, "D");
 
-			if (tempAvg > warningTemperature) {
+			if (tempAvg > config.warningTemperature) {
 				log(`Warning: Temperature over warning limit, sending SMS`, "W");
 				sendSms(`Commitment to environment sustainability failed, MCR IS MELTING: ${tempAvg} deg C`);
 			}
 		}
 
-		axios.post(`${webEndpoint}/temp`, Frames).then(
+		axios.post(`${config.webEndpoint}/temp`, Frames).then(
 			res => {log("Uploaded to website", "D")}
 		).catch(
 			error => {
@@ -611,7 +655,7 @@ function webLogTemp() {
 }
 
 function webLogPing() {
-	axios.get(`${webEndpoint}/ping`).then(
+	axios.get(`${config.webEndpoint}/ping`).then(
 		res => {log("Pinging website", "A")}
 	).catch(
 		error => {
@@ -621,7 +665,7 @@ function webLogPing() {
 }
 
 function webLogBoot() {
-	axios.get(`${webEndpoint}/boot`).then(
+	axios.get(`${config.webEndpoint}/boot`).then(
 		res => {log("Telling website I booted", "A")}
 	).catch(
 		error => {
@@ -631,7 +675,7 @@ function webLogBoot() {
 }
 
 function sendSms(msg) {
-    if (!textsEnabled) {
+    if (!config.textsEnabled) {
         return
     }
     
@@ -686,15 +730,30 @@ function trickleStart(callback, seconds) {
     return callback();
 }
 
+function printConfig() {
+    for (const key in config) {
+        if (Object.hasOwnProperty.call(config, key)) {
+            const value = config[key];
+            log(`Configuration option ${y}${key}${reset} has been set to: ${b}${value}${reset}`,"H");
+        }
+    }
+
+    for (const key in logsConfig) {
+        if (Object.hasOwnProperty.call(logsConfig, key)) {
+            const value = logsConfig[key];
+            log(`Configuration option ${y}${key}${reset} has been set to: ${b}${value}${reset}`,"H");
+        }
+    }
+}
 
 /* Start Functions */
 
-if (webEnabled) {
+if (config.webEnabled) {
     webLogBoot();
     trickleStart(webLogTemp, tempFrequency)
     .then(value => trickleStart(webLogPing, pingFrequency));
 }
-if (!devMode) {
+if (!config.devMode) {
     trickleStart(lldpLoop, lldpFrequency)
     .then(value => trickleStart(switchMac, switchStatsFrequency))
     .then(value => trickleStart(switchPhy, switchStatsFrequency))

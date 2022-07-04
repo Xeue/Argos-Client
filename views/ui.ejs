@@ -8,6 +8,7 @@
 
     <!-- Bootstrap CSS -->
     <link href="lib/bootstrap.min.css" rel="stylesheet">
+    <link href="lib/jsoneditor.css" rel="stylesheet">
     <link href="css/ui.css" rel="stylesheet">
     <script type="text/javascript" src="lib/jquery-3.6.0.min.js"></script>
     <script type="text/javascript" src="lib/bootstrap.min.js"></script>
@@ -17,6 +18,7 @@
     <script type="text/javascript" src="lib/chart.js"></script>
     <script type="text/javascript" src="lib/moment.js"></script>
     <script type="text/javascript" src="lib/chart-adapter-moment.js"></script>
+    <script type="text/javascript" src="lib/jsoneditor.js"></script>
     <script type="text/javascript">
         let Switches = [
             <% Object.keys(switches).forEach(function(prop) { %>
@@ -166,19 +168,114 @@
         </section>
     </main>
     
-    <article id="config" class="hidden">
-        <section class="bg-dark container text-light">
+    <article id="config" class="overflow-auto hidden">
+        <section class="bg-dark text-light alert text-nowrap container">
             <div class="row mt-2">
                 <h3>Edit Devices</h3>
             </div>
-            <div class="row mt-3">
-                <h4>Devices</h4>
-                <section id="configDevicesCont" class="mb-2">
-                    <button class="btn btn-primary collapsed" type="button" data-toggle="collapse" data-target="#configDevicesRaw">Show Raw</button>
-                    <pre id="configDevicesRaw" class="collapse mt-2"></pre>
-                </section>
-                <section id="configDevices" class="row"></section>
+
+            <div class="nav nav-tabs nav-justified" id="nav-tab" role="tablist">
+                <button class="nav-link active" id="nav-switches-tab" data-bs-toggle="tab" data-bs-target="#nav-switches" type="button" role="tab" aria-controls="nav-switches" aria-selected="true">Switches</button>
+                <button class="nav-link" id="nav-devices-tab" data-bs-toggle="tab" data-bs-target="#nav-devices" type="button" role="tab" aria-controls="nav-devices" aria-selected="false">Devices</button>
+                <button class="nav-link" id="nav-ups-tab" data-bs-toggle="tab" data-bs-target="#nav-ups" type="button" role="tab" aria-controls="nav-ups" aria-selected="false">Ups</button>
+                <button class="nav-link" id="nav-temperatures-tab" data-bs-toggle="tab" data-bs-target="#nav-temperatures" type="button" role="tab" aria-controls="nav-temperatures" aria-selected="false">Temperatures</button>
             </div>
+
+            <section class="tab-content">
+                <div class="tab-pane fade show active" id="nav-switches" data-editor="switches" role="tabpanel" aria-labelledby="nav-switches-tab">
+                    <div class="mt-3 mx-0">
+                        <button class="btn btn-primary toggleTableRaw" type="button" data-mode="table">Show Raw</button>
+                        <button class="btn btn-primary tableNew" type="button">Add new</button>
+                        <button class="btn btn-success tableSave" type="button">Save</button>
+                    </div>
+                    <div class="dataTable collapse show">
+                        <table class="table table-dark" data-editor="switches">
+                            <thead>
+                                <tr>
+                                    <th class="w-25">Name</th>
+                                    <th class="w-25">IP</th>
+                                    <th class="w-25"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="configSwitches"></tbody>
+                        </table>
+                    </div>
+                    <div class="dataRaw collapse mt-3">
+                        <div id="configSwitchesRaw"></div>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="nav-devices" data-editor="devices" role="tabpanel" aria-labelledby="nav-devices-tab">
+                    <div class="mt-3 mx-0">
+                        <button class="btn btn-primary toggleTableRaw" type="button" data-mode="table">Show Raw</button>
+                        <button class="btn btn-primary tableNew" type="button">Add new</button>
+                        <button class="btn btn-success tableSave" type="button">Save</button>
+                    </div>
+                    <div class="dataTable collapse show">
+                        <table class="table table-dark" data-editor="devices">
+                            <thead>
+                                <tr>
+                                    <th class="w-25">Hostname</th>
+                                    <th class="w-25">Slots</th>
+                                    <th class="w-25">Description</th>
+                                    <th class="w-25"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="configDevices"></tbody>
+                        </table>
+                    </div>
+                    <div class="dataRaw collapse mt-3">
+                        <div id="configDevicesRaw"></div>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="nav-ups" data-editor="ups" role="tabpanel" aria-labelledby="nav-ups-tab">
+                    <div class="mt-3 mx-0">
+                        <button class="btn btn-primary toggleTableRaw" type="button" data-mode="table">Show Raw</button>
+                        <button class="btn btn-primary tableNew" type="button">Add new</button>
+                        <button class="btn btn-success tableSave" type="button">Save</button>
+                    </div>
+                    <div class="dataTable collapse show">
+                        <table class="table table-dark" data-editor="ups">
+                            <thead>
+                                <tr>
+                                    <th class="w-25">Name</th>
+                                    <th class="w-25">IP</th>
+                                    <th class="w-25">
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="configUps"></tbody>
+                       </table>
+                    </div>
+                    <div class="dataRaw collapse mt-3">
+                        <div id="configUpsRaw"></div>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="nav-temperatures" data-editor="frames" role="tabpanel" aria-labelledby="nav-temperatures-tab">
+                    <div class="mt-3 mx-0">
+                        <button class="btn btn-primary toggleTableRaw" type="button" data-mode="table">Show Raw</button>
+                        <button class="btn btn-primary tableNew" type="button">Add new</button>
+                        <button class="btn btn-success tableSave" type="button">Save</button>
+                    </div>
+                    <div class="dataTable collapse show">
+                        <table class="table table-dark" data-editor="frames">
+                            <thead>
+                                <tr>
+                                    <th class="w-25">Name</th>
+                                    <th class="w-25">IP</th>
+                                    <th class="w-25"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="configFrames"></tbody>
+                        </table>
+                    </div>
+                    <div class="dataRaw collapse mt-3">
+                        <div id="configFramesRaw"></div>
+                    </div>
+                </div>
+            </section>
         </section>
     </article>
 

@@ -1,5 +1,7 @@
 let server = window.location;
 
+let editors = {};
+
 let pingTimeout;
 let pingChart;
 let tempChart;
@@ -10,13 +12,38 @@ let b = {};
 let a = {};
 let pings = {};
 let boots = {};
-let lastBroken = true
-let lastTra = -1
-let lastAlive = -1
-let lastMac = -1
-let lastPhy = -1
-let lastUps = -1
-let lastUpsHash = ""
+let lastBroken = true;
+let lastTra = -1;
+let lastAlive = -1;
+let lastMac = -1;
+let lastPhy = -1;
+let lastUps = -1;
+let lastUpsHash = "";
+
+let templates = {};
+
+templates.nameIP = `<% for(i = 0; i < devices.length; i++) { %>
+  <tr data-index="<%=i%>" data-template="nameIP">
+    <td data-type="text" data-key="Name" data-value="<%-devices[i].Name%>"><%-devices[i].Name%></td>
+    <td data-type="text" data-key="IP" data-value="<%-devices[i].IP%>"><%-devices[i].IP%></td>
+    <td>
+      <button type="button" class="btn btn-danger editConfig w-50">Edit</button>
+      <button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
+    </td>
+  </tr>
+<% } %>`;
+
+templates.devices = `<% for(i = 0; i < devices.length; i++) { %>
+  <tr data-index="<%=i%>" data-template="devices">
+    <td data-type="text" data-key="name" data-value="<%-devices[i].name%>"><%-devices[i].name%></td>
+    <td data-type="range" data-key-from="start" data-key-to="end" data-from="<%-devices[i].start%>" data-to="<%-devices[i].end%>"><%-devices[i].start%> to <%-devices[i].end%></td>
+    <td data-type="text" data-key="description" data-value="<%-devices[i].description%>"><%-devices[i].description%></td>
+    <td>
+      <button type="button" class="btn btn-danger editConfig w-50">Edit</button>
+      <button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
+    </td>
+  </tr>
+<% } %>`;
 
 function socketDoOpen() {
   console.log("Registering as client");
@@ -317,7 +344,7 @@ function saySomething(text) {
 function getFibre() {
     $.getJSON(`${server}fibre`, function (data) {
         $('table#tra tbody').empty()
-        if (data.length == 0) {
+        if (Object.keys(data).length == 0) {
             $('div#col-tra').addClass("text-muted")
             $('table#tra').addClass("text-muted")
         }
@@ -386,7 +413,7 @@ function getDevices() {
 function getMac() {
     $.getJSON(`${server}mac`, function (data) {
         $('table#mac tbody').empty()
-        if (data.length == 0) {
+        if (Object.keys(data).length == 0) {
             $('div#col-mac').addClass("text-muted")
             $('table#mac').addClass("text-muted")
         }
@@ -415,7 +442,7 @@ function getMac() {
 function getPhy() {
     $.getJSON(`${server}phy`, function (data) {
         $('table#phy tbody').empty()
-        if (data.length == 0) {
+        if (Object.keys(data).length == 0) {
             $('div#col-phy').addClass("text-muted")
             $('table#phy').addClass("text-muted")
         }
@@ -445,7 +472,7 @@ function getUps() {
     $.getJSON(`${server}ups`, function (data) {
         let hash = CryptoJS.MD5(JSON.stringify(data)).toString()
         if (lastUpsHash !== "" && hash !== lastUpsHash) {
-            if (data.length > 0) {
+            if (Object.keys(data).length > 0) {
                 saySomething("you pee ess broken")
             }
         } else if (lastUpsHash === "" && data.length > 0) {
@@ -454,7 +481,7 @@ function getUps() {
         lastUpsHash = hash
 
         $('table#ups tbody').empty()
-        if (data.length == 0) {
+        if (Object.keys(data).length == 0) {
             $('div#col-ups').addClass("text-muted")
             $('table#ups').addClass("text-muted")
         }
@@ -537,13 +564,14 @@ $(document).ready(function() {
   renderPingChart(pings);
   renderBootChart(boots);
   renderTempChart(f,m,b,a);
-  getBroken()
-  getDevices()
-  getMac()
-  getPhy()
-  getUps()
-  getFibre()
-  setInterval(updateLast, 1000)
+  getBroken();
+  getDevices();
+  getMac();
+  getPhy();
+  getUps();
+  getFibre();
+  setInterval(updateLast, 1000);
+  $('#webBroken').html(`<span class="badge badge-pill bg-danger">Website Broken</span>`);
 
   $(document).click(function(e) {
     $trg = $(e.target);
@@ -558,18 +586,144 @@ $(document).ready(function() {
       loading(true);
       let promises = [
         getConfig("switches"),
-        getConfig("frames"),
+        getConfig("devices"),
         getConfig("ups"),
-        getConfig("devices")
+        getConfig("frames")
       ]
       Promise.allSettled(promises).then(values => {
         loading(false);
         $("#config").toggleClass("hidden");
-        renderDevices(values[3].value);
+
+        editors["switches"] = renderEditorTab(values[0].value, editors["switches"], templates.nameIP, "configSwitches");
+        editors["devices"] = renderEditorTab(values[1].value, editors["devices"], templates.devices, "configDevices");
+        editors["ups"] = renderEditorTab(values[2].value, editors["ups"], templates.nameIP, "configUps");
+        editors["frames"] = renderEditorTab(values[3].value, editors["frames"], templates.nameIP, "configFrames");
       }).catch(error => {
         console.log(error);
       })
 
+    } else if ($trg.hasClass("toggleTableRaw")) {
+      $trg.closest(".tab-pane").find(".dataTable").collapse("toggle");
+      $trg.closest(".tab-pane").find(".dataRaw").collapse("toggle");
+      if ($trg.data("mode") == "table") {
+        $trg.html("Show Table");
+        $trg.data("mode", "raw");
+      } else {
+        $trg.html("Show Raw");
+        $trg.data("mode", "table");
+      }
+    } else if ($trg.hasClass("editConfig")) {
+      let $row = $trg.closest("tr");
+      $row.children().each(function() {
+        let $td = $(this);
+        switch ($td.data("type")) {
+          case "text":
+            let $txt = $(`<input type="text" class="form-control" value="${$td.data("value")}" name="${$td.data("key")}"></input>`);
+            $txt.change(function() {
+              $td.data("value", $txt.val())
+            });
+            $td.html("");
+            $td.append($txt);
+            break;
+          case "range":
+            let $from = $(`<input type="text" class="editRange form-control text-end" value="${$td.data("from")}" name="${$td.data("key-from")}"></input>`);
+            let $to = $(`<input type="text" class="editRange form-control" value="${$td.data("to")}" name="${$td.data("key-to")}"></input>`);
+            $from.change(function() {
+              $td.data("from", $from.val())
+            });
+            $to.change(function() {
+              $td.data("to", $to.val())
+            });
+            $td.html("");
+            $td.addClass("input-group");
+            $td.append($from);
+            $td.append('<span class="input-group-text">to</span>');
+            $td.append($to);
+            break;
+          default:
+            break;
+        }
+        $trg.html("Done");
+        $trg.removeClass("editConfig");
+        $trg.removeClass("btn-danger");
+        $trg.addClass("doneConfig");
+        $trg.addClass("btn-success");
+      })
+    } else if ($trg.hasClass("doneConfig")) {
+      let $row = $trg.closest("tr");
+      let data = {};
+      $row.children().each(function() {
+        let $td = $(this);
+        switch ($td.data("type")) {
+          case "text":
+            $td.html($td.data("value"));
+            data[$td.data("key")] = $td.data("value");
+            break;
+          case "range":
+            $td.html(`${$td.data("from")} to ${$td.data("to")}`);
+            data[$td.data("key-from")] = parseInt($td.data("from"));
+            data[$td.data("key-to")] = parseInt($td.data("to"));
+            $td.removeClass("input-group");
+            break;
+          default:
+            break;
+        }
+        $trg.html("Edit");
+        $trg.addClass("editConfig");
+        $trg.addClass("btn-danger");
+        $trg.removeClass("doneConfig");
+        $trg.removeClass("btn-success");
+      })
+      let editor = $row.closest("table").data("editor");
+      let current = editors[editor].get();
+      current[$row.data("index")] = data;
+      editors[editor].set(current);
+      editors[editor].expandAll();
+    } else if ($trg.hasClass("tableNew")) {
+      let $tbody = $trg.closest(".tab-pane").find(".dataTable").find("tbody");
+      let $rows = $tbody.children();
+      let template = $rows.last().data("template");
+      
+      let dummyData = [];
+      dummyData[0] = {};
+      switch (template) {
+        case "nameIP":
+          dummyData[0].Name = "New Device";
+          dummyData[0].IP = "IP Address";
+          break;
+        case "devices":
+          dummyData[0].name = "New Device";
+          dummyData[0].start = 1;
+          dummyData[0].end = 1;
+          dummyData[0].description = "Description";
+          break;
+        default:
+          break;
+      }
+      let $new = $(ejs.render(templates[template], {devices: dummyData}));
+      let index = $rows.length;
+      $new.data("index", index);
+      $tbody.append($new);
+      $new.find(".editConfig").trigger("click");
+    } else if ($trg.hasClass("tableSave")) {
+      let $tbody = $trg.closest(".tab-pane").find(".dataTable").find("table");
+      let editor = $tbody.data("editor");
+      let current = editors[editor].get();
+      $.ajax(`${server}set${editor}`, {
+        data : JSON.stringify(current),
+        contentType : 'application/json',
+        type : 'POST'}
+      ).then(function(data) {
+        alert("Saved");
+      })
+    } else if ($trg.hasClass("deleteRow")) {
+      let $row = $trg.closest("tr");
+      let editor = $row.closest("table").data("editor");
+      let current = editors[editor].get();
+      current.splice($row.data("index"), 1);
+      editors[editor].set(current);
+      editors[editor].expandAll();
+      $row.remove();
     }
   });
 
@@ -584,20 +738,21 @@ function getConfig(catagory) {
   return $.getJSON(`${server}getConfig?catagory=${catagory}`);
 }
 
-function renderDevices(devicesData) {
-  $("#configDevicesRaw").html(JSON.stringify(devicesData, undefined, 2));
-  let devices = `<% for(i = 0; i < devices.length; i++) { %>
-        <div class="card text-white bg-secondary mb-2 col-2 ms-2">
-          <!--<img class="card-img-top" src="..." alt="Card image cap">-->
-          <div class="card-body">
-            <h5 class="card-title"><%-devices[i].name%></h5>
-            <h6 class="card-subtitle">
-              Slots <%-devices[i].start%> to <%-devices[i].end%>
-            </h6>
-            <div class="card-text"><%-devices[i].description%></div>
-            <button type="button" class="btn btn-danger">Edit</button>
-          </div>
-        </div>
-        <% } %>`;
-  $("#configDevices").html(ejs.render(devices, {devices: devicesData}));
+function renderEditorTab(devicesData, editor, template, element) {
+  if (!editor) {
+    const container = document.getElementById(`${element}Raw`);
+    let options = {
+      "onChange": function(changed) {
+        $(`#${element}`).html(ejs.render(template, {devices: editor.get()}));
+      },
+      "mode": "tree",
+      "mainMenuBar": false,
+      "navigationBar": false
+    }
+    editor = new JSONEditor(container, options);
+    editor.set(devicesData);
+    editor.expandAll();
+  }
+  $(`#${element}`).html(ejs.render(template, {devices: devicesData}));
+  return editor;
 }

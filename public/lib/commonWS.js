@@ -12,8 +12,6 @@ let loadTime = new Date().getTime();
 let myID;
 let type;
 
-$('#webBroken').html(`<span class="badge badge-pill bg-danger">Website Broken</span>`);
-
 function socketConnect(inputType) {
   type = inputType;
   myID = `${type.charAt(0)}_${loadTime}_${version}`;
@@ -35,7 +33,7 @@ function socketConnect(inputType) {
       console.log("Connection established!");
       connecting = 0;
       connCount = 0;
-      $('#webBroken').html(`<span class="badge badge-pill bg-success">Web Ok</span>`)
+      $('#webBroken').html(`<span class="badge badge-pill bg-success">Web Ok</span>`);
       if (typeof socketDoOpen == "function") {
         socketDoOpen(e);
       }
