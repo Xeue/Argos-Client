@@ -10,6 +10,15 @@
     <link href="lib/bootstrap.min.css" rel="stylesheet">
     <link href="lib/jsoneditor.css" rel="stylesheet">
     <link href="css/ui.css" rel="stylesheet">
+    <script type="text/javascript">
+        let Switches = [
+            <% Object.keys(switches).forEach(function(prop) { %>
+                "<%- switches[prop].Name%>",
+            <% }); %>
+        ]
+        let servers = ["<%=webSocketEndpoint%>"];
+        let currentSystem = "<%=systemName%>";
+    </script>
     <script type="text/javascript" src="lib/jquery-3.6.0.min.js"></script>
     <script type="text/javascript" src="lib/bootstrap.min.js"></script>
     <script type="text/javascript" src="lib/ejs.js"></script>
@@ -19,14 +28,6 @@
     <script type="text/javascript" src="lib/moment.js"></script>
     <script type="text/javascript" src="lib/chart-adapter-moment.js"></script>
     <script type="text/javascript" src="lib/jsoneditor.js"></script>
-    <script type="text/javascript">
-        let Switches = [
-            <% Object.keys(switches).forEach(function(prop) { %>
-                "<%- switches[prop].Name%>",
-            <% }); %>
-        ]
-        let servers = ["wbs.chilton.tv"];
-    </script>
     <script type="text/javascript" src="ui.js"></script>
 
     <title>Argos</title>

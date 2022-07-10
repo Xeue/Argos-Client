@@ -10,6 +10,10 @@ let asci = [
 "                                                                                              "
 ];
 
+const serverVersion = "2.3.0";
+const serverID = new Date().getTime();
+
+const WebSocket = require('ws');
 const express = require('express')
 const fetch = require('node-fetch')
 const axios = require('axios');
@@ -29,14 +33,17 @@ try {
 }
 config.loggingLevel = config.loggingLevel ? config.loggingLevel : "W";
 config.port = config.port ? config.port : 3000;
+config.systemName = config.systemName ? config.systemName : "Unknown System";
 config.warningTemperature = config.warningTemperature ? config.warningTemperature : 30;
 config.webEnabled = config.webEnabled ? config.webEnabled : false;
-config.webEndpoint = config.webEndpoint;
+config.webSocketEndpoint = config.webEndpoint;
+config.webEndpoint = `https://${config.webEndpoint}/REST`;
 config.textsEnabled = config.textsEnabled ? config.textsEnabled : false;
 config.awsAccessKeyId = config.awsAccessKeyId;
 config.awsSecretAccessKey = config.awsSecretAccessKey;
 config.awsRegion = config.awsRegion;
 config.devMode = config.devMode ? config.devMode : false;
+config.installName = config.installName ? config.installName : "UK Flypack 01";
 
 const logsConfig = {
     "createLogFile": true,
@@ -46,6 +53,14 @@ const logsConfig = {
     "debugLineNum": true
 }
 setLogsConf(logsConfig);
+
+let webServer = {
+    "connected": false,
+    "active": false,
+    "attempts": 0,
+    "address": config.webSocketEndpoint,
+    "socket": null
+};
 
 const app = express()
 
@@ -58,7 +73,7 @@ const data = {
     "devices":{}
 }
 
-const pingFrequency = 10;
+const pingFrequency = 5;
 const lldpFrequency = 30;
 const switchStatsFrequency = 30;
 const upsFrequency = 30;
@@ -134,6 +149,7 @@ function devices(object) {
 
 /* Express setup & Endpoints */
 
+
 app.set('views', __dirname + '/views');
 app.set('view engine', 'ejs');
 app.use(express.json());
@@ -147,7 +163,9 @@ app.get('/',  (req, res) =>  {
     log("New client connected", "A");
     res.header('Content-type', 'text/html');
     res.render('ui', {
-        switches:switches()
+        switches:switches(),
+        systemName:config.systemName,
+        webSocketEndpoint:config.webSocketEndpoint
     });
 });
 
@@ -223,6 +241,7 @@ app.post('/setframes', (req, res) => {
     frames(req.body)
     res.send("Done");
 })
+
 
 /* Request definitions */
 
@@ -304,18 +323,22 @@ function lldpLoop() {
       promisses.push(doApi(lldpRequest, Switch.IP));
     }
     return Promise.all(promisses).then((values) => {
-      
       for (var i = 0; i < values.length; i++) {
-        let neighbors = values[i].result[1].lldpNeighbors;
-        data.neighbors[Switches[i].Name] = {};
-        let thisSwitch = data.neighbors[Switches[i].Name];
-        for (let j in neighbors) {
-          let t = neighbors[j];
-          if (!t.port.includes("Ma")) {
-            thisSwitch[t.port] = { lldp: t.neighborDevice };
-          }
+        if (typeof values[i] !== "undefined") {
+            let neighbors = values[i].result[1].lldpNeighbors;
+            data.neighbors[Switches[i].Name] = {};
+            let thisSwitch = data.neighbors[Switches[i].Name];
+            for (let j in neighbors) {
+              let t = neighbors[j];
+              if (!t.port.includes("Ma")) {
+                thisSwitch[t.port] = { lldp: t.neighborDevice };
+              }
+            }
+        } else {
+            log("Return data from switch empty, is the switch online?", "W");
         }
       }
+      sendData({"command":"log", "type":"lldp", "data":data.neighbors});
     });
 }
 
@@ -360,24 +383,29 @@ function switchMac() {
     return Promise.all(promisses).then((values) => {
         let filteredDevices = [];
         for (var i = 0; i < values.length; i++) {
-            let procDev = clearEmpties(processSwitchMac(values[i], data.neighbors[Switches[i].Name]));
-            
-            for (let dev in procDev) {
-                if (typeof procDev[dev].mac !== "undefined") {
-                    if(!('lastChange' in procDev[dev].mac)) {
-                        log(procDev[dev]+" seems to have an issue","W");
-                    }
-                    let time = procDev[dev].mac.lastChange.split(":")
-                    let timeTotal = parseInt(time[0]) * 3600 + parseInt(time[1]) * 60 + parseInt(time[2])
-                    if (timeTotal < 300) {
-                        procDev[dev].switch = Switches[i].Name;
-                        filteredDevices.push(procDev[dev])
+            if (typeof values[i] !== "undefined") {
+                let procDev = clearEmpties(processSwitchMac(values[i], data.neighbors[Switches[i].Name]));
+                
+                for (let dev in procDev) {
+                    if (typeof procDev[dev].mac !== "undefined") {
+                        if(!('lastChange' in procDev[dev].mac)) {
+                            log(procDev[dev]+" seems to have an issue","W");
+                        }
+                        let time = procDev[dev].mac.lastChange.split(":")
+                        let timeTotal = parseInt(time[0]) * 3600 + parseInt(time[1]) * 60 + parseInt(time[2])
+                        if (timeTotal < 300) {
+                            procDev[dev].switch = Switches[i].Name;
+                            filteredDevices.push(procDev[dev])
+                        }
                     }
                 }
-            }
 
+            } else {
+                log("Return data from switch empty, is the switch online?", "W");
+            }
         }
         data.mac = filteredDevices;
+        sendData({"command":"log", "type":"mac", "data":data.mac});
     });
 }
 
@@ -421,21 +449,25 @@ function switchPhy() {
     return Promise.all(promisses).then((values) => {
         let filteredDevices = [];
         for (var i = 0; i < values.length; i++) {
-            values[i];
-            let procDev = processSwitchPhy(values[i], data.neighbors[Switches[i].Name]);
+            if (typeof values[i] !== "undefined") {
+                let procDev = processSwitchPhy(values[i], data.neighbors[Switches[i].Name]);
 
-            for (let dev in procDev) {
-                if ("phy" in procDev[dev]) {
-                    let time = procDev[dev].phy.lastChange.split(" ")[0].split(":")
-                    let timeTotal = parseInt(time[0]) * 3600 + parseInt(time[1]) * 60 + parseInt(time[2])
-                    if (timeTotal < 300) {
-                        procDev[dev].switch = Switches[i].Name;
-                        filteredDevices.push(procDev[dev])
+                for (let dev in procDev) {
+                    if ("phy" in procDev[dev]) {
+                        let time = procDev[dev].phy.lastChange.split(" ")[0].split(":")
+                        let timeTotal = parseInt(time[0]) * 3600 + parseInt(time[1]) * 60 + parseInt(time[2])
+                        if (timeTotal < 300) {
+                            procDev[dev].switch = Switches[i].Name;
+                            filteredDevices.push(procDev[dev])
+                        }
                     }
                 }
+            } else {
+                log("Return data from switch empty, is the switch online?", "W");
             }
         }
         data.phy = filteredDevices;
+        sendData({"command":"log", "type":"phy", "data":data.phy});
     });
 }
 
@@ -468,19 +500,23 @@ function switchFibre() {
     return Promise.all(promisses).then((values) => {
         let filteredDevices = [];
         for (var i = 0; i < values.length; i++) {
-            values[i];
-            let procDev = processSwitchFibre(values[i], data.neighbors[Switches[i].Name]);
+            if (typeof values[i] !== "undefined") {
+                let procDev = processSwitchFibre(values[i], data.neighbors[Switches[i].Name]);
 
-            for (let dev in procDev) {
-                if ('txPower' in procDev[dev] && 'rxPower' in procDev[dev]) {
-                    if (procDev[dev].rxPower < -9 && procDev[dev].rxPower > -30 && procDev[dev].txPower > -30) {
-                        procDev[dev].switch = Switches[i].Name;
-                        filteredDevices.push(procDev[dev])
+                for (let dev in procDev) {
+                    if ('txPower' in procDev[dev] && 'rxPower' in procDev[dev]) {
+                        if (procDev[dev].rxPower < -9 && procDev[dev].rxPower > -30 && procDev[dev].txPower > -30) {
+                            procDev[dev].switch = Switches[i].Name;
+                            filteredDevices.push(procDev[dev])
+                        }
                     }
                 }
+            } else {
+                log("Return data from switch empty, is the switch online?", "W");
             }
         }
         data.fibre = filteredDevices;
+        sendData({"command":"log", "type":"mac", "data":data.fibre});
     });
 }
 
@@ -531,6 +567,7 @@ function checkUps() {
             }
         }
         data.ups = filteredUps;
+        sendData({"command":"log", "type":"mac", "data":data.ups});
     })
 }
 
@@ -568,6 +605,7 @@ function checkDevices() {
         }
     }
     data.devices = missingDevices;
+    sendData({"command":"log", "type":"mac", "data":data.devices});
 }
 
 function doApi(json, ip) {
@@ -582,6 +620,8 @@ function doApi(json, ip) {
         if (response.status === 200) {
             return response.json().then((jsonRpcResponse) => { return jsonRpcResponse })
         }
+    }).catch((error)=>{
+        logObj(`Failed to connect to switch ${ip}`, error, "E");
     })
 }
 
@@ -604,7 +644,6 @@ function webLogTemp() {
 		log('Got temperature data, processing', "D");
 		let tempSum = 0;
 		let tempValid = 0;
-
         for (let index = 0; index < Frames.length; index++) {
             const frameData = results[index];
             if (frameData.status == "fulfilled") {
@@ -642,36 +681,18 @@ function webLogTemp() {
 			}
 		}
 
-		axios.post(`${config.webEndpoint}/temp`, Frames).then(
-			res => {log("Uploaded to website", "D")}
-		).catch(
-			error => {
-				logObj(`Couldn't upload to website`, error, "E");
-			}
-		)
+        sendData({"command":"log", "type":"temperature", "data":Frames});
 				
 	})
 
 }
 
 function webLogPing() {
-	axios.get(`${config.webEndpoint}/ping`).then(
-		res => {log("Pinging website", "A")}
-	).catch(
-		error => {
-			logObj(`Couldn't ping website`, error, "E");
-		}
-	)
+    sendData({"command":"log", "type":"ping"});
 }
 
 function webLogBoot() {
-	axios.get(`${config.webEndpoint}/boot`).then(
-		res => {log("Telling website I booted", "A")}
-	).catch(
-		error => {
-			logObj(`Couldn't tell the website I booted`, error, "E");
-		}
-	)
+    sendData({"command":"log", "type":"boot"});
 }
 
 function sendSms(msg) {
@@ -690,6 +711,119 @@ function sendSms(msg) {
 	}).catch(function (err) {
 		console.error(err, err.stack)
 	})
+}
+
+function connectToWebServer(retry = false) {
+
+    let webSocket;
+
+    if ((!webServer.connected && webServer.active && webServer.attempts < 3) || (retry && !webServer.connected)) {
+        let inError = false;
+        if (retry) {
+            log(`Retrying connection to dead server: ${r}${webServer.address}${reset}`, "W");
+        }
+        webSocket = new WebSocket("wss://"+webServer.address);
+
+        webServer.socket = webSocket;
+
+        webSocket.on('open', function open() {
+            let payload = {};
+            payload.command = "register";
+            payload.name = config.installName;
+            sendData(payload);
+
+            log(`${g}${webServer.address}${reset} Established a connection to webserver`, "S");
+            webServer.connected = true;
+            webServer.active = true;
+            webServer.attempts = 0;
+        });
+
+        webSocket.on('message', function message(msgJSON) {
+            let msgObj = {};
+            let pObj;
+            let hObj;
+            try {
+                msgObj = JSON.parse(msgJSON);
+                if (msgObj.payload.command !== "ping" && msgObj.payload.command !== "pong") {
+                    logObj('Received from other server', msgObj, "A");
+                } else if (printPings == true) {
+                    logObj('Received from other server', msgObj, "A");
+                }
+                pObj = msgObj.payload;
+                hObj = msgObj.header;
+                switch (pObj.command) {
+                    case "ping":
+                        let payload = {};
+                        payload.command = "pong";
+                        sendData(payload);
+                        break;
+                    case "data":
+                        log("Recieved temp/ping data from server", "D");
+                        break;
+                    default:
+                        logObj(`Received unknown from other server`, msgObj, "W");
+                }
+            } catch (e) {
+                try {
+                    msgObj = JSON.parse(msgJSON);
+                    if (msgObj.payload.command !== "ping" && msgObj.payload.command !== "pong") {
+                        logObj('Received from other server', msgObj, "A");
+                    } else if (printPings == true) {
+                        logObj('Received from other server', msgObj, "A");
+                    }
+                    if (typeof msgObj.type == "undefined") {
+                        let stack = e.stack.toString().split(/\r\n|\n/);
+                        stack = JSON.stringify(stack, null, 4);
+                        log(`Server error, stack trace: ${stack}`, "E");
+                    } else {
+                        log("A device is using old 'chiltv' data format, upgrade it to v4.0 or above", "E");
+                    }
+                } catch (e2) {
+                    log("Invalid JSON from other server- "+e, "E");
+                    logObj('Received from other server', msgObj, "A");
+                }
+            }
+        });
+
+        webSocket.on('close', function close() {
+            webServer.connected = false;
+            webServer.socket = null;
+            webServer.attempts++;
+            if (!inError) {
+                log(`${r}${webServer.address}${reset} Outbound webserver connection closed`, "W");
+            }
+        });
+
+        webSocket.on('error', function error() {
+            inError = true;
+            log(`Could not connect to server: ${r}${webServer.address}${reset}`, "E");
+        });
+    } else if (!webServer.connected && webServer.active) {
+        webServer.active = false;
+        log(`Server not responding, changing status to dead: ${r}${webServer.address}${reset}`, "E");
+    }
+}
+
+function sendData(payload) {
+    let packet = {};
+    let header = makeHeader();
+    packet.header = header;
+    packet.payload = payload;
+    if (webServer.connected) {
+        webServer.socket.send(JSON.stringify(packet));
+    }
+}
+
+function makeHeader() {
+    let header = {};
+    header.fromID = serverID;
+    header.timestamp = new Date().getTime();
+    header.version = serverVersion;
+    header.type = "System";
+    header.system = config.systemName;
+    header.active = true;
+    header.messageID = header.timestamp;
+    return header;
 }
 
 
@@ -746,9 +880,30 @@ function printConfig() {
     }
 }
 
+
+/* Loops */
+
+
+function startLoops() {
+    connectToWebServer(true);
+
+    // 5 Second ping loop
+    setInterval(() => {
+        connectToWebServer();
+    }, 5*1000);
+  
+    // 1 Minute ping loop
+    setInterval(() => {
+        connectToWebServer(true);
+    }, 60*1000);
+}
+
+
 /* Start Functions */
 
+
 if (config.webEnabled) {
+    startLoops();
     webLogBoot();
     trickleStart(webLogTemp, tempFrequency)
     .then(value => trickleStart(webLogPing, pingFrequency));

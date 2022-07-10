@@ -12,6 +12,8 @@ let loadTime = new Date().getTime();
 let myID;
 let type;
 
+$("main").addClass("disconnected");
+
 function socketConnect(inputType) {
   type = inputType;
   myID = `${type.charAt(0)}_${loadTime}_${version}`;
@@ -33,7 +35,7 @@ function socketConnect(inputType) {
       console.log("Connection established!");
       connecting = 0;
       connCount = 0;
-      $('#webBroken').html(`<span class="badge badge-pill bg-success">Web Ok</span>`);
+      $("main").removeClass("disconnected");
       if (typeof socketDoOpen == "function") {
         socketDoOpen(e);
       }
@@ -116,15 +118,13 @@ function makeHeader() {
   header.timestamp = new Date().getTime();
   header.version = version;
   header.type = type;
+  header.system = currentSystem;
   if (connecting == 0) {
     header.active = true;
   } else {
     header.active = false;
   }
   header.messageID = header.timestamp;
-  header.recipients = [
-    currentCon
-  ];
   return header;
 }
 

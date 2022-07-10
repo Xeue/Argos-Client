@@ -12,7 +12,8 @@
     "jsdom": "^19.0.0",
     "log-timestamp": "^0.3.0",
     "node-fetch": "^2.6.5",
-    "node-fetch2": "^1.6.3"
+    "node-fetch2": "^1.6.3",
+    "ws": "^8.8.0"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
