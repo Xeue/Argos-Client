@@ -28,8 +28,37 @@ let config;
 try {
     config = JSON.parse(fs.readFileSync(__dirname + "/config.conf"));
 } catch (error) {
-    log("There is an error with the config file or it doesn't exist, please check it", "E");
-    process.exit(1);
+    log("There is an error with the config file or it doesn't exist, entering first time setup", "W");
+    let port = reader.question("What port shall the server use: ");
+    let systemName = reader.question("What is the name of the system: ");
+    let warningTemperature = reader.question("What temperature shall alerts be sent at: ");
+    let webEnabled = reader.question("Should this system report back to an argos server: ");
+    let webEndpoint = reader.question("What is hte url of the argos server: ");
+    let textsEnabled = reader.question("Should texts be sent when warnings are triggered: ");
+    if (TextEnabled) {
+        let awsAccessKeyId = reader.question("AWS access key for texts: ");
+        let awsSecretAccessKey = reader.question("AWS Secret access key for texts: ");
+        let awsRegion = reader.question("AWS region: ");
+    }
+    config = {
+        "port": port,
+        "systemName": systemName,
+        "warningTemperature": warningTemperature,
+        "webEnabled": webEnabled,
+        "webEndpoint": webEndpoint,
+        "textsEnabled": textsEnabled
+    }
+    if (TextEnabled) {
+        config.awsAccessKeyId = awsAccessKeyId;
+        config.awsSecretAccessKey = awsSecretAccessKey;
+        config.awsRegion = awsRegion;
+    }
+    try {
+        fs.writeFileSync(__dirname + '/config.conf', JSON.stringify(config, null, 4));
+        log("Config saved to file");
+    } catch (error) {
+        log("Could not write config file, running with entered details anyway", "E");
+    }
 }
 config.loggingLevel = config.loggingLevel ? config.loggingLevel : "W";
 config.port = config.port ? config.port : 3000;
@@ -73,7 +102,7 @@ const data = {
     "devices":{}
 }
 
-const pingFrequency = 5;
+const pingFrequency = 30;
 const lldpFrequency = 30;
 const switchStatsFrequency = 30;
 const upsFrequency = 30;
@@ -105,8 +134,29 @@ function loadData(file) {
             return [];
         }
     } catch (error) {
-        logObj(`Cloud not read the file ${file}.json, does it exist and does it have the right permissions?`, error, "E");
-        return [];
+        logObj(`Cloud not read the file ${file}.json, attempting to create new file`, error, "W");
+        let fileData = [];
+        switch (file) {
+            case "Devices":
+                fileData[0] = {
+                    "name":"Placeholder",
+                    "start":1,
+                    "end":2,
+                    "description":"Placeholder"
+                }
+                break;
+            default:
+                fileData[0] = {
+                    "Name":"Placeholder",
+                    "IP":"0.0.0.0"
+                }
+                break;
+        }
+        if (!fs.existsSync(`${__dirname}/data/`)){
+            fs.mkdirSync(`${__dirname}/data/`);
+        }
+        fs.writeFileSync(`${__dirname}/data/${file}.json`, JSON.stringify(fileData, null, 4));
+        return fileData;
     }
 };
 function writeData(file, data) {
@@ -419,8 +469,9 @@ function switchPhy() {
             if (!keys.includes(i)) {
                 devices[i] = {}
             }
-            let t = phy[i]
-            let split = t.phyStatuses[0].text.replace(/\s\s+/g, ' ').split(' ')
+            let t = phy[i];
+            log(t.phyStatuses[0].fec.uncorrectedCodewords);
+            let split = t.phyStatuses[0].text.replace(/\s\s+/g, ' ').split(' ');
             if (split.includes("25Gbps")) {
                 let j = split.indexOf("uncorrected")
                 if (j > -1 && split[j + 6] !== "never") {
@@ -609,11 +660,11 @@ function checkDevices() {
 }
 
 function doApi(json, ip) {
-    return fetch(`http://grass:valley@${ip}/command-api`, {
+    return fetch(`http://admin:N3p@G1R214:)@${ip}/command-api`, {
         method: "POST",
         headers: {
             "content-type": "application/json",
-            "Authorization": "Basic " + Buffer.from("grass:valley").toString('base64')
+            "Authorization": "Basic " + Buffer.from("admin:N3p@G1R214:)").toString('base64')
         },
         body: JSON.stringify(json),
     }).then((response) => {
@@ -637,7 +688,7 @@ function webLogTemp() {
 
     for (let index = 0; index < Frames.length; index++) {
         const frame = Frames[index];
-        promises.push(axios.get(frame.IP, { timeout: 1000 }));
+        promises.push(axios.get("http://"+frame.IP, { timeout: 1000 }));
     }
 
 	return Promise.allSettled(promises).then(results => {
@@ -720,7 +771,7 @@ function connectToWebServer(retry = false) {
     if ((!webServer.connected && webServer.active && webServer.attempts < 3) || (retry && !webServer.connected)) {
         let inError = false;
         if (retry) {
-            log(`Retrying connection to dead server: ${r}${webServer.address}${reset}`, "W");
+            log(`Retrying connection to dead server: ${r}wss://${webServer.address}${reset}`, "W");
         }
         webSocket = new WebSocket("wss://"+webServer.address);
 
@@ -911,7 +962,7 @@ if (config.webEnabled) {
 if (!config.devMode) {
     trickleStart(lldpLoop, lldpFrequency)
     .then(value => trickleStart(switchMac, switchStatsFrequency))
-    .then(value => trickleStart(switchPhy, switchStatsFrequency))
+    /*.then(value => trickleStart(switchPhy, switchStatsFrequency))*/
     .then(value => trickleStart(switchFibre, switchStatsFrequency))
     .then(value => trickleStart(checkUps, upsFrequency))
     .then(value => trickleStart(checkDevices, devicesFrequency));

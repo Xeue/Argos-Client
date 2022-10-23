@@ -217,7 +217,7 @@ function renderPingChart() {
   const data = {
     datasets: [
       {
-        label: 'Wimbledons Online',
+        label: 'Pings',
         data: [],
         backgroundColor: [
             'rgba(128, 255, 128, 0.2)'
@@ -260,7 +260,7 @@ function renderBootChart(boots) {
   const data = {
     datasets: [
       {
-        label: 'Boots',
+        label: 'PC Boots',
         data: boots,
         backgroundColor: [
             'rgba(128, 255, 128, 0.2)'
@@ -462,10 +462,10 @@ function getUps() {
         let hash = CryptoJS.MD5(JSON.stringify(data)).toString()
         if (lastUpsHash !== "" && hash !== lastUpsHash) {
             if (Object.keys(data).length > 0) {
-                saySomething("you pee ess broken")
+                //saySomething("you pee ess broken")
             }
         } else if (lastUpsHash === "" && data.length > 0) {
-            saySomething("you pee ess broken")
+            //saySomething("you pee ess broken")
         }
         lastUpsHash = hash
 
@@ -547,7 +547,12 @@ function loading(state) {
 }
 
 $(document).ready(function() {
-  socketConnect("Browser");
+  if (servers[0] != "") {
+    socketConnect("Browser");
+    $('#webBroken').html(`<span class="badge badge-pill bg-danger">Web Monitor Broken</span>`);
+  } else {
+    $('#webBroken').html(`<span class="badge badge-pill bg-danger">Web Monitor Disabled</span>`);
+  }
   renderPingChart(pings);
   renderBootChart(boots);
   renderTempChart(f,m,b,a);
@@ -558,7 +563,6 @@ $(document).ready(function() {
   getUps();
   getFibre();
   setInterval(updateLast, 1000);
-  $('#webBroken').html(`<span class="badge badge-pill bg-danger">Website Broken</span>`);
 
   $(document).click(function(e) {
     $trg = $(e.target);
@@ -583,8 +587,8 @@ $(document).ready(function() {
         "from": from,
         "to": to
       });
-    } else if ($trg.is("#toggleConfig")) {
-      $trg.toggleClass("rotate");
+    } else if ($trg.is("#toggleConfig") || $trg.is("#closeConfig")) {
+      $("#toggleConfig").toggleClass("rotate");
       loading(true);
       let promises = [
         getConfig("switches"),

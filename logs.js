@@ -116,7 +116,7 @@ module.exports = function (){
                 break;
             case "S":
             case "N":
-                if (loggingLevel == "A" || loggingLevel == "D") { //Blue
+                if (loggingLevel != "E") { //Blue
                     logSend(`[${timeString}]${b} NETWK: ${w}${message} ${p}${lineNum}${reset}`);
                 }
                 break;
