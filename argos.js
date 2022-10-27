@@ -628,11 +628,13 @@ function checkDevices() {
     let missingDevices = {};
     let expectedDevices = [];
     for (let i in Devices) {
-        let t = Devices[i];
+        expectedDevices = parseTempalteString(Devices[i].name);
+        /*let t = Devices[i];
         for (let j = t.start; j < t.end + 1; j++) {
             expectedDevices.push(t.name + j)
-        }
+        }*/
     }
+    log(expectedDevices);
 
     for (const Switch in data.neighbors) {
         if (Object.hasOwnProperty.call(data.neighbors, Switch)) {
@@ -644,7 +646,6 @@ function checkDevices() {
                     lldpNeighbors.push(Neighbor.lldp);
                 }
             }
-
             missingSwitchDevices = expectedDevices.filter(x => !lldpNeighbors.includes(x));
             for (let index = 0; index < missingSwitchDevices.length; index++) {
                 const device = missingSwitchDevices[index];
@@ -718,7 +719,7 @@ function webLogTemp() {
 		let tempAvg;
 
 		if (tempValid == 0) {
-			log(`Something is badly wrong`, "E");
+			log(`Invalid temperature measured connections must have failed`, "E");
 			sendSms(`CANNOT CONNECT TO MCR, MAYBE IT HAS MELTED?`);
 			
 		} else {
@@ -880,6 +881,45 @@ function makeHeader() {
 
 /* Utility Functions */
 
+
+function parseTempalteString(string) {
+
+    function paternDecompose(patern) {
+        const paternArray = patern.split(',');
+        const outputArray = [];
+        for (let index = 0; index < paternArray.length; index++) {
+            const element = paternArray[index];
+            if (element.includes('-')) {
+                const [from, to] = element.split('-')
+                for (let index = from; index <= to; index++) {
+                    outputArray.push(index);
+                }
+            } else {
+                outputArray.push(element);
+            }
+        }
+        return outputArray.sort((a,b)=>a[1]-b[1]);
+    }
+
+    string = `#${string}#`;
+    const loopable = string.split(/{(.*?)}/g);
+    let returnArray = [loopable.shift().substring(1)];
+    const loopLength = loopable.length;
+    for (let index = 0; index < loopLength; index++) {
+        const text = (index == loopLength - 2) ? loopable[index + 1].slice(0, -1) : loopable[index + 1];
+        const paternArray = paternDecompose(loopable[index]);
+
+        const newReturnArray = [];
+        returnArray.forEach(existingElement => {
+            paternArray.forEach(paternElement => {
+                newReturnArray.push(existingElement+paternElement+text);
+            });
+        });
+        returnArray = newReturnArray;
+        index++;
+    }
+    return returnArray;
+}
 
 function getDescription(deviceName) {
     if (typeof deviceName !== "undefined") {
