@@ -16,8 +16,13 @@
                 "<%- switches[prop].Name%>",
             <% }); %>
         ]
-        let servers = ["<%=webSocketEndpoint%>"];
-        let currentSystem = "<%=systemName%>";
+        <% if (webEnabled) { %>
+            let servers = ["<%=webSocketEndpoint%>"];
+        <% } else { %>
+            let servers = [`${window.location.hostname}:${window.location.port}`];
+        <% } %>
+        let currentSystem = "<%=systemName%>"
+        const version = '<%=version%>'
     </script>
     <script type="text/javascript" src="lib/jquery-3.6.0.min.js"></script>
     <script type="text/javascript" src="lib/bootstrap.min.js"></script>

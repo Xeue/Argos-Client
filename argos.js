@@ -1,6 +1,7 @@
 const serverID = new Date().getTime()
 
-import WebSocket from 'ws'
+import {WebSocket, WebSocketServer} from 'ws'
+import http from 'http'
 import express from 'express'
 import fetch from 'node-fetch'
 import axios from 'axios'
@@ -24,7 +25,7 @@ const __dirname = dirname(__filename)
 { /* Config */
 	logs.printHeader('Argos Monitoring')
 	config.useLogger(logs)
-    
+
 	config.require('port', [], 'What port shall the server use')
 	config.require('systemName', [], 'What is the name of the system')
 	config.require('warningTemperature', [], 'What temperature shall alerts be sent at')
@@ -68,8 +69,6 @@ const __dirname = dirname(__filename)
 		await config.fromCLI(__dirname + '/config.conf')
 	}
 
-	config.set('webEndpoint', `https://${config.get('webSocketEndpoint')}/REST`)
-
 	if (config.get('textsEnabled')) {
 		AWS.config.update({ region: config.get('awsRegion')})
 		AWS.config.credentials = new AWS.Credentials(config.get('awsAccessKeyId'), config.get('awsSecretAccessKey'))
@@ -104,7 +103,7 @@ const webServer = {
 	'connected': false,
 	'active': false,
 	'attempts': 0,
-	'address': config.webSocketEndpoint,
+	'address': config.get('webSocketEndpoint'),
 	'socket': null
 }
 const data = {
@@ -115,9 +114,6 @@ const data = {
 	'ups': {},
 	'devices':{}
 }
-
-const app = express()
-
 
 const pingFrequency = 30
 const lldpFrequency = 30
@@ -211,102 +207,324 @@ function devices(object) {
 }
 
 
-/* Express setup & Endpoints */
+/* Express setup & Websocket Server */
 
 
-app.set('views', __dirname + '/views')
-app.set('view engine', 'ejs')
-app.use(express.json())
-app.use(express.static('public'))
+function startHTTP() {
+	const app = express()
+	const server = http.createServer(app)
 
-app.listen(config.get('port'), '0.0.0.0', () => {
-	log(`Argos can be accessed at http://localhost:${config.get('port')}`, 'C')
-})
+	app.set('views', __dirname + '/views')
+	app.set('view engine', 'ejs')
+	app.use(express.json())
+	app.use(express.static('public'))
+	
+	app.get('/',  (req, res) =>  {
+		log('New client connected', 'A')
+		res.header('Content-type', 'text/html')
+		res.render('ui', {
+			switches:switches(),
+			systemName:config.get('systemName'),
+			webSocketEndpoint:config.get('webSocketEndpoint'),
+			webEnabled:config.get('webEnabled'),
+			version: version
+		})
+	})
+	
+	app.get('/broken', (req, res) => {
+		res.send('no')
+	})
+	
+	app.get('/fibre', (req, res) => {
+		log('Request for fibre data', 'D')
+		res.send(JSON.stringify(data.fibre))
+	})
+	
+	app.get('/ups', (req, res) => {
+		log('Request for UPS data', 'D')
+		res.send(JSON.stringify(data.ups))
+	})
+	
+	app.get('/phy', (req, res) => {
+		log('Request for PHY/FEC data', 'D')
+		res.send(JSON.stringify(data.phy))
+	})
+	
+	app.get('/mac', (req, res) => {
+		log('Request for mac/flap data', 'D')
+		res.send(JSON.stringify(data.mac))
+	})
+	
+	app.get('/devices', (req, res) => {
+		log('Request for devices data', 'D')
+		res.send(JSON.stringify(data.devices))
+	})
+	
+	app.get('/getConfig', (req, res) => {
+		log('Request for devices config', 'D')
+		let catagory = req.query.catagory
+		let data
+		switch (catagory) {
+		case 'switches':
+			data = switches()
+			break
+		case 'frames':
+			data = frames()
+			break
+		case 'ups':
+			data = ups()
+			break
+		case 'devices':
+			data = devices()
+			break
+		default:
+			break
+		}
+		res.send(JSON.stringify(data))
+	})
+	
+	app.post('/setswitches', (req, res) => {
+		log('Request to set switches config data', 'D')
+		switches(req.body)
+		res.send('Done')
+	})
+	app.post('/setdevices', (req, res) => {
+		log('Request to set devices config data', 'D')
+		devices(req.body)
+		res.send('Done')
+	})
+	app.post('/setups', (req, res) => {
+		log('Request to set ups config data', 'D')
+		ups(req.body)
+		res.send('Done')
+	})
+	app.post('/setframes', (req, res) => {
+		log('Request to set frames config data', 'D')
+		frames(req.body)
+		res.send('Done')
+	})
+	return server
+}
 
-app.get('/',  (req, res) =>  {
-	log('New client connected', 'A')
-	res.header('Content-type', 'text/html')
-	res.render('ui', {
-		switches:switches(),
-		systemName:config.get('systemName'),
-		webSocketEndpoint:config.get('webSocketEndpoint'),
-		webEnabled:config.get('webEnabled')
+const serverWS = new WebSocketServer({ noServer: true })
+const serverHTTP = startHTTP()
+
+serverHTTP.listen(config.get('port'))
+log(`Argos can be accessed at http://localhost:${config.get('port')}`, 'C')
+
+serverHTTP.on('upgrade', (request, socket, head) => {
+	log('Upgrade request received', 'D')
+	serverWS.handleUpgrade(request, socket, head, socket => {
+		serverWS.emit('connection', socket, request)
 	})
 })
 
-app.get('/broken', (req, res) => {
-	res.send('no')
+// Main websocket server functionality
+serverWS.on('connection', async socket => {
+	log('New client connected', 'D')
+	socket.pingStatus = 'alive'
+	socket.on('message', async (msgJSON)=>{
+		await onWSMessage(msgJSON, socket)
+	})
+	socket.on('close', ()=>{
+		onWSClose(socket)
+	})
 })
 
-app.get('/fibre', (req, res) => {
-	log('Request for fibre data', 'D')
-	res.send(JSON.stringify(data.fibre))
+serverWS.on('error', () => {
+	log('Server failed to start or crashed, please check the port is not in use', 'E')
+	process.exit(1)
 })
 
-app.get('/ups', (req, res) => {
-	log('Request for UPS data', 'D')
-	res.send(JSON.stringify(data.ups))
-})
-
-app.get('/phy', (req, res) => {
-	log('Request for PHY/FEC data', 'D')
-	res.send(JSON.stringify(data.phy))
-})
-
-app.get('/mac', (req, res) => {
-	log('Request for mac/flap data', 'D')
-	res.send(JSON.stringify(data.mac))
-})
-
-app.get('/devices', (req, res) => {
-	log('Request for devices data', 'D')
-	res.send(JSON.stringify(data.devices))
-})
-
-app.get('/getConfig', (req, res) => {
-	log('Request for devices config', 'D')
-	let catagory = req.query.catagory
-	let data
-	switch (catagory) {
-	case 'switches':
-		data = switches()
-		break
-	case 'frames':
-		data = frames()
-		break
-	case 'ups':
-		data = ups()
-		break
-	case 'devices':
-		data = devices()
-		break
-	default:
-		break
+async function onWSMessage(msgJSON, socket) {
+	let msgObj = {}
+	try {
+		msgObj = JSON.parse(msgJSON)
+		if (msgObj.payload.command !== 'ping' && msgObj.payload.command !== 'pong') {
+			logObj('Received', msgObj, 'A')
+		}
+		const payload = msgObj.payload
+		const header = msgObj.header
+		if (typeof payload.source == 'undefined') {
+			payload.source = 'default'
+		}
+		switch (payload.command) {
+		case 'meta':
+			log('Received: '+msgJSON, 'D')
+			socket.send('Received meta')
+			break
+		case 'register':
+			coreDoRegister(socket, msgObj)
+			break
+		case 'disconnect':
+			log(`${logs.r}${payload.data.ID}${logs.reset} Connection closed`, 'D')
+			break
+		case 'pong':
+			socket.pingStatus = 'alive'
+			break
+		case 'ping':
+			socket.pingStatus = 'alive'
+			sendClientData(socket, {
+				'command': 'pong'
+			})
+			break
+		case 'error':
+			log(`Device ${header.fromID} has entered an error state`, 'E')
+			log(`Message: ${payload.error}`, 'E')
+			break
+		case 'get':
+			getTemperature(header, payload).then(data => {
+				sendClientData(socket, data)
+			})
+			break
+		default:
+			log('Unknown message: '+msgJSON, 'W')
+		}
+	} catch (e) {
+		try {
+			msgObj = JSON.parse(msgJSON)
+			if (msgObj.payload.command !== 'ping' && msgObj.payload.command !== 'pong') {
+				logObj('Received', msgObj, 'A')
+			}
+			if (typeof msgObj.type == 'undefined') {
+				logObj('Server error', e, 'E')
+			} else {
+				log('A device is using old tally format, upgrade it to v4.0 or above', 'E')
+			}
+		} catch (e2) {
+			logObj('Invalid JSON', e, 'E')
+			log('Received: '+msgJSON, 'A')
+		}
 	}
-	res.send(JSON.stringify(data))
-})
+}
 
-app.post('/setswitches', (req, res) => {
-	log('Request to set switches config data', 'D')
-	switches(req.body)
-	res.send('Done')
-})
-app.post('/setdevices', (req, res) => {
-	log('Request to set devices config data', 'D')
-	devices(req.body)
-	res.send('Done')
-})
-app.post('/setups', (req, res) => {
-	log('Request to set ups config data', 'D')
-	ups(req.body)
-	res.send('Done')
-})
-app.post('/setframes', (req, res) => {
-	log('Request to set frames config data', 'D')
-	frames(req.body)
-	res.send('Done')
-})
+async function getTemperature(header, payload) {
+	log(`Getting temps for ${header.system}`, 'D')
+	let from = payload.from
+	let to = payload.to
+	let dateQuery = `SELECT ROW_NUMBER() OVER (ORDER BY PK) AS Number, \`PK\`, \`time\` FROM \`temperature\` WHERE time BETWEEN FROM_UNIXTIME(${from}) AND FROM_UNIXTIME(${to}) AND \`system\` = '${header.system}' GROUP BY \`time\`; `
 
+	const grouped = await db.query(dateQuery)
+
+	let divisor = Math.ceil(grouped.length/1000)
+	let whereArr = grouped.map((a)=>{
+		if (a.Number % divisor == 0) {
+			let data = new Date(a.time).toISOString().slice(0, 19).replace('T', ' ')
+			return `'${data}'`
+		}
+	}).filter(Boolean)
+	let whereString = whereArr.join(',')
+	let query
+	if (whereString == '') {
+		query = `SELECT * FROM \`temperature\` WHERE \`system\` = '${header.system}' ORDER BY \`PK\` ASC LIMIT 1; `
+	} else {
+		query = `SELECT * FROM \`temperature\` WHERE time IN (${whereString}) AND \`system\` = '${header.system}' ORDER BY \`PK\` ASC; `
+	}
+
+	const rows = await db.query(query)
+
+	const dataObj = {
+		'command':'data',
+		'data':'temps',
+		'system':header.system,
+		'replace': true,
+		'points':{}
+	}
+
+	rows.forEach((row) => {
+		let timestamp = row.time.getTime()
+		if (!dataObj.points[timestamp]) {
+			dataObj.points[timestamp] = {}
+		}
+		let point = dataObj.points[timestamp]
+		point[row.frame] = row.temperature
+
+		delete point.average
+		const n = Object.keys(point).length
+		const values = Object.values(point)
+		const total = values.reduce((accumulator, value) => {
+			return accumulator + value
+		}, 0)
+		point.average = total/n
+	})
+
+	return dataObj
+}
+
+function onWSClose(socket) {
+	try {
+		let oldId = JSON.parse(JSON.stringify(socket.ID))
+		log(`${logs.r}${oldId}${logs.reset} Connection closed`, 'D')
+		socket.connected = false
+	} catch (e) {
+		log('Could not end connection cleanly','E')
+	}
+}
+
+function doPing() {
+	let counts = {}
+	counts.alive = 0
+	counts.dead = 0
+	serverWS.clients.forEach(function each(client) {
+		if (client.readyState === 1) {
+			if (client.pingStatus == 'alive') {
+				counts.alive++
+				let payload = {}
+				payload.command = 'ping'
+				sendClientData(client, payload)
+				client.pingStatus = 'pending'
+			} else if (client.pingStatus == 'pending') {
+				client.pingStatus = 'dead'
+			} else {
+				counts.dead++
+			}
+		}
+	})
+}
+
+function coreDoRegister(socket, msgObj) {
+	const header = msgObj.header
+	if (typeof socket.type == 'undefined') {
+		socket.type = header.type
+	}
+	if (typeof socket.ID == 'undefined') {
+		socket.ID = header.fromID
+	}
+	if (typeof socket.version == 'undefined') {
+		socket.version = header.version
+	}
+	if (typeof socket.prodID == 'undefined') {
+		socket.prodID = header.prodID
+	}
+	if (header.version !== version) {
+		if (header.version.substr(0, header.version.indexOf('.')) != version.substr(0, version.indexOf('.'))) {
+			log('Connected client has different major version, it will not work with this server!', 'E')
+		} else {
+			log('Connected client has differnet version, support not guaranteed', 'W')
+		}
+	}
+	log(`${logs.g}${header.fromID}${logs.reset} Registered as new client`, 'D')
+	socket.connected = true
+}
+
+function sendClientData(connection, payload) {
+	connection.send(JSON.stringify({
+		'header': makeHeader(),
+		'payload': payload
+	}))
+}
+
+function makeHeader() {
+	const header = {}
+	header.fromID = serverID
+	header.timestamp = new Date().getTime()
+	header.version = version
+	header.type = 'Server'
+	header.active = true
+	header.messageID = header.timestamp
+	header.recipients = []
+	return header
+}
 
 /* Request definitions */
 
@@ -383,12 +601,12 @@ function lldpLoop() {
 	let Switches = switches()
 	log('Getting LLDP neighbors', 'A')
 	let promisses = []
-	for (var i = 0; i < Switches.length; i++) {
+	for (let i = 0; i < Switches.length; i++) {
 		let Switch = Switches[i]
 		promisses.push(doApi(lldpRequest, Switch))
 	}
 	return Promise.all(promisses).then((values) => {
-		for (var i = 0; i < values.length; i++) {
+		for (let i = 0; i < values.length; i++) {
 			if (typeof values[i] !== 'undefined') {
 				let neighbors = values[i].result[1].lldpNeighbors
 				data.neighbors[Switches[i].Name] = {}
@@ -423,7 +641,7 @@ function switchMac() {
 				mac: t.substr(50, 6).trim(),
 				last: t.substr(54, t.length).trim()
 			}
-    
+
 			if (mac.config == 'Up') {
 				if (!keys.includes(mac.int)) {
 					devices[mac.int] = {}
@@ -441,15 +659,15 @@ function switchMac() {
 	}
 
 	let promisses = []
-	for (var i = 0; i < Switches.length; i++) {
+	for (let i = 0; i < Switches.length; i++) {
 		promisses.push(doApi(macRequest, Switches[i]))
 	}
 	return Promise.all(promisses).then((values) => {
 		let filteredDevices = []
-		for (var i = 0; i < values.length; i++) {
+		for (let i = 0; i < values.length; i++) {
 			if (typeof values[i] !== 'undefined') {
 				let procDev = clearEmpties(processSwitchMac(values[i], data.neighbors[Switches[i].Name]))
-                
+
 				for (let dev in procDev) {
 					if (typeof procDev[dev].mac !== 'undefined') {
 						if(!('lastChange' in procDev[dev].mac)) {
@@ -485,37 +703,44 @@ function switchPhy() {
 			}
 			const port = statuses[portName]
 			const fec = port.phyStatuses[0].fec
-			log(fec)
-			if (fec.uncorrectedCodewords.value > 0) {
-				devices[portName].phy = {}
-				devices[portName].phy.current = fec.uncorrectedCodewords.value
-				devices[portName].phy.changes = fec.uncorrectedCodewords.changes
-				devices[portName].phy.lastChange = fec.uncorrectedCodewords.lastChange
-				devices[portName].port = portName
-				devices[portName].description = getDescription(devices[portName].lldp)
+			if (fec?.encoding == 'reedSolomon') {
+				if (fec.uncorrectedCodewords.value > 100) {
+					devices[portName].phy = {}
+					devices[portName].phy.current = fec.uncorrectedCodewords.value
+					devices[portName].phy.changes = fec.uncorrectedCodewords.changes
+					devices[portName].phy.lastChange = fec.uncorrectedCodewords.lastChange
+					devices[portName].port = portName
+					devices[portName].description = getDescription(devices[portName].lldp)
+				}
+			} else if (fec?.encoding == 'fireCode') {
+				if (fec.perLaneUncorrectedFecBlocks[0].value > 100) {
+					devices[portName].phy = {}
+					devices[portName].phy.current = fec.perLaneUncorrectedFecBlocks[0].value
+					devices[portName].phy.changes = fec.perLaneUncorrectedFecBlocks[0].changes
+					devices[portName].phy.lastChange = fec.perLaneUncorrectedFecBlocks[0].lastChange
+					devices[portName].port = portName
+					devices[portName].description = getDescription(devices[portName].lldp)
+				}
 			}
 		}
 		return devices
 	}
 
 	let promisses = []
-	for (var i = 0; i < Switches.length; i++) {
+	for (let i = 0; i < Switches.length; i++) {
 		promisses.push(doApi(phyRequest, Switches[i]))
 	}
 	return Promise.all(promisses).then((values) => {
 		let filteredDevices = []
-		for (var i = 0; i < values.length; i++) {
+		for (let i = 0; i < values.length; i++) {
 			if (typeof values[i] !== 'undefined') {
 				let procDev = processSwitchPhy(values[i], data.neighbors[Switches[i].Name])
 
 				for (let dev in procDev) {
 					if ('phy' in procDev[dev]) {
-						let time = procDev[dev].phy.lastChange.split(' ')[0].split(':')
-						let timeTotal = parseInt(time[0]) * 3600 + parseInt(time[1]) * 60 + parseInt(time[2])
-						if (timeTotal < 300) {
-							procDev[dev].switch = Switches[i].Name
-							filteredDevices.push(procDev[dev])
-						}
+						procDev[dev].switch = Switches[i].Name
+						filteredDevices.push(procDev[dev])
+						//}
 					}
 				}
 			} else {
@@ -548,14 +773,14 @@ function switchFibre() {
 		}
 		return devices
 	}
-    
+
 	let promisses = []
-	for (var i = 0; i < Switches.length; i++) {
+	for (let i = 0; i < Switches.length; i++) {
 		promisses.push(doApi(fibreRequest, Switches[i]))
 	}
 	return Promise.all(promisses).then((values) => {
 		let filteredDevices = []
-		for (var i = 0; i < values.length; i++) {
+		for (let i = 0; i < values.length; i++) {
 			if (typeof values[i] !== 'undefined') {
 				let procDev = processSwitchFibre(values[i], data.neighbors[Switches[i].Name])
 
@@ -700,7 +925,7 @@ async function logTemp() {
 	log('Got temperature data, processing', 'D')
 	let tempSum = 0
 	let tempValid = 0
-	
+
 	for (let index = 0; index < Frames.length; index++) {
 		const frameData = results[index]
 		if (frameData.status == 'fulfilled') {
@@ -733,7 +958,7 @@ async function logTemp() {
 	if (tempValid == 0) {
 		log('Invalid temperature measured connections must have failed', 'E')
 		sendSms('CANNOT CONNECT TO MCR, MAYBE IT HAS MELTED?')
-		
+
 	} else {
 		tempAvg = tempSum / tempValid
 		log(`Average temperature = ${tempAvg} deg C`, 'D')
@@ -758,7 +983,7 @@ function webLogBoot() {
 
 function sendSms(msg) {
 	if (!config.get('textsEnabled')) return
-    
+
 	let params = {
 		Message: msg,
 		TopicArn: 'arn:aws:sns:eu-west-2:796884558775:TDS_temperature'
@@ -868,18 +1093,6 @@ function sendData(payload) {
 	}
 }
 
-function makeHeader() {
-	let header = {}
-	header.fromID = serverID
-	header.timestamp = new Date().getTime()
-	header.version = version
-	header.type = 'System'
-	header.system = config.get('systemName')
-	header.active = true
-	header.messageID = header.timestamp
-	return header
-}
-
 
 /* Database */
 
@@ -887,8 +1100,8 @@ function makeHeader() {
 class database {
 	constructor() {
 		this.pool = mariadb.createPool({
-			host: config.get('dbHost'), 
-			user: config.get('dbUser'), 
+			host: config.get('dbHost'),
+			user: config.get('dbUser'),
 			password: config.get('dbPass'),
 			connectionLimit: 5
 		})
@@ -898,8 +1111,8 @@ class database {
 		log('Initialising SQL database', 'S')
 		await this.query(`CREATE DATABASE IF NOT EXISTS ${config.get('dbName')};`)
 		this.pool = mariadb.createPool({
-			host: config.get('dbHost'), 
-			user: config.get('dbUser'), 
+			host: config.get('dbHost'),
+			user: config.get('dbUser'),
 			password: config.get('dbPass'),
 			database: config.get('dbName'),
 			connectionLimit: 5
@@ -1015,7 +1228,7 @@ function parseTempalteString(string) {
 	for (let index = 0; index < loopLength; index++) {
 		const text = (index == loopLength - 2) ? loopable[index + 1].slice(0, -1) : loopable[index + 1]
 		const paternArray = paternDecompose(loopable[index])
-        
+
 		const newReturnArray = []
 		returnArray.forEach(existingElement => {
 			paternArray.forEach(paternElement => {
@@ -1043,11 +1256,11 @@ function minutes(n) {
 }
 
 function clearEmpties(o) {
-	for (var k in o) {
+	for (let k in o) {
 		if (!o[k] || typeof o[k] !== 'object') {
 			continue // If null or not an object, skip to the next iteration
 		}
-    
+
 		// The property is an object
 		clearEmpties(o[k]) // <-- Make a recursive call on the nested object
 		if (Object.keys(o[k]).length === 0) {
@@ -1078,8 +1291,9 @@ function startLoops() {
 	// 5 Second ping loop
 	setInterval(() => {
 		connectToWebServer()
+		doPing()
 	}, 5*1000)
-  
+
 	// 1 Minute ping loop
 	setInterval(() => {
 		connectToWebServer(true)
@@ -1089,7 +1303,6 @@ function startLoops() {
 
 /* Start Functions */
 
-logObj('test', {'test':'test'})
 
 if (config.get('webEnabled')) {
 	startLoops()

@@ -457,7 +457,8 @@ function getPhy() {
 				} else {
 					feeding = '<em class="text-muted">n/a</em>'
 				}
-				let s = `<tr><td>${v.switch}</td><td>${v.port}</td><td>${lldp}</td><td>${feeding}</td><td>${v.phy.changes}</td><td>${v.phy.lastChange}</td></tr>`
+				const time = new Date(v.phy.lastChange * 1000)
+				let s = `<tr><td>${v.switch}</td><td>${v.port}</td><td>${lldp}</td><td>${feeding}</td><td>${v.phy.changes}</td><td>${time.toLocaleTimeString('en-GB')}</td></tr>`
 				$('table#phy tbody').append(s)
 			})
 		}
