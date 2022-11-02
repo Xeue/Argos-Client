@@ -46,8 +46,8 @@
             </div>
             <button id="toggleConfig"></button>
         </section>
-        <section class="row mt-3">
-            <div class="col-md-3 text-light text-muted" id="col-alive">
+        <section class="mainCont">
+            <div class="text-light text-muted" id="col-alive">
                 <h4>Missing devices</h4>
                 <span class="text-muted">Last updated <span id="lastAlive"></span></span>
                 <table id="alive" class="table table-dark text-muted">
@@ -61,7 +61,7 @@
                     </tbody>
                 </table>
             </div>
-            <div class="col-md-4 text-light text-muted" id="col-mac">
+            <div class="text-light text-muted" id="col-mac">
                 <h4>MAC flap</h4>
                 <span class="text-muted">Last updated <span id="lastMac"></span></span>
                 <table id="mac" class="table table-dark text-muted">
@@ -77,7 +77,7 @@
                     </tbody>
                 </table>
             </div>
-            <div class="col-md-5 text-light text-muted" id="col-phy">
+            <div class="text-light text-muted" id="col-phy">
                 <h4>PHY FEC uncorrected errors</h4>
                 <span class="text-muted">Last updated <span id="lastPhy"></span></span>
                 <table id="phy" class="table table-dark text-muted">
@@ -93,9 +93,7 @@
                     </tbody>
                 </table>
             </div>
-        </section>
-        <section class="row mt-5">
-            <div class="col-md-4 text-light text-muted" id="col-ups">
+            <div class="text-light text-muted" id="col-ups">
                 <h4>UPS status</h4>
                 <span class="text-muted">Last updated <span id="lastUps"></span></span>
                 <table id="ups" class="table table-dark text-muted">
@@ -110,7 +108,7 @@
                     </tbody>
                 </table>
             </div>
-            <div class="col-md-4 text-light text-muted" id="col-tra">
+            <div class="text-light text-muted" id="col-tra">
                 <h4>Low fibre RX</h4>
                 <span class="text-muted">Last updated <span id="lastTra"></span></span>
                 <table id="tra" class="table table-dark text-muted">
@@ -125,24 +123,7 @@
                     </tbody>
                 </table>
             </div>
-        </section>
-        <section class="row mt-5">
-            <div class="col-md-4 text-light" id="col-ping">
-                <h4>Argos to internet pings</h4>
-                <span class="text-muted">Last updated <span id="lastPing"></span></span>
-                <canvas id="pingChart"></canvas>
-                <div class="buttonBox">
-                  <button class="pingBut btn btn-secondary btn-sm" data-time="2419200">Last Month</button>
-                  <button class="pingBut btn btn-secondary btn-sm" data-time="604800">Last Week</button>
-                  <button class="pingBut btn btn-secondary btn-sm" data-time="172800">2 Days</button>
-                  <button class="pingBut btn btn-secondary btn-sm" data-time="86400">1 Day</button>
-                  <button class="pingBut btn btn-secondary btn-sm" data-time="43200">12 Hours</button>
-                  <button class="pingBut btn btn-secondary btn-sm" data-time="21600">6 Hours</button>
-                  <button class="pingBut btn btn-secondary btn-sm" data-time="7200">2 Hours</button>
-                  <button class="pingBut btn btn-secondary btn-sm" data-time="1800">30 Mins</button>
-                </div>
-            </div>
-            <div class="col-md-4 text-light" id="col-hot">
+            <div class="text-light" id="col-hot">
                 <h4>IQ Frame Temperatures</h4>
                 <span class="text-muted">Last updated <span id="lastHot"></span></span>
                 <canvas id="tempChart"></canvas>
@@ -156,17 +137,29 @@
                   <button class="tempBut btn btn-secondary btn-sm" data-time="7200">2 Hours</button>
                 </div>
             </div>
-            <div class="col-md-4 text-light" id="col-online">
-                <h4>Argos boots</h4>
-                <canvas id="bootChart"></canvas>
-                <pre class="infoBox" id="bootTime"></pre>
-            </div>
+            <% if (webEnabled) { %>
+                <div class="text-light" id="col-ping">
+                    <h4>Argos to internet pings</h4>
+                    <span class="text-muted">Last updated <span id="lastPing"></span></span>
+                    <canvas id="pingChart"></canvas>
+                    <div class="buttonBox">
+                      <button class="pingBut btn btn-secondary btn-sm" data-time="2419200">Last Month</button>
+                      <button class="pingBut btn btn-secondary btn-sm" data-time="604800">Last Week</button>
+                      <button class="pingBut btn btn-secondary btn-sm" data-time="172800">2 Days</button>
+                      <button class="pingBut btn btn-secondary btn-sm" data-time="86400">1 Day</button>
+                      <button class="pingBut btn btn-secondary btn-sm" data-time="43200">12 Hours</button>
+                      <button class="pingBut btn btn-secondary btn-sm" data-time="21600">6 Hours</button>
+                      <button class="pingBut btn btn-secondary btn-sm" data-time="7200">2 Hours</button>
+                      <button class="pingBut btn btn-secondary btn-sm" data-time="1800">30 Mins</button>
+                    </div>
+                </div>
+                <div class="text-light" id="col-online">
+                    <h4>Argos boots</h4>
+                    <canvas id="bootChart"></canvas>
+                    <pre class="infoBox" id="bootTime"></pre>
+                </div>
+            <% } %>
         </section>
-        <!--<section class="row mt-5 justify-content-md-center">
-            <div class="col-md-auto">
-                <button type="button" class="btn btn-danger btn-lg" id="cut">CUT TRANSMISSION</button>
-            </div>
-        </section>-->
     </main>
     
     <article id="config" class="overflow-auto hidden">

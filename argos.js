@@ -6,6 +6,7 @@ import fetch from 'node-fetch'
 import axios from 'axios'
 import AWS from 'aws-sdk'
 import fs from 'fs'
+import mariadb from 'mariadb'
 import { Buffer } from 'node:buffer'
 import {log, logObj, logs} from 'xeue-logs'
 import config from 'xeue-config'
@@ -22,6 +23,7 @@ const __dirname = dirname(__filename)
 
 { /* Config */
 	logs.printHeader('Argos Monitoring')
+	config.useLogger(logs)
     
 	config.require('port', [], 'What port shall the server use')
 	config.require('systemName', [], 'What is the name of the system')
@@ -29,6 +31,14 @@ const __dirname = dirname(__filename)
 	config.require('webEnabled', [true, false], 'Should this system report back to an argos server')
 	{
 		config.require('webSocketEndpoint', [], 'What is the url of the argos server', ['webEnabled', true])
+	}
+	config.require('localDataBase', [true, false], 'Setup and use a local database to save warnings and temperature information')
+	{
+		config.require('dbUser', [], 'Database Username', ['localDataBase', true])
+		config.require('dbPass', [], 'Database Password', ['localDataBase', true])
+		config.require('dbPort', [], 'Database port', ['localDataBase', true])
+		config.require('dbHost', [], 'Database address', ['localDataBase', true])
+		config.require('dbName', [], 'Database name', ['localDataBase', true])
 	}
 	config.require('textsEnabled', [true, false], 'Use AWS to send texts when warnings are triggered')
 	{
@@ -43,6 +53,10 @@ const __dirname = dirname(__filename)
 	config.default('systemName', 'Unknown')
 	config.default('warningTemperature', 35)
 	config.default('webEnabled', false)
+	config.default('localDataBase', false)
+	config.default('dbPort', '3306')
+	config.default('dbName', 'argos-data')
+	config.default('dbHost', 'localhost')
 	config.default('textsEnabled', false)
 	config.default('loggingLevel', 'W')
 	config.default('createLogFile', true)
@@ -215,7 +229,8 @@ app.get('/',  (req, res) =>  {
 	res.render('ui', {
 		switches:switches(),
 		systemName:config.get('systemName'),
-		webSocketEndpoint:config.get('webSocketEndpoint')
+		webSocketEndpoint:config.get('webSocketEndpoint'),
+		webEnabled:config.get('webEnabled')
 	})
 })
 
@@ -385,7 +400,7 @@ function lldpLoop() {
 					}
 				}
 			} else {
-				log('Return data from switch empty, is the switch online?', 'W')
+				log(`(LLDP) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W')
 			}
 		}
 		sendData({'command':'log', 'type':'lldp', 'data':data.neighbors})
@@ -450,7 +465,7 @@ function switchMac() {
 				}
 
 			} else {
-				log('Return data from switch empty, is the switch online?', 'W')
+				log(`(MAC) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W')
 			}
 		}
 		data.mac = filteredDevices
@@ -513,7 +528,7 @@ function switchPhy() {
 					}
 				}
 			} else {
-				log('Return data from switch empty, is the switch online?', 'W')
+				log(`(PHY) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W')
 			}
 		}
 		data.phy = filteredDevices
@@ -562,7 +577,7 @@ function switchFibre() {
 					}
 				}
 			} else {
-				log('Return data from switch empty, is the switch online?', 'W')
+				log(`(TRANS) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W')
 			}
 		}
 		data.fibre = filteredDevices
@@ -658,8 +673,8 @@ function doApi(json, Switch) {
 	const ip = Switch.IP
 	const user = Switch.User
 	const pass = Switch.Pass
-	log(`Polling switch API endpoint http://${user}:${pass}@${ip}/command-api for data`, 'D')
-	return fetch(`http://${user}:${pass}@${ip}/command-api`, {
+	log(`Polling switch API endpoint http://${ip}/command-api for data`, 'D')
+	return fetch(`http://${ip}/command-api`, {
 		method: 'POST',
 		headers: {
 			'content-type': 'application/json',
@@ -679,7 +694,7 @@ function doApi(json, Switch) {
 /* Web Logging Functions */
 
 
-function webLogTemp() {
+async function logTemp() {
 	let Frames = frames()
 	log('Getting temperatures', 'A')
 
@@ -690,50 +705,55 @@ function webLogTemp() {
 		promises.push(axios.get('http://'+frame.IP, { timeout: 1000 }))
 	}
 
-	return Promise.allSettled(promises).then(results => {
-		log('Got temperature data, processing', 'D')
-		let tempSum = 0
-		let tempValid = 0
-		for (let index = 0; index < Frames.length; index++) {
-			const frameData = results[index]
-			if (frameData.status == 'fulfilled') {
-				let temp = 0
-				let frameStat = frameData.value.data.split('<p><b>Temperature In:</b></p>')[1].slice(25,27)
-				if (frameStat == 'OK') {
-					let unfilteredTemp = frameData.value.data.split('<p><b>Temperature In:</b></p>')[1].slice(29,33)
-					temp = parseInt(unfilteredTemp.substring(0, unfilteredTemp.indexOf(')')))
-				} else {
-					log(`${Frames[index].Name} frame temperature is not OK`, 'W')
-				}
-				Frames[index].Temp = temp
-				tempSum += temp
-				tempValid++
-				log(`${Frames[index].Name} temperature = ${temp} deg C`, 'D')
+	const results = await Promise.allSettled(promises)
+	log('Got temperature data, processing', 'D')
+	let tempSum = 0
+	let tempValid = 0
+	
+	for (let index = 0; index < Frames.length; index++) {
+		const frameData = results[index]
+		if (frameData.status == 'fulfilled') {
+			let temp = 0
+			const frameStatData = frameData.value.data.split('<p><b>Temperature In:</b></p>')
+			if (typeof frameStatData[1] == 'undefined') return
+			const frameStat = frameStatData[1].slice(25,27)
+			if (frameStat == 'OK') {
+				let unfilteredTemp = frameData.value.data.split('<p><b>Temperature In:</b></p>')[1].slice(29,33)
+				temp = parseInt(unfilteredTemp.substring(0, unfilteredTemp.indexOf(')')))
 			} else {
-				log(`can't connect to ${Frames[index].Name}`, 'W')
+				log(`${Frames[index].Name} frame temperature is not OK`, 'W')
 			}
-		}
-
-		let tempAvg
-
-		if (tempValid == 0) {
-			log('Invalid temperature measured connections must have failed', 'E')
-			sendSms('CANNOT CONNECT TO MCR, MAYBE IT HAS MELTED?')
-			
+			Frames[index].Temp = temp
+			tempSum += temp
+			tempValid++
+			log(`${Frames[index].Name} temperature = ${temp} deg C`, 'D')
+			if (config.get('localDataBase')) db.insert('temperatures', {
+				'frame': Frames[index].Name,
+				'temperature': Frames[index].Temp,
+				'system': config.get('systemName')
+			})
 		} else {
-			tempAvg = tempSum / tempValid
-			log(`Average temperature = ${tempAvg} deg C`, 'D')
-			log(`Warning temperature = ${config.get('warningTemperature')} deg C`, 'D')
-
-			if (tempAvg > config.get('warningTemperature')) {
-				log('Warning: Temperature over warning limit, sending SMS', 'W')
-				sendSms(`Commitment to environment sustainability failed, MCR IS MELTING: ${tempAvg} deg C`)
-			}
+			log(`Can't connect to frame: '${Frames[index].Name}'`, 'W')
 		}
+	}
 
-		sendData({'command':'log', 'type':'temperature', 'data':Frames})
-				
-	})
+	let tempAvg
+
+	if (tempValid == 0) {
+		log('Invalid temperature measured connections must have failed', 'E')
+		sendSms('CANNOT CONNECT TO MCR, MAYBE IT HAS MELTED?')
+		
+	} else {
+		tempAvg = tempSum / tempValid
+		log(`Average temperature = ${tempAvg} deg C`, 'D')
+		log(`Warning temperature = ${config.get('warningTemperature')} deg C`, 'D')
+
+		if (tempAvg > config.get('warningTemperature')) {
+			log('Warning: Temperature over warning limit, sending SMS', 'W')
+			sendSms(`Commitment to environment sustainability failed, MCR IS MELTING: ${tempAvg} deg C`)
+		}
+		if (config.get('webEnabled')) sendData({'command':'log', 'type':'temperature', 'data':Frames})
+	}
 
 }
 
@@ -870,6 +890,108 @@ function makeHeader() {
 }
 
 
+/* Database */
+
+
+class database {
+	constructor() {
+		this.pool = mariadb.createPool({
+			host: config.get('dbHost'), 
+			user: config.get('dbUser'), 
+			password: config.get('dbPass'),
+			connectionLimit: 5
+		})
+	}
+
+	async init() {
+		log('Initialising SQL database', 'S')
+		await this.query(`CREATE DATABASE IF NOT EXISTS ${config.get('dbName')};`)
+		this.pool = mariadb.createPool({
+			host: config.get('dbHost'), 
+			user: config.get('dbUser'), 
+			password: config.get('dbPass'),
+			database: config.get('dbName'),
+			connectionLimit: 5
+		})
+		await this.#tableCheck('temperature', `CREATE TABLE \`temperature\` (
+			\`PK\` int(11) NOT NULL,
+			\`frame\` text NOT NULL,
+			\`temperature\` float NOT NULL,
+			\`system\` text NOT NULL,
+			\`time\` timestamp NOT NULL DEFAULT current_timestamp()
+		)`)
+		log('Tables initialised', 'S')
+	}
+
+	async #tableCheck(table, tableDef) {
+		const rows = await this.query(`SELECT count(*) as count
+			FROM information_schema.TABLES
+			WHERE (TABLE_SCHEMA = '${config.get('dbName')}') AND (TABLE_NAME = '${table}')
+		`)
+		if (rows[0].count == 0) {
+			log(`Table: ${table} is being created`, 'S')
+			this.query(tableDef)
+		}
+	}
+
+	async get(table, _conditions) {
+		const where = typeof _conditions == 'string' ? _conditions : _conditions.join(' and ')
+		const query = `SELECT * FROM ${table} WHERE ${where}`
+		const result = await this.query(query)
+		return result
+	}
+
+	async insert(table, _values) { // { affectedRows: 1, insertId: 1, warningStatus: 0 }
+		const query = `INSERT INTO ${table}(${Object.keys(_values).join(',')}) values (${Object.values(_values).join(',')})`
+		const result = await this.query(query)
+		return result
+	}
+
+	async update(table, _values, _conditions) {
+		let where = ''
+		switch (typeof _conditions) {
+		case 'undefined':
+			where = ''
+			break
+		case 'string':
+			where = 'WHERE '+_conditions
+			break
+		case 'object':
+			where = 'WHERE '+_conditions.join(' and ')
+			break
+		default:
+			break
+		}
+		const values = Object.keys(_values).map(key => `${key} = ${_values[key]}`).join(',')
+		const query = `UPDATE ${table} SET ${values} ${where}`
+		const result = await this.query(query)
+		return result
+	}
+
+	async query(query) {
+		try {
+			const conn = await this.pool.getConnection()
+			const rows = await conn.query(query)
+			conn.end()
+			return rows
+		} catch (error) {
+			logs.error('SQL Error', error)
+		}
+	}
+
+}
+
+const db = setupDatabase()
+
+function setupDatabase() {
+	if (!config.get('localDataBase')) return
+	const db = new database
+	db.init()
+	return db
+}
+
+
+
 /* Utility Functions */
 
 
@@ -947,7 +1069,7 @@ function clearEmpties(o) {
 async function startLoopAfterDelay(callback, seconds) {
 	setInterval(callback, seconds * 1000)
 	callback()
-	log('Starting '+callback.name)
+	log('Starting '+callback.name, 'A')
 	await sleep(1)
 }
 
@@ -980,7 +1102,6 @@ function startLoops() {
 if (config.get('webEnabled')) {
 	startLoops()
 	webLogBoot()
-	await startLoopAfterDelay(webLogTemp, tempFrequency)
 	await startLoopAfterDelay(webLogPing, pingFrequency)
 }
 if (!config.get('devMode')) {
@@ -990,4 +1111,5 @@ if (!config.get('devMode')) {
 	await startLoopAfterDelay(switchPhy, switchStatsFrequency)
 	await startLoopAfterDelay(switchFibre, switchStatsFrequency)
 	await startLoopAfterDelay(checkUps, upsFrequency)
+	await startLoopAfterDelay(logTemp, tempFrequency)
 }
