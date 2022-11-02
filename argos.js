@@ -404,6 +404,14 @@ async function getTemperature(header, payload) {
 	let to = payload.to
 	let dateQuery = `SELECT ROW_NUMBER() OVER (ORDER BY PK) AS Number, \`PK\`, \`time\` FROM \`temperature\` WHERE time BETWEEN FROM_UNIXTIME(${from}) AND FROM_UNIXTIME(${to}) AND \`system\` = '${header.system}' GROUP BY \`time\`; `
 
+	if (!config.get('localDataBase')) return {
+		'command':'data',
+		'data':'temps',
+		'system':header.system,
+		'replace': true,
+		'points':{}
+	}
+
 	const grouped = await db.query(dateQuery)
 
 	let divisor = Math.ceil(grouped.length/1000)
