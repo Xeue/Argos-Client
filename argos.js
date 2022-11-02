@@ -218,7 +218,7 @@ function startHTTP() {
 	app.set('view engine', 'ejs')
 	app.use(express.json())
 	app.use(express.static('public'))
-	
+
 	app.get('/',  (req, res) =>  {
 		log('New client connected', 'A')
 		res.header('Content-type', 'text/html')
@@ -230,36 +230,36 @@ function startHTTP() {
 			version: version
 		})
 	})
-	
+
 	app.get('/broken', (req, res) => {
 		res.send('no')
 	})
-	
+
 	app.get('/fibre', (req, res) => {
 		log('Request for fibre data', 'D')
 		res.send(JSON.stringify(data.fibre))
 	})
-	
+
 	app.get('/ups', (req, res) => {
 		log('Request for UPS data', 'D')
 		res.send(JSON.stringify(data.ups))
 	})
-	
+
 	app.get('/phy', (req, res) => {
 		log('Request for PHY/FEC data', 'D')
 		res.send(JSON.stringify(data.phy))
 	})
-	
+
 	app.get('/mac', (req, res) => {
 		log('Request for mac/flap data', 'D')
 		res.send(JSON.stringify(data.mac))
 	})
-	
+
 	app.get('/devices', (req, res) => {
 		log('Request for devices data', 'D')
 		res.send(JSON.stringify(data.devices))
 	})
-	
+
 	app.get('/getConfig', (req, res) => {
 		log('Request for devices config', 'D')
 		let catagory = req.query.catagory
@@ -282,7 +282,7 @@ function startHTTP() {
 		}
 		res.send(JSON.stringify(data))
 	})
-	
+
 	app.post('/setswitches', (req, res) => {
 		log('Request to set switches config data', 'D')
 		switches(req.body)
@@ -416,7 +416,7 @@ async function getTemperature(header, payload) {
 
 	let divisor = Math.ceil(grouped.length/1000)
 	let whereArr = grouped.map((a)=>{
-		if (a.Number % divisor == 0) {
+		if (parseInt(a.Number) % parseInt(divisor) == 0) {
 			let data = new Date(a.time).toISOString().slice(0, 19).replace('T', ' ')
 			return `'${data}'`
 		}
@@ -951,7 +951,7 @@ async function logTemp() {
 			tempSum += temp
 			tempValid++
 			log(`${Frames[index].Name} temperature = ${temp} deg C`, 'D')
-			if (config.get('localDataBase')) db.insert('temperatures', {
+			if (config.get('localDataBase')) db.insert('temperature', {
 				'frame': Frames[index].Name,
 				'temperature': Frames[index].Temp,
 				'system': config.get('systemName')
@@ -1130,19 +1130,21 @@ class database {
 			\`frame\` text NOT NULL,
 			\`temperature\` float NOT NULL,
 			\`system\` text NOT NULL,
-			\`time\` timestamp NOT NULL DEFAULT current_timestamp()
-		)`)
+			\`time\` timestamp NOT NULL DEFAULT current_timestamp(),
+			PRIMARY KEY (\`PK\`)
+		)`, 'PK')
 		log('Tables initialised', 'S')
 	}
 
-	async #tableCheck(table, tableDef) {
+	async #tableCheck(table, tableDef, pk) {
 		const rows = await this.query(`SELECT count(*) as count
 			FROM information_schema.TABLES
 			WHERE (TABLE_SCHEMA = '${config.get('dbName')}') AND (TABLE_NAME = '${table}')
 		`)
 		if (rows[0].count == 0) {
 			log(`Table: ${table} is being created`, 'S')
-			this.query(tableDef)
+			await this.query(tableDef)
+			await this.query(`ALTER TABLE \`${table}\` MODIFY \`${pk}\` int(11) NOT NULL AUTO_INCREMENT;`)
 		}
 	}
 
@@ -1154,7 +1156,7 @@ class database {
 	}
 
 	async insert(table, _values) { // { affectedRows: 1, insertId: 1, warningStatus: 0 }
-		const query = `INSERT INTO ${table}(${Object.keys(_values).join(',')}) values (${Object.values(_values).join(',')})`
+		const query = `INSERT INTO ${table}(${Object.keys(_values).join(',')}) values ('${Object.values(_values).join("','")}')`
 		const result = await this.query(query)
 		return result
 	}
