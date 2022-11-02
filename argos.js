@@ -474,34 +474,25 @@ function switchMac() {
 }
 
 function switchPhy() {
-	let Switches = switches()
+	const Switches = switches()
 	log('Looking for high numbers of PHY/FEC errors', 'A')
 	function processSwitchPhy(response, devices) {
-		let phy = response.result[1].interfacePhyStatuses
-		let keys = Object.keys(devices)
-		for (let i in phy) {
-			if (!keys.includes(i)) {
-				devices[i] = {}
+		const statuses = response.result[1].interfacePhyStatuses
+		const keys = Object.keys(devices)
+		for (let portName in statuses) {
+			if (!keys.includes(portName)) {
+				devices[portName] = {}
 			}
-			let t = phy[i]
-			log(t.phyStatuses[0].fec.uncorrectedCodewords)
-			let split = t.phyStatuses[0].text.replace(/\s\s+/g, ' ').split(' ')
-			if (split.includes('25Gbps')) {
-				let j = split.indexOf('uncorrected')
-				if (j > -1 && split[j + 6] !== 'never') {
-					devices[i].phy = {}
-					devices[i].phy.current = split[j + 4]
-					devices[i].phy.changes = split[j + 5]
-					devices[i].phy.lastChange = ''
-    
-					devices[i].port = i
-					devices[i].description = getDescription(devices[i].lldp)
-    
-					for (let k = j + 6; k < split.indexOf('PCS'); k++) {
-						devices[i].phy.lastChange += split[k] + ' '
-					}
-					devices[i].phy.lastChange = devices[i].phy.lastChange.slice(0, -1)
-				}
+			const port = statuses[portName]
+			const fec = port.phyStatuses[0].fec
+			log(fec)
+			if (fec.uncorrectedCodewords.value > 0) {
+				devices[portName].phy = {}
+				devices[portName].phy.current = fec.uncorrectedCodewords.value
+				devices[portName].phy.changes = fec.uncorrectedCodewords.changes
+				devices[portName].phy.lastChange = fec.uncorrectedCodewords.lastChange
+				devices[portName].port = portName
+				devices[portName].description = getDescription(devices[portName].lldp)
 			}
 		}
 		return devices
@@ -782,7 +773,7 @@ function sendSms(msg) {
 }
 
 function connectToWebServer(retry = false) {
-
+	if(!config.get('webEnabled')) return
 	let webSocket
 
 	if ((!webServer.connected && webServer.active && webServer.attempts < 3) || (retry && !webServer.connected)) {
@@ -1098,6 +1089,7 @@ function startLoops() {
 
 /* Start Functions */
 
+logObj('test', {'test':'test'})
 
 if (config.get('webEnabled')) {
 	startLoops()

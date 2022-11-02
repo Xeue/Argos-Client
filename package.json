@@ -1,6 +1,6 @@
 {
   "name": "argos",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "OB/Flypack Monitoring",
   "main": "argos.js",
   "type": "module",
@@ -16,7 +16,7 @@
     "node-fetch2": "^1.6.3",
     "ws": "^8.10.0",
     "xeue-config": "^1.2.8",
-    "xeue-logs": "^1.4.2"
+    "xeue-logs": "^1.4.3"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
