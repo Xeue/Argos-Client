@@ -11,6 +11,7 @@ import mariadb from 'mariadb'
 import { Buffer } from 'node:buffer'
 import {log, logObj, logs} from 'xeue-logs'
 import config from 'xeue-config'
+import process from 'process'
 
 import { createRequire } from 'module'
 import { fileURLToPath } from 'url'
@@ -56,7 +57,7 @@ const __dirname = dirname(__filename)
 	config.default('webEnabled', false)
 	config.default('localDataBase', false)
 	config.default('dbPort', '3306')
-	config.default('dbName', 'argos-data')
+	config.default('dbName', 'argosdata')
 	config.default('dbHost', 'localhost')
 	config.default('textsEnabled', false)
 	config.default('loggingLevel', 'W')
@@ -1156,7 +1157,7 @@ class database {
 	}
 
 	async insert(table, _values) { // { affectedRows: 1, insertId: 1, warningStatus: 0 }
-		const query = `INSERT INTO ${table}(${Object.keys(_values).join(',')}) values ('${Object.values(_values).join("','")}')`
+		const query = `INSERT INTO ${table}(${Object.keys(_values).join(',')}) values ('${Object.values(_values).join('\',\'')}')`
 		const result = await this.query(query)
 		return result
 	}
