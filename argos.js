@@ -70,6 +70,10 @@ const __dirname = dirname(__filename)
 		await config.fromCLI(__dirname + '/config.conf')
 	}
 
+	if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
+		config.set('debugLineNum', true)
+	}
+
 	if (config.get('textsEnabled')) {
 		AWS.config.update({ region: config.get('awsRegion')})
 		AWS.config.credentials = new AWS.Credentials(config.get('awsAccessKeyId'), config.get('awsSecretAccessKey'))
@@ -88,6 +92,9 @@ const __dirname = dirname(__filename)
 		switch (command) {
 		case 'config':
 			await config.fromCLI(__dirname + '/config.conf')
+			if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
+				config.set('debugLineNum', true)
+			}
 			logs.setConf({
 				'createLogFile': config.get('createLogFile'),
 				'logsFileName': 'CreditsLogging',
@@ -95,7 +102,7 @@ const __dirname = dirname(__filename)
 				'loggingLevel': config.get('loggingLevel'),
 				'debugLineNum': config.get('debugLineNum')
 			})
-			break
+			return true
 		}
 	})
 }
@@ -471,24 +478,26 @@ function onWSClose(socket) {
 }
 
 function doPing() {
-	let counts = {}
-	counts.alive = 0
-	counts.dead = 0
-	serverWS.clients.forEach(function each(client) {
-		if (client.readyState === 1) {
-			if (client.pingStatus == 'alive') {
-				counts.alive++
-				let payload = {}
-				payload.command = 'ping'
-				sendClientData(client, payload)
-				client.pingStatus = 'pending'
-			} else if (client.pingStatus == 'pending') {
-				client.pingStatus = 'dead'
-			} else {
-				counts.dead++
-			}
+	log('Doing client pings', 'A')
+	let alive = 0
+	let dead = 0
+	serverWS.clients.forEach(client => {
+		if (client.readyState !== 1) return
+		switch (client.pingStatus) {
+		case 'alive':
+			alive++
+			sendClientData(client, {'command': 'ping'})
+			client.pingStatus = 'pending'
+			break;
+		case 'pending':
+			client.pingStatus = 'dead'
+			break
+		default:
+			dead++
+			break;
 		}
 	})
+	log(`Alive: ${alive}, Dead: ${dead}`, 'A')
 }
 
 function coreDoRegister(socket, msgObj) {
@@ -523,6 +532,12 @@ function sendClientData(connection, payload) {
 	}))
 }
 
+function sendAllData(payload) {
+	serverWS.clients.forEach(client => {
+		sendClientData(client, payload)
+	})
+}
+
 function makeHeader() {
 	const header = {}
 	header.fromID = serverID
@@ -534,6 +549,12 @@ function makeHeader() {
 	header.recipients = []
 	return header
 }
+
+function distributeData(type, data) {
+	if (config.get('webEnabled')) sendWebData({'command':'log', 'type':type, 'data':data})
+	sendAllData({'command':'log', 'type':type, 'data':data})
+}
+
 
 /* Request definitions */
 
@@ -630,7 +651,8 @@ function lldpLoop() {
 				log(`(LLDP) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W')
 			}
 		}
-		sendData({'command':'log', 'type':'lldp', 'data':data.neighbors})
+
+		distributeData('lldp', data.neighbors)
 	})
 }
 
@@ -696,7 +718,7 @@ function switchMac() {
 			}
 		}
 		data.mac = filteredDevices
-		sendData({'command':'log', 'type':'mac', 'data':data.mac})
+		distributeData('mac', data.mac)
 	})
 }
 
@@ -757,7 +779,7 @@ function switchPhy() {
 			}
 		}
 		data.phy = filteredDevices
-		sendData({'command':'log', 'type':'phy', 'data':data.phy})
+		distributeData('phy', data.phy)
 	})
 }
 
@@ -806,7 +828,7 @@ function switchFibre() {
 			}
 		}
 		data.fibre = filteredDevices
-		sendData({'command':'log', 'type':'mac', 'data':data.fibre})
+		distributeData('fibre', data.fibre)
 	})
 }
 
@@ -857,7 +879,7 @@ function checkUps() {
 			}
 		}
 		data.ups = filteredUps
-		sendData({'command':'log', 'type':'mac', 'data':data.ups})
+		distributeData('ups', data.ups)
 	})
 }
 
@@ -891,7 +913,7 @@ function checkDevices() {
 		}
 	}
 	data.devices = missingDevices
-	sendData({'command':'log', 'type':'mac', 'data':data.devices})
+	distributeData('devices', data.devices)
 }
 
 function doApi(json, Switch) {
@@ -911,7 +933,8 @@ function doApi(json, Switch) {
 			return response.json().then((jsonRpcResponse) => { return jsonRpcResponse })
 		}
 	}).catch((error)=>{
-		logObj(`Failed to connect to switch ${ip}`, error, 'E')
+		log(`Failed to connect to switch ${ip}`, 'E')
+		logObj(error, 'D')
 	})
 }
 
@@ -977,17 +1000,17 @@ async function logTemp() {
 			log('Warning: Temperature over warning limit, sending SMS', 'W')
 			sendSms(`Commitment to environment sustainability failed, MCR IS MELTING: ${tempAvg} deg C`)
 		}
-		if (config.get('webEnabled')) sendData({'command':'log', 'type':'temperature', 'data':Frames})
+		if (config.get('webEnabled')) sendWebData({'command':'log', 'type':'temperature', 'data':Frames})
 	}
 
 }
 
 function webLogPing() {
-	sendData({'command':'log', 'type':'ping'})
+	sendWebData({'command':'log', 'type':'ping'})
 }
 
 function webLogBoot() {
-	sendData({'command':'log', 'type':'boot'})
+	sendWebData({'command':'log', 'type':'boot'})
 }
 
 function sendSms(msg) {
@@ -1023,7 +1046,7 @@ function connectToWebServer(retry = false) {
 			let payload = {}
 			payload.command = 'register'
 			payload.name = config.get('systemName')
-			sendData(payload)
+			sendWebData(payload)
 
 			log(`${logs.g}${webServer.address}${logs.reset} Established a connection to webserver`, 'S')
 			webServer.connected = true
@@ -1041,7 +1064,7 @@ function connectToWebServer(retry = false) {
 				}
 				switch (msgObj.payload.command) {
 				case 'ping':
-					sendData({
+					sendWebData({
 						'command': 'pong'
 					})
 					break
@@ -1092,7 +1115,7 @@ function connectToWebServer(retry = false) {
 	}
 }
 
-function sendData(payload) {
+function sendWebData(payload) {
 	let packet = {}
 	let header = makeHeader()
 	packet.header = header
@@ -1293,31 +1316,20 @@ async function sleep(seconds) {
 }
 
 
-/* Loops */
+/* Start Functions */
 
+await startLoopAfterDelay(doPing, 5)
 
-function startLoops() {
+if (config.get('webEnabled')) {
 	connectToWebServer(true)
-
-	// 5 Second ping loop
-	setInterval(() => {
-		connectToWebServer()
-		doPing()
-	}, 5*1000)
+	webLogBoot()
 
 	// 1 Minute ping loop
 	setInterval(() => {
 		connectToWebServer(true)
 	}, 60*1000)
-}
 
-
-/* Start Functions */
-
-
-if (config.get('webEnabled')) {
-	startLoops()
-	webLogBoot()
+	await startLoopAfterDelay(connectToWebServer, 5)
 	await startLoopAfterDelay(webLogPing, pingFrequency)
 }
 if (!config.get('devMode')) {

@@ -11,18 +11,14 @@
     <link href="lib/jsoneditor.css" rel="stylesheet">
     <link href="css/ui.css" rel="stylesheet">
     <script type="text/javascript">
+        const currentSystem = "<%=systemName%>"
+        const version = '<%=version%>'
         let Switches = [
-            <% Object.keys(switches).forEach(function(prop) { %>
+            <% Object.keys(switches).forEach(prop => { %>
                 "<%- switches[prop].Name%>",
             <% }); %>
         ]
-        <% if (webEnabled) { %>
-            let servers = ["<%=webSocketEndpoint%>"];
-        <% } else { %>
-            let servers = [`${window.location.hostname}:${window.location.port}`];
-        <% } %>
-        let currentSystem = "<%=systemName%>"
-        const version = '<%=version%>'
+        const webEnabled = <%=webEnabled%>
     </script>
     <script type="text/javascript" src="lib/jquery-3.6.0.min.js"></script>
     <script type="text/javascript" src="lib/bootstrap.min.js"></script>
@@ -168,12 +164,9 @@
     </main>
     
     <article id="config" class="overflow-auto hidden">
-        <section class="bg-dark text-light alert text-nowrap container">
+        <section class="bg-dark text-light alert text-nowrap container flex-column d-flex mb-0">
             <div class="row mt-2">
                 <h3 class="w-50">Edit Devices</h3>
-                <div class="w-50 text-end px-4">
-                    <button id="closeConfig" class="text-danger px-4 btn-close btn bg-danger"></button>
-                </div>
             </div>
 
             <div class="nav nav-tabs nav-justified" id="nav-tab" role="tablist">
@@ -183,16 +176,11 @@
                 <button class="nav-link" id="nav-temperatures-tab" data-bs-toggle="tab" data-bs-target="#nav-temperatures" type="button" role="tab" aria-controls="nav-temperatures" aria-selected="false">Temperatures</button>
             </div>
 
-            <section class="tab-content">
+            <section class="tab-content overflow-scroll">
                 <div class="tab-pane fade show active" id="nav-switches" data-editor="switches" role="tabpanel" aria-labelledby="nav-switches-tab">
-                    <div class="mt-3 mx-0">
-                        <button class="btn btn-primary toggleTableRaw" type="button" data-mode="table">Show Raw</button>
-                        <button class="btn btn-primary tableNew" type="button">Add new</button>
-                        <button class="btn btn-success tableSave" type="button">Save</button>
-                    </div>
                     <div class="dataTable collapse show">
                         <table class="table table-dark" data-editor="switches">
-                            <thead>
+                            <thead class="position-sticky top-0">
                                 <tr>
                                     <th class="">Name</th>
                                     <th class="">IP</th>
@@ -210,14 +198,9 @@
                 </div>
 
                 <div class="tab-pane fade" id="nav-devices" data-editor="devices" role="tabpanel" aria-labelledby="nav-devices-tab">
-                    <div class="mt-3 mx-0">
-                        <button class="btn btn-primary toggleTableRaw" type="button" data-mode="table">Show Raw</button>
-                        <button class="btn btn-primary tableNew" type="button">Add new</button>
-                        <button class="btn btn-success tableSave" type="button">Save</button>
-                    </div>
                     <div class="dataTable collapse show">
                         <table class="table table-dark" data-editor="devices">
-                            <thead>
+                            <thead class="position-sticky top-0">
                                 <tr>
                                     <th class="w-25">Hostname</th>
                                     <th class="w-25">Description</th>
@@ -233,14 +216,9 @@
                 </div>
 
                 <div class="tab-pane fade" id="nav-ups" data-editor="ups" role="tabpanel" aria-labelledby="nav-ups-tab">
-                    <div class="mt-3 mx-0">
-                        <button class="btn btn-primary toggleTableRaw" type="button" data-mode="table">Show Raw</button>
-                        <button class="btn btn-primary tableNew" type="button">Add new</button>
-                        <button class="btn btn-success tableSave" type="button">Save</button>
-                    </div>
                     <div class="dataTable collapse show">
                         <table class="table table-dark" data-editor="ups">
-                            <thead>
+                            <thead class="position-sticky top-0">
                                 <tr>
                                     <th class="w-25">Name</th>
                                     <th class="w-25">IP</th>
@@ -257,14 +235,9 @@
                 </div>
 
                 <div class="tab-pane fade" id="nav-temperatures" data-editor="frames" role="tabpanel" aria-labelledby="nav-temperatures-tab">
-                    <div class="mt-3 mx-0">
-                        <button class="btn btn-primary toggleTableRaw" type="button" data-mode="table">Show Raw</button>
-                        <button class="btn btn-primary tableNew" type="button">Add new</button>
-                        <button class="btn btn-success tableSave" type="button">Save</button>
-                    </div>
                     <div class="dataTable collapse show">
                         <table class="table table-dark" data-editor="frames">
-                            <thead>
+                            <thead class="position-sticky top-0">
                                 <tr>
                                     <th class="w-25">Name</th>
                                     <th class="w-25">IP</th>
@@ -279,10 +252,15 @@
                     </div>
                 </div>
             </section>
+
+            <div class="mt-3 mx-0 align-self-end">
+                <button class="btn btn-primary toggleTableRaw" type="button">Toggle View</button>
+                <button class="btn btn-primary tableNew" type="button">Add new</button>
+                <button class="btn btn-success tableSave" type="button">Save</button>
+                <button id="closeConfig" class="btn btn-danger">Close</button>
+            </div>
         </section>
     </article>
-
-    <!--<figure style="position: fixed; bottom: 0px; right: 0px;"><img src="media/argos_gray.png"></figure>-->
 </body>
 
 </html>

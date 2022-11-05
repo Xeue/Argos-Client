@@ -31,11 +31,14 @@
   background: rgba(0,0,0,0.5);
   opacity: 1;
   transition: 0.3s;
-  display: grid;
-  place-items: center;
   inset: 0;
   padding: 20px;
 }
+
+#config > section {
+  max-height: 100%;
+}
+
 #config.hidden {
   opacity: 0;
   pointer-events: none;
@@ -66,4 +69,8 @@ td {
   flex-wrap: wrap;
   gap: 2em;
   justify-content: space-between;
+}
+
+#config th {
+  background-color: #161717;
 }
