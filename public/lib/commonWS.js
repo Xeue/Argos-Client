@@ -1,136 +1,101 @@
 /*jshint esversion: 6 */
 
-let connecting = 0
-let conn
-let connCount = 0
-let connNum = 1
-let currentCon
-let connectLoop
-let forceShut = 0
-let loadTime = new Date().getTime()
-let myID
-let type
+class webSocket extends EventTarget {
+	constructor(type, clientVersion, ssl = false) {
+		super()
+		this.loadTime = new Date().getTime()
+		this.clientID = `${type.charAt(0)}_${this.loadTime}_${clientVersion}`
+		this.version = clientVersion
+		this.type = type
 
-$('main').addClass('disconnected')
+		this.connecting = false
+		this.currentServer
+		this.server
+		this.forceShut = false
+		this.serverURL
+		this.protocol = 'ws'
 
-function socketConnect(inputType) {
-	type = inputType
-	myID = `${type.charAt(0)}_${loadTime}_${version}`
-	if (connecting == 0) {
-		connecting = 1
-		if (connCount > 0) {
-			connNum++
-			if (connNum > servers.length) {
-				connNum -= servers.length
-			}
-			connCount = 0
+		if (ssl) {
+			this.protocol = 'wss'
 		}
-		connCount++
-		console.log('Connecting to: ws://'+servers[connNum-1])
-		currentCon = servers[connNum-1]
-		conn = new WebSocket('ws://'+servers[connNum-1])
+	}
 
-		conn.onopen = function(e) {
+	connect(serverURL) {
+		if (this.serverURL !== serverURL) {
+			if (typeof this.server !== 'undefined') {
+				this.server.disconnect()
+			}
+			this.server = null
+			this.serverURL = serverURL
+			this.connecting = false
+		}
+		if (this.connecting) return this.server
+		this.connecting = true
+		console.log(`Connecting to: ${this.protocol}://${this.serverURL}`)
+		this.server = new WebSocket(`${this.protocol}://${this.serverURL}`)
+
+		this.server.onopen = event => {
 			console.log('Connection established!')
-			connecting = 0
-			connCount = 0
-			$('main').removeClass('disconnected')
-			if (typeof socketDoOpen == 'function') {
-				socketDoOpen(e)
-			}
+			this.connecting = false
+			this.dispatchEvent(new Event('open'))
 		}
 
-		conn.onmessage = function(e) {
-			let packet = JSON.parse(e.data)
-			let header = packet.header
-			let payload = packet.payload
-			if (typeof socketDoMessage == 'function') {
-				socketDoMessage(packet, header, payload, e)
-			}
+		this.server.onmessage = event => {
+			const packet = JSON.parse(event.data)
+			const header = packet.header
+			const payload = packet.payload
 			switch (payload.command) {
 			case 'ping':
-				conn.pong()
+				this.send({'command':'pong'})
+				this.dispatchEvent(new Event('ping'))
+				break
+			default:
+				this.dispatchEvent(new CustomEvent('message', {detail: [header, payload, event]}))
 				break
 			}
 		}
 
-		conn.onclose = function(e) {
-			if (forceShut == 0) {
-				console.log('Connection failed')
-				setTimeout(function(){socketConnect(inputType)}, 500)
+		this.server.onclose = () => {
+			if (!this.forceShut) {
+				console.log('Connection ended')
+				setTimeout(() => {
+					this.connect(this.serverURL)
+				}, 500)
 			}
-			connecting = 0
-			forceShut = 0
-			$('main').addClass('disconnected')
-			if (typeof socketDoClose == 'function') {
-				socketDoClose(e)
-			}
+			this.forceShut = false
+			this.dispatchEvent(new Event('close'))
 		}
 
-		conn.tally = function(id, status) {
-			id = id || 0
-			let main = {}
-			main[id] = {}
-			main[id][status] = true
-			let payload = {
-				'command':'tally',
-				'busses':{
-					'main':main
-				}
-			}
-			sendData(payload)
-			if (typeof socketDoTally == 'function') {
-				socketDoTally(e)
-			}
+		this.server.disconnect = () => {
+			this.forceShut = true
+			this.server.close()
+			this.dispatchEvent(new Event('disconnect'))
 		}
 
-		conn.untally = function(id, status) {
-			id = id || 0
-			let main = {}
-			main[id] = {}
-			main[id][status] = false
-			let payload = {
-				'command':'tally',
-				'busses':{
-					'main':main
-				}
-			}
-			sendData(payload)
-			if (typeof socketDoUnTally == 'function') {
-				socketDoUnTally(e)
-			}
-		}
-
-		conn.pong = function() {
-			let payload = {'command':'pong'}
-			sendData(payload)
-			if (typeof socketDoPong == 'function') {
-				socketDoPong(e)
-			}
-		}
+		return this.server
 	}
-}
 
-function makeHeader() {
-	let header = {}
-	header.fromID = myID
-	header.timestamp = new Date().getTime()
-	header.version = version
-	header.type = type
-	header.system = currentSystem
-	if (connecting == 0) {
-		header.active = true
-	} else {
-		header.active = false
+	makeHeader() {
+		const header = {
+			'fromID': this.clientID,
+			'timestamp': new Date().getTime(),
+			'version': version,
+			'type': this.type,
+			'system': currentSystem,
+			'active': false,
+		}
+		if (this.connecting == 0) {
+			header.active = true
+		}
+		header.messageID = header.timestamp
+		return header
 	}
-	header.messageID = header.timestamp
-	return header
-}
 
-function sendData(payload) {
-	let packet = {}
-	let header = makeHeader()
-	packet.header = header
-	packet.payload = payload
-	conn.send(JSON.stringify(packet))
+	send(payload) {
+		this.server.send(JSON.stringify({
+			'header': this.makeHeader(),
+			'payload': payload
+		}))
+	}
+
 }

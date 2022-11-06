@@ -21,7 +21,7 @@ let lastPhy = -1
 let lastUps = -1
 let lastUpsHash = ''
 
-let templates = {}
+const templates = {}
 
 templates.nameIP = `<% for(i = 0; i < devices.length; i++) { %>
   <tr data-index="<%=i%>" data-template="nameIP">
@@ -35,7 +35,7 @@ templates.nameIP = `<% for(i = 0; i < devices.length; i++) { %>
 <% } %>`
 
 templates.switch = `<% for(i = 0; i < devices.length; i++) { %>
-  <tr data-index="<%=i%>" data-template="nameIP">
+  <tr data-index="<%=i%>" data-template="switch">
     <td data-type="text" data-key="Name" data-value="<%-devices[i].Name%>"><%-devices[i].Name%></td>
     <td data-type="text" data-key="IP" data-value="<%-devices[i].IP%>"><%-devices[i].IP%></td>
     <td data-type="text" data-key="User" data-value="<%-devices[i].User%>"><%-devices[i].User%></td>
@@ -58,20 +58,19 @@ templates.devices = `<% for(i = 0; i < devices.length; i++) { %>
   </tr>
 <% } %>`
 
-function socketDoOpen() {
+function socketDoOpen(socket) {
 	console.log('Registering as client')
-	sendData({'command':'register'})
-	$('#webBroken').html('<span class="badge badge-pill bg-success">Website Ok</span>')
+	socket.send({'command':'register'})
 	let to = new Date().getTime()/1000
 	let from = to - 7200
-	sendData({
+	socket.send({
 		'command':'get',
 		'data':'temperature',
 		'from': from,
 		'to': to
 	})
 
-	sendData({
+	socket.send({
 		'command':'get',
 		'data':'ping',
 		'from': from,
@@ -79,7 +78,7 @@ function socketDoOpen() {
 	})
 }
 
-function socketDoMessage(packet, header, payload) {
+function socketDoMessage(header, payload) {
 	switch (payload.command) {
 	case 'data':
 		switch (payload.data) {
@@ -109,18 +108,25 @@ function socketDoMessage(packet, header, payload) {
 			break
 		}
 		break
-	case 'command':
-		if (payload.serial == myID) {
-			switch (payload.action) {
-			case 'identify':
-				$('#t_indicatior').addClass('identify')
-				setTimeout(function(){
-					$('#t_indicatior').removeClass('identify')
-				}, 4000)
-				break
-			default:
-
-			}
+	case 'log':
+		switch (payload.type) {
+		case 'ups':
+			handleUPSData(payload.data)
+			break;
+		case 'fibre':
+			handleFibreData(payload.data)
+			break
+		case 'devices':
+			handleDevicesData(payload.data)
+			break
+		case 'mac':
+			handleMacData(payload.data)
+			break
+		case 'phy':
+			handlePhyData(payload.data)
+			break
+		default:
+			break
 		}
 		break
 	default:
@@ -337,173 +343,133 @@ function saySomething(text) {
 	}
 }
 
-function getFibre() {
-	$.getJSON(`${server}fibre`, function (data) {
-		$('table#tra tbody').empty()
-		if (Object.keys(data).length == 0) {
-			$('div#col-tra').addClass('text-muted')
-			$('table#tra').addClass('text-muted')
-		}
-		else {
-			$('div#col-tra').removeClass('text-muted')
-			$('table#tra').removeClass('text-muted')
-			$.each(data, (k, v) => {
-				let lldp = v.lldp ? v.lldp : '<em class="text-muted">n/a</em>'
-				let feeding
-				if (typeof v.description !== 'undefined') {
-					feeding = v.description
-				} else {
-					feeding = '<em class="text-muted">n/a</em>'
-				}
-				let s = `<tr><td>${v.switch}</td><td>${v.port}</td><td>${lldp}</td><td>${feeding}</td><td>${v.rxPower} dBm</td></tr>`
-				$('table#tra tbody').append(s)
-			})
-		}
-		lastTra = Date.now()
-		setTimeout(getFibre, 30000)
-	}).fail(function () {
-		setTimeout(getFibre, 30000)
-	})
-}
-
-function getBroken() {
-	$.get(`${server}broken`, function () {
-		lastBroken = false
-		$('#broken').html('<span class="badge badge-pill bg-success">Argos Ok</span>')
-		setTimeout(getBroken, 5000)
-	}).fail(function () {
-		if (!lastBroken) {
-			// broken
-			lastBroken = true
-		}
-		$('#broken').html('<span class="badge badge-pill bg-danger">Argos Broken</span>')
-		setTimeout(getBroken, 1000)
-	})
-}
-
-function getDevices() {
-	$.getJSON(`${server}devices`, function (data) {
-		$('table#alive tbody').empty()
-		if (Object.keys(data).length == 0) {
-			$('div#col-alive').addClass('text-muted')
-			$('table#alive').addClass('text-muted')
-		} else {
-			$('div#col-alive').removeClass('text-muted')
-			$('table#alive').removeClass('text-muted')
-			$.each(data, (k, v) => {
-				let s = '<tr><td>' + k + '</td>'
-				for (let index = 0; index < Switches.length; index++) {
-					if (v.includes(Switches[index])) {
-						s += '<td class=\'bg-danger\'>DOWN</td>'
-					} else {
-						s += '<td class=\'bg-success\'>UP</td>'
-					}
-                  
-				}
-				$('table#alive tbody').append(s)
-			})
-		}
-		lastAlive = Date.now()
-		setTimeout(getDevices, 10000)
-	}).fail(function () {
-		setTimeout(getDevices, 10000)
-	})
-}
-
-function getMac() {
-	$.getJSON(`${server}mac`, function (data) {
-		$('table#mac tbody').empty()
-		if (Object.keys(data).length == 0) {
-			$('div#col-mac').addClass('text-muted')
-			$('table#mac').addClass('text-muted')
-		}
-		else {
-			$('div#col-mac').removeClass('text-muted')
-			$('table#mac').removeClass('text-muted')
-			$.each(data, (k, v) => {
-				let lldp = v.lldp ? v.lldp : '<em class="text-muted">n/a</em>'
-				let feeding
-				if (typeof v.description !== 'undefined') {
-					feeding = v.description
-				} else {
-					feeding = '<em class="text-muted">n/a</em>'
-				}
-				let s = `<tr><td>${v.switch}</td><td>${v.port}</td><td>${lldp}</td><td>${feeding}</td><td>${v.mac.phyState}</td><td>${v.mac.lastChange}</td></tr>`
-				$('table#mac tbody').append(s)
-			})
-		}
-		lastMac = Date.now()
-		setTimeout(getMac, 10000)
-	}).fail(function () {
-		setTimeout(getMac, 10000)
-	})
-}
-
-function getPhy() {
-	$.getJSON(`${server}phy`, function (data) {
-		$('table#phy tbody').empty()
-		if (Object.keys(data).length == 0) {
-			$('div#col-phy').addClass('text-muted')
-			$('table#phy').addClass('text-muted')
-		}
-		else {
-			$('div#col-phy').removeClass('text-muted')
-			$('table#phy').removeClass('text-muted')
-			$.each(data, (k, v) => {
-				let lldp = v.lldp ? v.lldp : '<em class="text-muted">n/a</em>'
-				let feeding
-				if (typeof v.description !== 'undefined') {
-					feeding = v.description
-				} else {
-					feeding = '<em class="text-muted">n/a</em>'
-				}
-				const time = new Date(v.phy.lastChange * 1000)
-				let s = `<tr><td>${v.switch}</td><td>${v.port}</td><td>${lldp}</td><td>${feeding}</td><td>${v.phy.changes}</td><td>${time.toLocaleTimeString('en-GB')}</td></tr>`
-				$('table#phy tbody').append(s)
-			})
-		}
-		lastPhy = Date.now()
-		setTimeout(getPhy, 30000)
-	}).fail(function () {
-		setTimeout(getPhy, 30000)
-	})
-}
-
-function getUps() {
-	$.getJSON(`${server}ups`, function (data) {
-		let hash = CryptoJS.MD5(JSON.stringify(data)).toString()
-		if (lastUpsHash !== '' && hash !== lastUpsHash) {
-			if (Object.keys(data).length > 0) {
-				//saySomething("you pee ess broken")
+function handleFibreData(data) {
+	$('table#tra tbody').empty()
+	if (Object.keys(data).length == 0) {
+		$('div#col-tra').addClass('text-muted')
+		$('table#tra').addClass('text-muted')
+	}
+	else {
+		$('div#col-tra').removeClass('text-muted')
+		$('table#tra').removeClass('text-muted')
+		$.each(data, (k, v) => {
+			let lldp = v.lldp ? v.lldp : '<em class="text-muted">n/a</em>'
+			let feeding
+			if (typeof v.description !== 'undefined') {
+				feeding = v.description
+			} else {
+				feeding = '<em class="text-muted">n/a</em>'
 			}
-		} else if (lastUpsHash === '' && data.length > 0) {
+			let s = `<tr><td>${v.switch}</td><td>${v.port}</td><td>${lldp}</td><td>${feeding}</td><td>${v.rxPower} dBm</td></tr>`
+			$('table#tra tbody').append(s)
+		})
+	}
+	lastTra = Date.now()
+}
+
+function handleDevicesData(data) {
+	$('table#alive tbody').empty()
+	if (Object.keys(data).length == 0) {
+		$('div#col-alive').addClass('text-muted')
+		$('table#alive').addClass('text-muted')
+	} else {
+		$('div#col-alive').removeClass('text-muted')
+		$('table#alive').removeClass('text-muted')
+		$.each(data, (k, v) => {
+			let s = '<tr><td>' + k + '</td>'
+			for (let index = 0; index < Switches.length; index++) {
+				if (v.includes(Switches[index])) {
+					s += '<td class=\'bg-danger\'>DOWN</td>'
+				} else {
+					s += '<td class=\'bg-success\'>UP</td>'
+				}
+				
+			}
+			$('table#alive tbody').append(s)
+		})
+	}
+	lastAlive = Date.now()
+}
+
+function handleMacData(data) {
+	$('table#mac tbody').empty()
+	if (Object.keys(data).length == 0) {
+		$('div#col-mac').addClass('text-muted')
+		$('table#mac').addClass('text-muted')
+	}
+	else {
+		$('div#col-mac').removeClass('text-muted')
+		$('table#mac').removeClass('text-muted')
+		$.each(data, (k, v) => {
+			let lldp = v.lldp ? v.lldp : '<em class="text-muted">n/a</em>'
+			let feeding
+			if (typeof v.description !== 'undefined') {
+				feeding = v.description
+			} else {
+				feeding = '<em class="text-muted">n/a</em>'
+			}
+			let s = `<tr><td>${v.switch}</td><td>${v.port}</td><td>${lldp}</td><td>${feeding}</td><td>${v.mac.phyState}</td><td>${v.mac.lastChange}</td></tr>`
+			$('table#mac tbody').append(s)
+		})
+	}
+	lastMac = Date.now()
+}
+
+function handlePhyData(data) {
+	$('table#phy tbody').empty()
+	if (Object.keys(data).length == 0) {
+		$('div#col-phy').addClass('text-muted')
+		$('table#phy').addClass('text-muted')
+	}
+	else {
+		$('div#col-phy').removeClass('text-muted')
+		$('table#phy').removeClass('text-muted')
+		$.each(data, (k, v) => {
+			let lldp = v.lldp ? v.lldp : '<em class="text-muted">n/a</em>'
+			let feeding
+			if (typeof v.description !== 'undefined') {
+				feeding = v.description
+			} else {
+				feeding = '<em class="text-muted">n/a</em>'
+			}
+			const time = new Date(v.phy.lastChange * 1000)
+			let s = `<tr><td>${v.switch}</td><td>${v.port}</td><td>${lldp}</td><td>${feeding}</td><td>${v.phy.changes}</td><td>${time.toLocaleTimeString('en-GB')}</td></tr>`
+			$('table#phy tbody').append(s)
+		})
+	}
+	lastPhy = Date.now()
+}
+
+function handleUPSData(data) {
+	let hash = CryptoJS.MD5(JSON.stringify(data)).toString()
+	if (lastUpsHash !== '' && hash !== lastUpsHash) {
+		if (Object.keys(data).length > 0) {
 			//saySomething("you pee ess broken")
 		}
-		lastUpsHash = hash
+	} else if (lastUpsHash === '' && data.length > 0) {
+		//saySomething("you pee ess broken")
+	}
+	lastUpsHash = hash
 
-		$('table#ups tbody').empty()
-		if (Object.keys(data).length == 0) {
-			$('div#col-ups').addClass('text-muted')
-			$('table#ups').addClass('text-muted')
-		}
-		else {
-			$('div#col-ups').removeClass('text-muted')
-			$('table#ups').removeClass('text-muted')
-			$.each(data, (k, v) => {
-				let s
-				if (v.Status === 'Offline') {
-					s = `<tr><td>${v.Name}</td><td colspan="4" class="text-center">Offline</td></tr>`
-				} else {
-					s = `<tr><td>${v.Name}</td><td>${v.voltageIn}V ${v.freqIn}Hz</td><td>${v.voltageOut}V ${v.freqOut}Hz</td><td>${v.autonomy} min</td><td>${v.load}%</td></tr>`
-				}
-				$('table#ups tbody').append(s)
-			})
-		}
-		lastUps = Date.now()
-		setTimeout(getUps, 30000)
-	}).fail(function () {
-		setTimeout(getUps, 30000)
-	})
+	$('table#ups tbody').empty()
+	if (Object.keys(data).length == 0) {
+		$('div#col-ups').addClass('text-muted')
+		$('table#ups').addClass('text-muted')
+	}
+	else {
+		$('div#col-ups').removeClass('text-muted')
+		$('table#ups').removeClass('text-muted')
+		$.each(data, (k, v) => {
+			let s
+			if (v.Status === 'Offline') {
+				s = `<tr><td>${v.Name}</td><td colspan="4" class="text-center">Offline</td></tr>`
+			} else {
+				s = `<tr><td>${v.Name}</td><td>${v.voltageIn}V ${v.freqIn}Hz</td><td>${v.voltageOut}V ${v.freqOut}Hz</td><td>${v.autonomy} min</td><td>${v.load}%</td></tr>`
+			}
+			$('table#ups tbody').append(s)
+		})
+	}
+	lastUps = Date.now()
 }
 
 function updateLast() {
@@ -559,22 +525,45 @@ function loading(state) {
 }
 
 $(document).ready(function() {
-	if (servers[0] != '') {
-		socketConnect('Browser')
-		$('#webBroken').html('<span class="badge badge-pill bg-danger">Web Monitor Broken</span>')
-	} else {
-		$('#webBroken').html('<span class="badge badge-pill bg-danger">Web Monitor Disabled</span>')
-	}
-	renderPingChart(pings)
-	renderBootChart(boots)
-	renderTempChart(f,m,b,a)
-	getBroken()
-	getDevices()
-	getMac()
-	getPhy()
-	getUps()
-	getFibre()
+	renderTempChart()
 	setInterval(updateLast, 1000)
+
+	if (webEnabled) {
+		renderPingChart()
+		renderBootChart(boots)
+
+		$('#webBroken').html('<span class="badge badge-pill bg-danger">Web Monitor Offline</span>')
+		const webConnection = new webSocket('Browser', version)
+		webConnection.connect(["<%=webSocketEndpoint%>"])
+		webConnection.addEventListener('message', event => {
+			const [header, payload] = event.detail
+			socketDoMessage(header, payload)
+		})
+		webConnection.addEventListener('open', () => {
+			socketDoOpen(webConnection)
+			$('#webBroken').html('<span class="badge badge-pill bg-success">Website Online</span>')
+		})
+		webConnection.addEventListener('close', () => {
+			$('#webBroken').html('<span class="badge badge-pill bg-danger">Web Monitor Offline</span>')
+		})
+	} else {
+		$('#webBroken').html('<span class="badge badge-pill bg-secondary">Web Monitor Disabled</span>')
+	}
+
+	$('#broken').html('<span class="badge badge-pill bg-danger">Argos Offline</span>')
+	const localConnection = new webSocket('Browser', version)
+	localConnection.connect([`${window.location.hostname}:${window.location.port}`])
+	localConnection.addEventListener('message', event => {
+		const [header, payload] = event.detail
+		socketDoMessage(header, payload)
+	})
+	localConnection.addEventListener('open', () => {
+		socketDoOpen(localConnection)
+		$('#broken').html('<span class="badge badge-pill bg-success">Argos Online</span>')
+	})
+	localConnection.addEventListener('close', () => {
+		$('#broken').html('<span class="badge badge-pill bg-danger">Argos Offline</span>')
+	})
 
 	$(document).click(function(e) {
 		const $trg = $(e.target)
@@ -582,7 +571,7 @@ $(document).ready(function() {
 			let time = parseInt($trg.data('time'))
 			let to = new Date().getTime()/1000
 			let from = to - time
-			sendData({
+			localConnection.send({
 				'command':'get',
 				'data':'temperature',
 				'from': from,
@@ -593,7 +582,7 @@ $(document).ready(function() {
 			let to = new Date().getTime()/1000
 			let from = to - time
 
-			sendData({
+			localConnection.send({
 				'command':'get',
 				'data':'ping',
 				'from': from,
@@ -602,34 +591,27 @@ $(document).ready(function() {
 		} else if ($trg.is('#toggleConfig') || $trg.is('#closeConfig')) {
 			$('#toggleConfig').toggleClass('rotate')
 			loading(true)
-			let promises = [
+			Promise.allSettled([
 				getConfig('switches'),
 				getConfig('devices'),
 				getConfig('ups'),
 				getConfig('frames')
-			]
-			Promise.allSettled(promises).then(values => {
+			]).then(values => {
+				const [switches, devices, ups, frames] = values
 				loading(false)
 				$('#config').toggleClass('hidden')
-
-				editors['switches'] = renderEditorTab(values[0].value, editors['switches'], templates.switch, 'configSwitches')
-				editors['devices'] = renderEditorTab(values[1].value, editors['devices'], templates.devices, 'configDevices')
-				editors['ups'] = renderEditorTab(values[2].value, editors['ups'], templates.nameIP, 'configUps')
-				editors['frames'] = renderEditorTab(values[3].value, editors['frames'], templates.nameIP, 'configFrames')
+				editors['switches'] = renderEditorTab(switches.value, editors['switches'], templates.switch, 'configSwitches')
+				editors['devices'] = renderEditorTab(devices.value, editors['devices'], templates.devices, 'configDevices')
+				editors['ups'] = renderEditorTab(ups.value, editors['ups'], templates.nameIP, 'configUps')
+				editors['frames'] = renderEditorTab(frames.value, editors['frames'], templates.nameIP, 'configFrames')
 			}).catch(error => {
-				console.log(error)
+				console.error(error)
 			})
 
 		} else if ($trg.hasClass('toggleTableRaw')) {
-			$trg.closest('.tab-pane').find('.dataTable').collapse('toggle')
-			$trg.closest('.tab-pane').find('.dataRaw').collapse('toggle')
-			if ($trg.data('mode') == 'table') {
-				$trg.html('Show Table')
-				$trg.data('mode', 'raw')
-			} else {
-				$trg.html('Show Raw')
-				$trg.data('mode', 'table')
-			}
+			const $active = $trg.closest('.alert.container').find('.tab-pane.active')
+			$active.find('.dataTable').collapse('toggle')
+			$active.find('.dataRaw').collapse('toggle')
 		} else if ($trg.hasClass('editConfig')) {
 			let $row = $trg.closest('tr')
 			$row.children().each(function() {
@@ -700,40 +682,47 @@ $(document).ready(function() {
 			editors[editor].set(current)
 			editors[editor].expandAll()
 		} else if ($trg.hasClass('tableNew')) {
-			let $tbody = $trg.closest('.tab-pane').find('.dataTable').find('tbody')
-			let $rows = $tbody.children()
-			let template = $rows.last().data('template')
-      
-			let dummyData = []
+			const $tbody = $trg.closest('.alert.container').find('.tab-pane.active').find('.dataTable').find('tbody')
+			const $rows = $tbody.children()
+			const template = $rows.last().data('template')
+			console.log($rows)
+			const dummyData = []
 			dummyData[0] = {}
 			switch (template) {
+			case 'switch':
+				dummyData[0].Name = 'Switch'
+				dummyData[0].IP = 'IP Address'
+				dummyData[0].User = 'Username'
+				dummyData[0].Pass = 'Password'
+				break
 			case 'nameIP':
 				dummyData[0].Name = 'New Device'
 				dummyData[0].IP = 'IP Address'
 				break
 			case 'devices':
 				dummyData[0].name = 'New Device'
-				dummyData[0].start = 1
-				dummyData[0].end = 1
 				dummyData[0].description = 'Description'
 				break
 			default:
 				break
 			}
-			let $new = $(ejs.render(templates[template], {devices: dummyData}))
-			let index = $rows.length
+			const $new = $(ejs.render(templates[template], {'devices': dummyData}))
+			const index = $rows.length
 			$new.data('index', index)
 			$tbody.append($new)
 			$new.find('.editConfig').trigger('click')
 		} else if ($trg.hasClass('tableSave')) {
-			let $tbody = $trg.closest('.tab-pane').find('.dataTable').find('table')
-			let editor = $tbody.data('editor')
-			let current = editors[editor].get()
-			$.ajax(`${server}set${editor}`, {
-				data : JSON.stringify(current),
-				contentType : 'application/json',
-				type : 'POST'}
-			).then(function() {
+			let promises = []
+			for (const editor in editors) {
+				if (Object.hasOwnProperty.call(editors, editor)) {
+					promises.push($.ajax(`${server}set${editor}`, {
+						data : JSON.stringify(editors[editor].get()),
+						contentType : 'application/json',
+						type : 'POST'}
+					))
+				}
+			}
+			Promise.allSettled(promises).then(() => {
 				alert('Saved')
 			})
 		} else if ($trg.hasClass('deleteRow')) {
