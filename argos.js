@@ -90,7 +90,7 @@ const __dirname = dirname(__filename)
 			await config.fromCLI(__dirname + '/config.conf')
 			logs.setConf({
 				'createLogFile': config.get('createLogFile'),
-				'logsFileName': 'CreditsLogging',
+				'logsFileName': 'ArgosLogging',
 				'configLocation': __dirname,
 				'loggingLevel': config.get('loggingLevel'),
 				'debugLineNum': config.get('debugLineNum')
