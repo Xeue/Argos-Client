@@ -225,7 +225,7 @@ function startHTTP() {
 	app.set('views', __dirname + '/views')
 	app.set('view engine', 'ejs')
 	app.use(express.json())
-	app.use(express.static('public'))
+	app.use(express.static( __dirname + '/public'))
 
 	app.get('/',  (req, res) =>  {
 		log('New client connected', 'A')
@@ -408,9 +408,9 @@ async function onWSMessage(msgJSON, socket) {
 
 async function getTemperature(header, payload) {
 	log(`Getting temps for ${header.system}`, 'D')
-	let from = payload.from
-	let to = payload.to
-	let dateQuery = `SELECT ROW_NUMBER() OVER (ORDER BY PK) AS Number, \`PK\`, \`time\` FROM \`temperature\` WHERE time BETWEEN FROM_UNIXTIME(${from}) AND FROM_UNIXTIME(${to}) AND \`system\` = '${header.system}' GROUP BY \`time\`; `
+	const from = payload.from
+	const to = payload.to
+	const dateQuery = `SELECT ROW_NUMBER() OVER (ORDER BY PK) AS Number, \`PK\`, \`time\` FROM \`temperature\` WHERE time BETWEEN FROM_UNIXTIME(${from}) AND FROM_UNIXTIME(${to}) AND \`system\` = '${header.system}' GROUP BY \`time\`; `
 
 	if (!config.get('localDataBase')) return {
 		'command':'data',
@@ -422,14 +422,14 @@ async function getTemperature(header, payload) {
 
 	const grouped = await db.query(dateQuery)
 
-	let divisor = Math.ceil(grouped.length/1000)
-	let whereArr = grouped.map((a)=>{
+	const divisor = Math.ceil(grouped.length/1000)
+	const whereArr = grouped.map((a)=>{
 		if (parseInt(a.Number) % parseInt(divisor) == 0) {
-			let data = new Date(a.time).toISOString().slice(0, 19).replace('T', ' ')
+			const data = new Date(a.time).toISOString().slice(0, 19).replace('T', ' ')
 			return `'${data}'`
 		}
 	}).filter(Boolean)
-	let whereString = whereArr.join(',')
+	const whereString = whereArr.join(',')
 	let query
 	if (whereString == '') {
 		query = `SELECT * FROM \`temperature\` WHERE \`system\` = '${header.system}' ORDER BY \`PK\` ASC LIMIT 1; `
@@ -957,6 +957,7 @@ async function logTemp() {
 	log('Got temperature data, processing', 'D')
 	let tempSum = 0
 	let tempValid = 0
+	const socketSend = {}
 
 	for (let index = 0; index < Frames.length; index++) {
 		const frameData = results[index]
@@ -980,6 +981,7 @@ async function logTemp() {
 				'temperature': Frames[index].Temp,
 				'system': config.get('systemName')
 			})
+			socketSend[Frames[index].Name] = Frames[index].Temp
 		} else {
 			log(`Can't connect to frame: '${Frames[index].Name}'`, 'W')
 		}
@@ -990,7 +992,6 @@ async function logTemp() {
 	if (tempValid == 0) {
 		log('Invalid temperature measured connections must have failed', 'E')
 		sendSms('CANNOT CONNECT TO MCR, MAYBE IT HAS MELTED?')
-
 	} else {
 		tempAvg = tempSum / tempValid
 		log(`Average temperature = ${tempAvg} deg C`, 'D')
@@ -1001,6 +1002,19 @@ async function logTemp() {
 			sendSms(`Commitment to environment sustainability failed, MCR IS MELTING: ${tempAvg} deg C`)
 		}
 		if (config.get('webEnabled')) sendWebData({'command':'log', 'type':'temperature', 'data':Frames})
+
+		socketSend.average = tempAvg
+		const time = new Date().getTime()
+		const points = {}
+		points[time] = socketSend
+		sendAllData({
+			'command': 'data',
+			'data': 'temps',
+			'system': config.get('systemName'),
+			'replace': false,
+			'points': points
+		})
+
 	}
 
 }
@@ -1134,6 +1148,7 @@ class database {
 		this.pool = mariadb.createPool({
 			host: config.get('dbHost'),
 			user: config.get('dbUser'),
+			port: config.get('dbPort'),
 			password: config.get('dbPass'),
 			connectionLimit: 5
 		})
@@ -1145,6 +1160,7 @@ class database {
 		this.pool = mariadb.createPool({
 			host: config.get('dbHost'),
 			user: config.get('dbUser'),
+			port: config.get('dbPort'),
 			password: config.get('dbPass'),
 			database: config.get('dbName'),
 			connectionLimit: 5
@@ -1242,7 +1258,7 @@ function parseTempalteString(string) {
 			const element = paternArray[index]
 			if (element.includes('-')) {
 				const [from, to] = element.split('-')
-				for (let index = from; index <= to; index++) {
+				for (let index = Number(from); index <= Number(to); index++) {
 					outputArray.push(index)
 				}
 			} else {
@@ -1285,8 +1301,8 @@ function getDescription(deviceName) {
 	}
 }
 
-function minutes(n) {
-	return parseInt(n) * 60
+function minutes(mins) {
+	return parseInt(mins) * 60
 }
 
 function clearEmpties(o) {
@@ -1312,7 +1328,7 @@ async function startLoopAfterDelay(callback, seconds) {
 }
 
 async function sleep(seconds) {
-	await new Promise ((resolve)=>{setTimeout(resolve, 1000*seconds)})
+	await new Promise (resolve => setTimeout(resolve, 1000*seconds))
 }
 
 
