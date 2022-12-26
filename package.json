@@ -1,6 +1,6 @@
 {
   "name": "argos",
-  "version": "2.4.1",
+  "version": "2.4.2",
   "description": "OB/Flypack Monitoring",
   "main": "argos.js",
   "type": "module",
