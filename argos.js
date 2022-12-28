@@ -11,16 +11,43 @@ const {Buffer} = require('node:buffer');
 const {log, logObj, logs, logEvent} = require('xeue-logs');
 const {config} = require('xeue-config');
 const {version} = require('./package.json');
-const {app, BrowserWindow, ipcMain} = require('electron');
+const {app, BrowserWindow, ipcMain, Tray, Menu} = require('electron');
 const electronEjs = require('electron-ejs');
 const { Promise } = require('node-fetch');
+const AutoLaunch = require('auto-launch');
 
 (async () => {
 
 	const ejs = new electronEjs({}, {});
 	let configValid = false;
 	let mainWindow;
+	let isQuiting;
+	let tray;
 	await app.whenReady();
+
+	tray = new Tray(__dirname + '/public/img/icon/network-48.png');
+	tray.setContextMenu(Menu.buildFromTemplate([
+		{
+			label: 'Show App', click: function () {
+				mainWindow.show();
+			}
+		},
+		{
+			label: 'Quit', click: function () {
+				isQuiting = true;
+				app.quit();
+			}
+		}
+	]));
+
+	let autoLaunch = new AutoLaunch({
+		name: 'Argos Monitoring',
+		path: app.getPath('exe')
+	});
+	autoLaunch.isEnabled().then(isEnabled => {
+		if (!isEnabled) autoLaunch.enable();
+	})
+
 	await createWindow();
 
 	async function createWindow() {
@@ -30,7 +57,8 @@ const { Promise } = require('node-fetch');
 			autoHideMenuBar: true,
 			webPreferences: {
 				preload: __dirname + '/config.js'
-			}
+			},
+			icon: 'public/img/icon/network-48.png'
 		});
 
 		if (!configValid) {
@@ -43,12 +71,29 @@ const { Promise } = require('node-fetch');
 		}
 	};
 	
+	app.on('before-quit', function () {
+		isQuiting = true;
+	});
+
 	app.on('activate', async () => {
 		if (BrowserWindow.getAllWindows().length === 0) createWindow();
 	});
 
+	mainWindow.on('close', function (event) {
+		if (!isQuiting) {
+		  event.preventDefault();
+		  mainWindow.hide();
+		  event.returnValue = false;
+		}
+	});
+
+    mainWindow.on('minimize', function (event) {
+        event.preventDefault();
+        mainWindow.hide();
+    });
+
 	logEvent.on('logSend', (message) => {
-		mainWindow.webContents.send('log', message);
+		if (!isQuiting) mainWindow.webContents.send('log', message);
 	})
 
 	{ /* Config */
@@ -1432,5 +1477,6 @@ const { Promise } = require('node-fetch');
 	}
 
 })().catch(error => {
-	log(error);
+	//log(error);
+	console.log(error);
 });

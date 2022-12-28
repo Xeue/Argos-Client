@@ -4,9 +4,9 @@
   "description": "OB/Flypack Monitoring",
   "main": "argos.js",
   "dependencies": {
+    "auto-launch": "^5.0.5",
     "aws-sdk": "^2.1283.0",
     "ejs": "^3.1.8",
-    "electron": "^22.0.0",
     "electron-ejs": "^1.2.1",
     "express": "^4.18.2",
     "fs": "^0.0.1-security",
@@ -20,8 +20,37 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "electron ."
+    "start": "electron .",
+    "build": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.xeue.argos",
+    "files": [
+      "public/*",
+      "views/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable"
+        }
+      ],
+      "icon": "public/img/icon/icon.ico"
+    },
+    "portable": {
+      "artifactName": "Argos-v${version}.exe"
+    }
   },
   "author": "Ollie Quirke & Sam Chilton",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "electron-builder": "^23.6.0",
+    "electron": "^22.0.0"
+  }
 }
