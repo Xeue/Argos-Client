@@ -7,13 +7,49 @@ const fetch = require('node-fetch');
 const AWS = require('aws-sdk');
 const fs = require('fs');
 const mariadb = require('mariadb');
-const { Buffer } = require('node:buffer');
-const {log, logObj, logs} = require('xeue-logs');
+const {Buffer} = require('node:buffer');
+const {log, logObj, logs, logEvent} = require('xeue-logs');
 const {config} = require('xeue-config');
 const {version} = require('./package.json');
-const { app, BrowserWindow } = require('electron');
+const {app, BrowserWindow, ipcMain} = require('electron');
+const electronEjs = require('electron-ejs');
+const { Promise } = require('node-fetch');
 
 (async () => {
+
+	const ejs = new electronEjs({}, {});
+	let configValid = false;
+	let mainWindow;
+	await app.whenReady();
+	await createWindow();
+
+	async function createWindow() {
+		mainWindow = new BrowserWindow({
+			width: 1440,
+			height: 720,
+			autoHideMenuBar: true,
+			webPreferences: {
+				preload: __dirname + '/config.js'
+			}
+		});
+
+		if (!configValid) {
+			mainWindow.loadURL("file://" + __dirname + "/views/config.ejs");
+			await sleep(1);
+		} else {
+			mainWindow.loadURL("file://" + __dirname + "/views/config.ejs");
+			await sleep(1);
+			mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}`);
+		}
+	};
+	
+	app.on('activate', async () => {
+		if (BrowserWindow.getAllWindows().length === 0) createWindow();
+	});
+
+	logEvent.on('logSend', (message) => {
+		mainWindow.webContents.send('log', message);
+	})
 
 	{ /* Config */
 		logs.printHeader('Argos Monitoring');
@@ -58,8 +94,10 @@ const { app, BrowserWindow } = require('electron');
 		config.default('devMode', false);
 
 		if (!await config.fromFile(__dirname + '/config.conf')) {
-			await config.fromCLI(__dirname + '/config.conf');
+			await config.fromAPI(__dirname + '/config.conf', configQuestion, configPrint);
 		}
+
+		configValid = true;
 
 		if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
 			config.set('debugLineNum', true);
@@ -310,26 +348,8 @@ const { app, BrowserWindow } = require('electron');
 
 	serverHTTP.listen(config.get('port'));
 	log(`Argos can be accessed at http://localhost:${config.get('port')}`, 'C');
+	mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}`);
 
-	const createWindow = () => {
-		const win = new BrowserWindow({
-			width: 1440,
-			height: 720,
-			autoHideMenuBar: true
-		});
-	
-		win.loadURL('http://localhost:'+config.get('port'));
-	};
-	
-	app.whenReady().then(() => {
-		createWindow();
-	
-		app.on('activate', () => {
-			if (BrowserWindow.getAllWindows().length === 0) createWindow();
-		});
-	});
-	
-	
 	serverHTTP.on('upgrade', (request, socket, head) => {
 		log('Upgrade request received', 'D');
 		serverWS.handleUpgrade(request, socket, head, socket => {
@@ -430,9 +450,19 @@ const { app, BrowserWindow } = require('electron');
 			'points':{}
 		};
 
-		const grouped = await db.query(dateQuery);
+		try {
+			const grouped = await db.query(dateQuery);
+			const divisor = Math.ceil(grouped.length/1000);
+		} catch (error) {
+			return {
+				'command':'data',
+				'data':'temps',
+				'system':header.system,
+				'replace': true,
+				'points':{}
+			};
+		}
 
-		const divisor = Math.ceil(grouped.length/1000);
 		const whereArr = grouped.map((a)=>{
 			if (parseInt(a.Number) % parseInt(divisor) == 0) {
 				const data = new Date(a.time).toISOString().slice(0, 19).replace('T', ' ');
@@ -1167,23 +1197,31 @@ const { app, BrowserWindow } = require('electron');
 
 		async init() {
 			log('Initialising SQL database', 'S');
-			await this.query(`CREATE DATABASE IF NOT EXISTS ${config.get('dbName')};`);
-			this.pool = mariadb.createPool({
-				host: config.get('dbHost'),
-				user: config.get('dbUser'),
-				port: config.get('dbPort'),
-				password: config.get('dbPass'),
-				database: config.get('dbName'),
-				connectionLimit: 5
-			});
-			await this.tableCheck('temperature', `CREATE TABLE \`temperature\` (
-				\`PK\` int(11) NOT NULL,
-				\`frame\` text NOT NULL,
-				\`temperature\` float NOT NULL,
-				\`system\` text NOT NULL,
-				\`time\` timestamp NOT NULL DEFAULT current_timestamp(),
-				PRIMARY KEY (\`PK\`)
-			)`, 'PK');
+			try {
+				await this.query(`CREATE DATABASE IF NOT EXISTS ${config.get('dbName')};`);
+				this.pool = mariadb.createPool({
+					host: config.get('dbHost'),
+					user: config.get('dbUser'),
+					port: config.get('dbPort'),
+					password: config.get('dbPass'),
+					database: config.get('dbName'),
+					connectionLimit: 5
+				});
+			} catch (error) {
+				log(`Could not check for or create the required database: ${config.get('dbName')}`, 'E');
+			}
+			try {
+				await this.tableCheck('temperature', `CREATE TABLE \`temperature\` (
+					\`PK\` int(11) NOT NULL,
+					\`frame\` text NOT NULL,
+					\`temperature\` float NOT NULL,
+					\`system\` text NOT NULL,
+					\`time\` timestamp NOT NULL DEFAULT current_timestamp(),
+					PRIMARY KEY (\`PK\`)
+				)`, 'PK');
+			} catch (error) {
+				log('Could not check for or create the required table: temperature', 'E');
+			}
 			log('Tables initialised', 'S');
 		}
 
@@ -1251,11 +1289,35 @@ const { app, BrowserWindow } = require('electron');
 	function setupDatabase() {
 		if (!config.get('localDataBase')) return;
 		const db = new database;
-		db.init();
+		try {
+			db.init();
+		} catch (error) {
+			log('Error setting up SQL connection');
+		}
 		return db;
 	}
 
 
+	/* Config Functions */
+
+
+	async function configQuestion(question, current, options) {
+		mainWindow.webContents.send('configQuestion', JSON.stringify({
+			'question': question,
+			'current': current,
+			'options': options
+		}));
+		const awaitMessage = new Promise (resolve => {
+			ipcMain.on('configMessage', (event, message) => {
+				resolve(message);
+			});
+		});
+		return awaitMessage;
+	}
+
+	async function configPrint() {
+
+	}
 
 	/* Utility Functions */
 
