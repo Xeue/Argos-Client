@@ -25,7 +25,7 @@ const AutoLaunch = require('auto-launch');
 	let tray;
 	await app.whenReady();
 
-	tray = new Tray(__dirname + '/public/img/icon/network-48.png');
+	tray = new Tray(__dirname + '/public/img/icon/icon.svg');
 	tray.setContextMenu(Menu.buildFromTemplate([
 		{
 			label: 'Show App', click: function () {
@@ -58,7 +58,7 @@ const AutoLaunch = require('auto-launch');
 			webPreferences: {
 				preload: __dirname + '/config.js'
 			},
-			icon: 'public/img/icon/network-48.png'
+			icon: 'public/img/icon/icon.svg'
 		});
 
 		if (!configValid) {

@@ -26,6 +26,7 @@
   "build": {
     "appId": "com.xeue.argos",
     "files": [
+      "**/*",
       "public/*",
       "views/*"
     ],
@@ -50,7 +51,7 @@
   "author": "Ollie Quirke & Sam Chilton",
   "license": "MIT",
   "devDependencies": {
-    "electron-builder": "^23.6.0",
-    "electron": "^22.0.0"
+    "electron": "^22.0.0",
+    "electron-builder": "^23.6.0"
   }
 }
