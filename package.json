@@ -15,8 +15,8 @@
     "node-fetch": "^2.6.7",
     "node-fetch2": "^1.6.3",
     "ws": "^8.11.0",
-    "xeue-config": "^1.4.2",
-    "xeue-logs": "^1.6.0"
+    "xeue-config": "^1.5.0",
+    "xeue-logs": "^1.7.0"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",

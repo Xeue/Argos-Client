@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <link href="../public/lib/bootstrap.min.css" rel="stylesheet" type="text/css">
+        <link href="../public/css/main.css" rel="stylesheet" type="text/css">
+        <script src="../public/lib/bootstrap.min.js" type="text/javascript"></script>
+        <script src="../public/main.js" type="text/javascript"></script>
+
+        <title>Argos</title>
+        <link id="favicon_48" rel="icon" href="../public/img/icon/icon.svg" sizes="256x256">
+    </head>
+    <body class="bg-dark" id="body">
+        <iframe id="frame"></iframe>
+        <main id="logsCont">
+            <div id="logs"></div>
+        </main>
+
+        <div class="modal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" id="config">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content bg-dark text-light">
+                    <div class="modal-header">
+                         <h5 class="modal-title">First Time Config</h5>
+                    </div>
+                    <div class="modal-body">
+                        <p id="question"></p>
+                        <div id="answerCont" action="#"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-primary" id="next">Next</button>
+                        <button type="button" class="btn btn-danger" id="cancel" data-dismiss="modal">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" id="exitConfirm">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content bg-dark text-light">
+                    <div class="modal-header">
+                         <h5 class="modal-title">Exit Argos</h5>
+                    </div>
+                    <div class="modal-body">
+                        <p>Exiting Argos will stop it collecting data and will close the program entirely.</p>
+                        <p>However Minimising Argos will send it to the background where it can continue to monitor the system.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-danger" id="exitYes">Exit</button>
+                        <button type="button" class="btn btn-success" id="exitMinimise" data-dismiss="modal">Minimise</button>
+                        <button type="button" class="btn btn-primary" id="exitCancel" data-dismiss="modal">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <nav>
+            <button type="button" class="btn btn-danger hidden" id="exit">Exit</button>
+            <button type="button" class="btn btn-secondary" id="startConfig">Edit Config</button>
+            <button type="button" class="btn btn-primary" id="toggleView">Show Logs</button>
+        </nav>
+    </body>
+</html>
