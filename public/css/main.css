@@ -1,0 +1,182 @@
+body {
+   margin: 0;
+   position: absolute;
+   inset: 0;
+}
+
+#startConfig {
+   display: none;
+}
+
+body.showLogs #startConfig {
+   display: inline;
+}
+
+body.showLogs #frame,
+body.loaded #cancel {
+   display: none;
+}
+
+nav {
+   position: absolute;
+   bottom: 0;
+   right: 0;
+   margin: 5px;
+   padding: 5px;
+}
+
+label {
+   display: block;
+   padding: 5px;
+   border-radius: 5px;
+   text-transform: capitalize;
+   border: dashed 1px transparent;
+   cursor: pointer;
+}
+
+label > input {
+   margin-left: 10px;
+}
+
+label:has(:checked) {
+   border-color: white;
+   background: #2e303a;
+}
+
+.log {
+   font-family: monospace;
+   color: #fff;
+   white-space: break-spaces
+}
+
+.cyanLog {
+   color: cyan
+}
+
+.greenLog {
+   color: lime
+}
+
+.purpleLog {
+   color: #fe00fe
+}
+
+.blueLog {
+   color: blue
+}
+
+.yellowLog {
+   color: #ff0
+}
+
+.redLog {
+   color: red
+}
+
+.whiteLog {
+   color: #fff
+}
+
+.whiteLog.dimLog {
+   color: #969696
+}
+
+.greenLog.dimLog {
+   color: #005800
+}
+
+.redLog.dimLog {
+   color: darkred
+}
+
+.purpleLog.dimLog {
+   color: purple
+}
+
+.blueLog.dimLog {
+   color: #2d2dc9
+}
+
+.yellowLog.dimLog {
+   color: #9a9a00
+}
+
+.cyanLog.dimLog {
+   color: #009e9e
+}
+
+.green {
+   background-color: #417f3f;
+   border-top: 1px solid #459942 !important
+}
+
+.red {
+   background-color: #7f3f3f;
+   border-top: 1px solid #954f4f !important
+}
+
+.blue {
+   background-color: #3f6a7f;
+   border-top: 1px solid #4c8099 !important
+}
+
+.purple {
+   background-color: #7a3f7f;
+   border-top: 1px solid #99539f !important
+}
+
+.green:hover {
+   background-color: #28b538;
+   border-top: 1px solid #3ce34f !important
+}
+
+.red:hover {
+   background-color: #d50303;
+   border-top: 1px solid #ff5f5f !important
+}
+
+.blue:hover {
+   background-color: #00abff;
+   border-top: 1px solid #62cafd !important
+}
+
+.purple:hover {
+   background-color: #ce00df;
+   border-top: 1px solid #f253ff !important
+}
+
+.versionInfo {
+   align-self: center;
+   margin-right: auto;
+   padding-left: 20px;
+   font-size: 25pt;
+   color: #fff
+}
+
+#frame {
+   position: fixed;
+   top: 0;
+   bottom: 0;
+   left: 0;
+   right: 0;
+   width: 100%;
+   height: 100%;
+   overflow: hidden;
+   border: none;
+}
+
+#frame.hidden,
+button.hidden {
+   display: none;
+}
+
+#logsCont {
+   display: flex;
+   flex-direction: column-reverse;
+   overflow: auto;
+   height: 100%;
+}
+
+#logs {
+   margin-bottom: auto;
+}

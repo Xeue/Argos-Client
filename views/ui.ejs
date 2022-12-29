@@ -32,8 +32,7 @@
     <script type="text/javascript" src="ui.js"></script>
 
     <title>Argos</title>
-    <link id="favicon_48" rel="icon" href="img/icon/network-48.png" sizes="48x48">
-    <link id="favicon_96" rel="icon" href="img/icon/network-96.png" sizes="96x96">
+    <link id="favicon_48" rel="icon" href="img/icon/icon.svg" sizes="256x256">
 </head>
 
 <body class="bg-dark">
@@ -58,12 +57,12 @@
                             <th scope="col"><%- switches[prop].Name%></th>
                         <% }); %>
                     </thead>
-                    <tbody>
+                    <tbody data-template="devices">
                     </tbody>
                 </table>
             </div>
             <div class="text-light text-muted" id="col-mac">
-                <h4>MAC flap</h4>
+                <h4>Connection Dropouts</h4>
                 <span class="text-muted">Last updated <span id="lastMac"></span></span>
                 <table id="mac" class="table table-dark text-muted">
                     <thead>
@@ -79,7 +78,7 @@
                 </table>
             </div>
             <div class="text-light text-muted" id="col-phy">
-                <h4>PHY FEC uncorrected errors</h4>
+                <h4>Uncorrectable data (PHY FEC)</h4>
                 <span class="text-muted">Last updated <span id="lastPhy"></span></span>
                 <table id="phy" class="table table-dark text-muted">
                     <thead>
@@ -110,7 +109,7 @@
                 </table>
             </div>
             <div class="text-light text-muted" id="col-tra">
-                <h4>Low fibre RX</h4>
+                <h4>Low SFP/QSFP fibre RX levels</h4>
                 <span class="text-muted">Last updated <span id="lastTra"></span></span>
                 <table id="tra" class="table table-dark text-muted">
                     <thead>
@@ -189,7 +188,7 @@
                                     <th class=""></th>
                                 </tr>
                             </thead>
-                            <tbody id="configSwitches"></tbody>
+                            <tbody id="configSwitches" data-template="switch"></tbody>
                         </table>
                     </div>
                     <div class="dataRaw collapse mt-3">
@@ -207,7 +206,7 @@
                                     <th class="w-25"></th>
                                 </tr>
                             </thead>
-                            <tbody id="configDevices"></tbody>
+                            <tbody id="configDevices" data-template="devices"></tbody>
                         </table>
                     </div>
                     <div class="dataRaw collapse mt-3">
@@ -226,7 +225,7 @@
                                     </th>
                                 </tr>
                             </thead>
-                            <tbody id="configUps"></tbody>
+                            <tbody id="configUps" data-template="nameIP"></tbody>
                        </table>
                     </div>
                     <div class="dataRaw collapse mt-3">
@@ -244,7 +243,7 @@
                                     <th class="w-25"></th>
                                 </tr>
                             </thead>
-                            <tbody id="configFrames"></tbody>
+                            <tbody id="configFrames" data-template="nameIP"></tbody>
                         </table>
                     </div>
                     <div class="dataRaw collapse mt-3">
