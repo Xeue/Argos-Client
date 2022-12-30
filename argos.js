@@ -166,8 +166,8 @@ config.loaded = false;
 		config.default('printPings', false);
 		config.default('devMode', false);
 
-		if (!await config.fromFile(__dirname + '/config.conf')) {
-			await config.fromAPI(__dirname + '/config.conf', configQuestion, configDone);
+		if (!await config.fromFile(path.join(app.getAppPath('userData'), 'config.conf'))) {
+			await config.fromAPI(path.join(app.getAppPath('userData'), 'config.conf'), configQuestion, configDone);
 		}
 
 		if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
@@ -182,7 +182,7 @@ config.loaded = false;
 		logs.setConf({
 			'createLogFile': config.get('createLogFile'),
 			'logsFileName': 'ArgosLogging',
-			'configLocation': __dirname,
+			'configLocation': app.getAppPath('userData'),
 			'loggingLevel': config.get('loggingLevel'),
 			'debugLineNum': config.get('debugLineNum'),
 		});
@@ -191,14 +191,14 @@ config.loaded = false;
 		config.userInput(async command => {
 			switch (command) {
 			case 'config':
-				await config.fromCLI(__dirname + '/config.conf');
+				await config.fromCLI(path.join(app.getAppPath('userData'), 'config.conf'));
 				if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
 					config.set('debugLineNum', true);
 				}
 				logs.setConf({
 					'createLogFile': config.get('createLogFile'),
 					'logsFileName': 'ArgosLogging',
-					'configLocation': __dirname,
+					'configLocation': app.getAppPath('userData'),
 					'loggingLevel': config.get('loggingLevel'),
 					'debugLineNum': config.get('debugLineNum')
 				});
@@ -276,7 +276,7 @@ async function setUpApp() {
 		log(message);
 		switch (message) {
 		case 'start':
-			config.fromAPI(__dirname + '/config.conf', configQuestion, configDone);
+			config.fromAPI(path.join(app.getAppPath('userData'), 'config.conf'), configQuestion, configDone);
 			break;
 		case 'stop':
 			log('Not implemeneted yet: Cancle config change');
@@ -349,7 +349,7 @@ async function createWindow() {
 
 function loadData(file) {
 	try {
-		let dataRaw = fs.readFileSync(`${__dirname}/data/${file}.json`);
+		let dataRaw = fs.readFileSync(`${app.getAppPath('userData')}/data/${file}.json`);
 		let data;
 		try {
 			data = JSON.parse(dataRaw);
@@ -384,16 +384,16 @@ function loadData(file) {
 			};
 			break;
 		}
-		if (!fs.existsSync(`${__dirname}/data/`)){
-			fs.mkdirSync(`${__dirname}/data/`);
+		if (!fs.existsSync(`${app.getAppPath('userData')}/data/`)){
+			fs.mkdirSync(`${app.getAppPath('userData')}/data/`);
 		}
-		fs.writeFileSync(`${__dirname}/data/${file}.json`, JSON.stringify(fileData, null, 4));
+		fs.writeFileSync(`${app.getAppPath('userData')}/data/${file}.json`, JSON.stringify(fileData, null, 4));
 		return fileData;
 	}
 }
 function writeData(file, data) {
 	try {
-		fs.writeFileSync(`${__dirname}/data/${file}.json`, JSON.stringify(data, undefined, 2));
+		fs.writeFileSync(`${app.getAppPath('userData')}/data/${file}.json`, JSON.stringify(data, undefined, 2));
 	} catch (error) {
 		logObj(`Cloud not write the file ${file}.json, do we have permission to access the file?`, error, 'E');
 	}
