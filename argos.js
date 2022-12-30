@@ -166,8 +166,8 @@ config.loaded = false;
 		config.default('printPings', false);
 		config.default('devMode', false);
 
-		if (!await config.fromFile(path.join(app.getAppPath('userData'), 'config.conf'))) {
-			await config.fromAPI(path.join(app.getAppPath('userData'), 'config.conf'), configQuestion, configDone);
+		if (!await config.fromFile(path.join(app.getPath('userData'), 'config.conf'))) {
+			await config.fromAPI(path.join(app.getPath('userData'), 'config.conf'), configQuestion, configDone);
 		}
 
 		if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
@@ -182,7 +182,7 @@ config.loaded = false;
 		logs.setConf({
 			'createLogFile': config.get('createLogFile'),
 			'logsFileName': 'ArgosLogging',
-			'configLocation': app.getAppPath('userData'),
+			'configLocation': app.getPath('userData'),
 			'loggingLevel': config.get('loggingLevel'),
 			'debugLineNum': config.get('debugLineNum'),
 		});
@@ -191,14 +191,14 @@ config.loaded = false;
 		config.userInput(async command => {
 			switch (command) {
 			case 'config':
-				await config.fromCLI(path.join(app.getAppPath('userData'), 'config.conf'));
+				await config.fromCLI(path.join(app.getPath('userData'), 'config.conf'));
 				if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
 					config.set('debugLineNum', true);
 				}
 				logs.setConf({
 					'createLogFile': config.get('createLogFile'),
 					'logsFileName': 'ArgosLogging',
-					'configLocation': app.getAppPath('userData'),
+					'configLocation': app.getPath('userData'),
 					'loggingLevel': config.get('loggingLevel'),
 					'debugLineNum': config.get('debugLineNum')
 				});
@@ -276,7 +276,7 @@ async function setUpApp() {
 		log(message);
 		switch (message) {
 		case 'start':
-			config.fromAPI(path.join(app.getAppPath('userData'), 'config.conf'), configQuestion, configDone);
+			config.fromAPI(path.join(app.getPath('userData'), 'config.conf'), configQuestion, configDone);
 			break;
 		case 'stop':
 			log('Not implemeneted yet: Cancle config change');
@@ -288,7 +288,7 @@ async function setUpApp() {
 
 	const autoLaunch = new AutoLaunch({
 		name: 'Argos Monitoring',
-		path: app.getPath('exe')
+		isHidden: true,
 	});
 	autoLaunch.isEnabled().then(isEnabled => {
 		if (!isEnabled) autoLaunch.enable();
@@ -315,8 +315,15 @@ async function createWindow() {
 		webPreferences: {
 			preload: __dirname + '/preload.js'
 		},
-		icon: 'public/img/icon/icon.png'
+		icon: 'public/img/icon/icon.png',
+		show: false
 	});
+
+	if (!app.commandLine.hasSwitch('hidden')) {
+		mainWindow.show();
+	} else {
+		mainWindow.hide();
+	}
 
 	mainWindow.on('close', function (event) {
 		if (!isQuiting) {
@@ -349,7 +356,7 @@ async function createWindow() {
 
 function loadData(file) {
 	try {
-		let dataRaw = fs.readFileSync(`${app.getAppPath('userData')}/data/${file}.json`);
+		let dataRaw = fs.readFileSync(`${app.getPath('userData')}/data/${file}.json`);
 		let data;
 		try {
 			data = JSON.parse(dataRaw);
@@ -384,16 +391,16 @@ function loadData(file) {
 			};
 			break;
 		}
-		if (!fs.existsSync(`${app.getAppPath('userData')}/data/`)){
-			fs.mkdirSync(`${app.getAppPath('userData')}/data/`);
+		if (!fs.existsSync(`${app.getPath('userData')}/data/`)){
+			fs.mkdirSync(`${app.getPath('userData')}/data/`);
 		}
-		fs.writeFileSync(`${app.getAppPath('userData')}/data/${file}.json`, JSON.stringify(fileData, null, 4));
+		fs.writeFileSync(`${app.getPath('userData')}/data/${file}.json`, JSON.stringify(fileData, null, 4));
 		return fileData;
 	}
 }
 function writeData(file, data) {
 	try {
-		fs.writeFileSync(`${app.getAppPath('userData')}/data/${file}.json`, JSON.stringify(data, undefined, 2));
+		fs.writeFileSync(`${app.getPath('userData')}/data/${file}.json`, JSON.stringify(data, undefined, 2));
 	} catch (error) {
 		logObj(`Cloud not write the file ${file}.json, do we have permission to access the file?`, error, 'E');
 	}
