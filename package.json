@@ -2,18 +2,16 @@
   "name": "argos",
   "version": "3.1.0",
   "description": "OB/Flypack Monitoring",
-  "main": "argos.js",
+  "main": "src/main/main.js",
   "dependencies": {
     "auto-launch": "^5.0.5",
     "aws-sdk": "^2.1283.0",
     "ejs": "^3.1.8",
     "electron-ejs": "^1.2.1",
     "express": "^4.18.2",
-    "fs": "^0.0.1-security",
-    "log-timestamp": "^0.3.0",
     "mariadb": "^3.0.2",
     "node-fetch": "^2.6.7",
-    "node-fetch2": "^1.6.3",
+    "source-map-support": "^0.5.21",
     "ws": "^8.11.0",
     "xeue-config": "^1.5.0",
     "xeue-logs": "^1.7.0"
@@ -21,37 +19,39 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron .",
-    "build": "electron-builder --win"
+    "build": "electron-builder --win",
+    "dev": "electron-webpack dev",
+    "compile": "electron-webpack",
+    "build-webpack": "npm run compile && electron-builder"
   },
   "build": {
     "appId": "com.xeue.argos",
+    "productName": "Argos",
     "files": [
       "**/*",
-      "public/*",
-      "views/*"
+      "static/*"
     ],
     "win": {
+      "icon": "static/img/icon/icon.ico",
       "target": [
         {
           "target": "nsis",
           "arch": [
             "x64"
           ]
-        },
-        {
-          "target": "portable"
         }
-      ],
-      "icon": "public/img/icon/icon.ico"
+      ]
     },
-    "portable": {
+    "nsis": {
       "artifactName": "Argos-v${version}.exe"
     }
   },
-  "author": "Ollie Quirke & Sam Chilton",
+  "author": "Sam Chilton & Ollie Quirke",
   "license": "MIT",
   "devDependencies": {
     "electron": "^22.0.0",
-    "electron-builder": "^23.6.0"
+    "electron-builder": "^22.10.3",
+    "electron-webpack": "^2.8.2",
+    "webpack": "~4.42.1"
   }
 }

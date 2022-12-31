@@ -44,7 +44,6 @@ label:has(:checked) {
 }
 
 .log {
-   font-family: monospace;
    color: #fff;
    white-space: break-spaces
 }
@@ -178,5 +177,7 @@ button.hidden {
 }
 
 #logs {
+   font-family: Ubuntu Mono;
    margin-bottom: auto;
+   line-height: normal;
 }
