@@ -109,4 +109,8 @@ class webSocket extends EventTarget {
 		this.server.close();
 		this.dispatchEvent(new Event('close'));
 	}
+
+	setSystem(system) {
+		this.currentSystem = system;
+	}
 }
