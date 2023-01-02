@@ -1,7 +1,7 @@
 /*jshint esversion: 6 */
 
 class webSocket extends EventTarget {
-	constructor(type, clientVersion, ssl = false) {
+	constructor(serverURL, type, clientVersion, currentSystem, ssl = false, logger = console) {
 		super();
 		this.loadTime = new Date().getTime();
 		this.clientID = `${type.charAt(0)}_${this.loadTime}_${clientVersion}`;
@@ -9,15 +9,17 @@ class webSocket extends EventTarget {
 		this.type = type;
 
 		this.connecting = false;
-		this.currentServer;
 		this.server;
 		this.forceShut = false;
-		this.serverURL;
+		this.serverURL = serverURL;
 		this.protocol = 'ws';
+		this.currentSystem = currentSystem;
+		this.logger = logger;
 
 		if (ssl) {
 			this.protocol = 'wss';
 		}
+		this.connect(this.serverURL);
 	}
 
 	connect(serverURL) {
@@ -31,11 +33,11 @@ class webSocket extends EventTarget {
 		}
 		if (this.connecting) return this.server;
 		this.connecting = true;
-		console.log(`Connecting to: ${this.protocol}://${this.serverURL}`);
+		this.logger.log(`Connecting to: ${this.protocol}://${this.serverURL}`);
 		this.server = new WebSocket(`${this.protocol}://${this.serverURL}`);
 
 		this.server.onopen = event => {
-			console.log('Connection established!');
+			this.logger.log('Connection established!');
 			this.connecting = false;
 			this.dispatchEvent(new Event('open'));
 		};
@@ -57,7 +59,7 @@ class webSocket extends EventTarget {
 
 		this.server.onclose = () => {
 			if (!this.forceShut) {
-				console.log('Connection ended');
+				this.logger.log('Connection ended');
 				setTimeout(() => {
 					this.connect(this.serverURL);
 				}, 500);
@@ -72,6 +74,10 @@ class webSocket extends EventTarget {
 			this.dispatchEvent(new Event('disconnect'));
 		};
 
+		this.server.onerror = event => {
+			this.dispatchEvent(new CustomEvent('error', {detail: [event]}));
+		}
+
 		return this.server;
 	}
 
@@ -81,7 +87,7 @@ class webSocket extends EventTarget {
 			'timestamp': new Date().getTime(),
 			'version': version,
 			'type': this.type,
-			'system': currentSystem,
+			'system': this.currentSystem,
 			'active': false,
 		};
 		if (this.connecting == 0) {
@@ -98,4 +104,9 @@ class webSocket extends EventTarget {
 		}));
 	}
 
+	close() {
+		this.forceShut = true;
+		this.server.close();
+		this.dispatchEvent(new Event('close'));
+	}
 }

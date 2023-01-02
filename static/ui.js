@@ -3,7 +3,6 @@ let server = window.location;
 
 let editors = {};
 
-let pingTimeout;
 let pingChart;
 let tempChart;
 let bootChart;
@@ -76,31 +75,38 @@ function socketDoOpen(socket) {
 function socketDoMessage(header, payload) {
 	switch (payload.command) {
 	case 'data':
-		switch (payload.data) {
-		case 'ping':
-			if (payload.replace && (payload.system == currentSystem)) {
-				pingChart.data.datasets[0].data = payload.points;
+		if (payload.system === currentSystem) {
+			switch (payload.data) {
+			case 'ping':
+				if (payload.replace) {
+					pingChart.data.datasets[0].data = payload.points;
+				} else {
+					const datePing = new Date(parseInt(payload.time));
+					const colour = payload.status == 1 ? '128, 255, 128' : '255, 64, 64';
+					pingChart.data.datasets[0].data[datePing] = payload.status;
+					pingChart.data.datasets[0].backgroundColor[0] = `rgba(${colour}, 0.2)`;
+					pingChart.data.datasets[0].borderColor[0] = `rgba(${colour}, 1)`;
+				}
 				pingChart.update();
-			} else {
-				clearTimeout(pingTimeout);
-				let datePing = new Date(parseInt(payload.time));
-				pings[datePing] = payload.status;
-				pingChart.update();
+				break;
+			case 'boot': {
+				if (payload.replace) {
+					bootChart.data.datasets[0].data = payload.points;
+				} else {
+					const dateBoot = new Date(parseInt(payload.time));
+					bootChart.data.datasets[0].data[dateBoot] = 1;
+				}
+				bootChart.update();
+				break;
 			}
-			break;
-		case 'boot': {
-			let dateBoot = new Date(parseInt(payload.time));
-			boots[dateBoot] = 1;
-			bootChart.update();
-			break;
-		}
-		case 'temps':
-			if (payload.replace) {
-				replaceTemps(payload.points);
-			} else {
-				addTemps(payload.points);
+			case 'temps':
+				if (payload.replace) {
+					replaceTemps(payload.points);
+				} else {
+					addTemps(payload.points);
+				}
+				break;
 			}
-			break;
 		}
 		break;
 	case 'log':
@@ -148,9 +154,7 @@ function addTemps(points) {
 }
 
 function replaceTemps(points) {
-	tempChart.data.datasets.forEach((dataSet) => {
-		dataSet.data = {};
-	});
+	tempChart.data.datasets = [];
 	for (var timeStamp in points) {
 		let sets = tempChart.data.datasets.map((set)=>{return set.label;});
 		let dateStamp = new Date(parseInt(timeStamp));
@@ -213,7 +217,7 @@ function renderTempChart() {
 					time: {
 						displayFormats: {
 							second: 'YY/MM/DD H:mm:ss',
-							minute: 'YY/MM/DD H:mm:ss',
+							minute: 'YY/MM/DD H:mm',
 							hour: 'YY/MM/DD H:mm'
 						}
 					}
@@ -229,7 +233,7 @@ function renderPingChart() {
 	const data = {
 		datasets: [
 			{
-				label: 'Pings',
+				label: 'Network Status',
 				data: [],
 				backgroundColor: [
 					'rgba(128, 255, 128, 0.2)'
@@ -255,9 +259,9 @@ function renderPingChart() {
 					type: 'time',
 					time: {
 						displayFormats: {
-							second: 'MM/DD/yy H:mm:ss',
-							minute: 'MM/DD/yy H:mm:ss',
-							hour: 'MM/DD/yy H:mm:ss'
+							second: 'YY/MM/DD H:mm:ss',
+							minute: 'YY/MM/DD H:mm',
+							hour: 'YY/MM/DD H:mm'
 						}
 					}
 				}
@@ -272,7 +276,7 @@ function renderBootChart(boots) {
 	const data = {
 		datasets: [
 			{
-				label: 'PC Boots',
+				label: 'Argos Starts',
 				data: boots,
 				backgroundColor: [
 					'rgba(128, 255, 128, 0.2)'
@@ -300,9 +304,9 @@ function renderBootChart(boots) {
 					type: 'time',
 					time: {
 						displayFormats: {
-							second: 'MM/DD/yy H:mm:ss',
-							minute: 'MM/DD/yy H:mm:ss',
-							hour: 'MM/DD/yy H:mm:ss'
+							second: 'YY/MM/DD H:mm:ss',
+							minute: 'YY/MM/DD H:mm',
+							hour: 'YY/MM/DD H:mm'
 						}
 					}
 				}
@@ -312,6 +316,8 @@ function renderBootChart(boots) {
 	bootChart = new Chart(ctx, config);
 
 }
+
+/* Device data handeling */
 
 function handleFibreData(data) {
 	$('table#tra tbody').empty();
@@ -504,8 +510,7 @@ function setupWebConnection() {
 	renderBootChart(boots);
 
 	$('#webBroken').html('<span class="badge badge-pill bg-danger">Web Monitor Offline</span>');
-	const webConnection = new webSocket('Browser', version, secureWebsockets);
-	webConnection.connect([webSocketEndpoint]);
+	const webConnection = new webSocket([webSocketEndpoint], 'Browser', version, currentSystem, secureWebsockets);
 	webConnection.addEventListener('message', event => {
 		const [header, payload] = event.detail;
 		socketDoMessage(header, payload);
@@ -527,8 +532,7 @@ $(document).ready(function() {
 	const webConnection = setupWebConnection();
 
 	$('#broken').html('<span class="badge badge-pill bg-danger">Argos Offline</span>');
-	const localConnection = new webSocket('Browser', version);
-	localConnection.connect([`${window.location.hostname}:${window.location.port}`]);
+	const localConnection = new webSocket([`${window.location.hostname}:${window.location.port}`], 'Browser', version, currentSystem);
 	localConnection.addEventListener('message', event => {
 		const [header, payload] = event.detail;
 		socketDoMessage(header, payload);
@@ -557,6 +561,14 @@ $(document).ready(function() {
 		dateFormat: 'YYYY-MM-DD HH:mm',
 		title: 'To'
 	});
+	$('#bootFromPick').dateTimePicker({
+		dateFormat: 'YYYY-MM-DD HH:mm',
+		title: 'From'
+	});
+	$('#bootToPick').dateTimePicker({
+		dateFormat: 'YYYY-MM-DD HH:mm',
+		title: 'To'
+	});
 
 	$(document).click(function(e) {
 		const $trg = $(e.target);
@@ -578,6 +590,17 @@ $(document).ready(function() {
 			webConnection.send({
 				'command':'get',
 				'data':'ping',
+				'from': from,
+				'to': to
+			});
+		} else if ($trg.hasClass('bootBut')) {
+			let time = parseInt($trg.data('time'));
+			let to = new Date().getTime()/1000;
+			let from = to - time;
+
+			webConnection.send({
+				'command':'get',
+				'data':'boot',
 				'from': from,
 				'to': to
 			});
@@ -751,6 +774,13 @@ $(document).ready(function() {
 				'data':'ping',
 				'from': parseInt($('#pingFrom').val()),
 				'to': parseInt($('#pingTo').val())
+			});
+		} else if ($trg.is('#bootFrom') || $trg.is('#bootTo')) {
+			webConnection.send({
+				'command':'get',
+				'data':'boot',
+				'from': parseInt($('#bootFrom').val()),
+				'to': parseInt($('#bootTo').val())
 			});
 		}
 	});

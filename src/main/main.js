@@ -7,10 +7,10 @@ const express = require('express');
 const fetch = require('node-fetch');
 const AWS = require('aws-sdk');
 const fs = require('fs');
-const mariadb = require('mariadb');
 const path = require('path');
 const {log, logObj, logs, logEvent} = require('xeue-logs');
 const {config} = require('xeue-config');
+const {SQLSession} = require('xeue-sql');
 const {app, BrowserWindow, ipcMain, Tray, Menu} = require('electron');
 const {version} = require('../../package.json');
 const electronEjs = require('electron-ejs');
@@ -110,9 +110,8 @@ let isQuiting = false;
 let mainWindow = null;
 let serverHTTP;
 let serverWS;
-let db;
+let SQL;
 config.loaded = false;
-const staticPath = '../../static';
 
 
 /* Start App */
@@ -149,11 +148,13 @@ const staticPath = '../../static';
 			config.require('awsRegion', [], 'AWS region', ['textsEnabled', true]);
 		}
 		config.require('loggingLevel', {'A':'All', 'D':'Debug', 'W':'Warnings', 'E':'Errors'}, 'Set logging level');
-		{
-			config.require('printPings', {true: 'Yes', false: 'No'}, 'Print pings', ['loggingLevel', 'A']);
-			config.require('devMode', {true: 'Yes', false: 'No'}, 'Dev mode - Disables connections to devices', ['loggingLevel', 'A']);
-		}
 		config.require('createLogFile', {true: 'Yes', false: 'No'}, 'Save logs to local file');
+		config.require('advancedConfig', {true: 'Yes', false: 'No'}, 'Show advanced config settings');
+		{
+			config.require('debugLineNum', {true: 'Yes', false: 'No'}, 'Print line numbers', ['advancedConfig', true]);
+			config.require('printPings', {true: 'Yes', false: 'No'}, 'Print pings', ['advancedConfig', true]);
+			config.require('devMode', {true: 'Yes', false: 'No'}, 'Dev mode - Disables connections to devices', ['advancedConfig', true]);
+		}
 
 		config.default('port', 8080);
 		config.default('systemName', 'Unknown');
@@ -168,6 +169,7 @@ const staticPath = '../../static';
 		config.default('createLogFile', true);
 		config.default('debugLineNum', false);
 		config.default('printPings', false);
+		config.default('advancedConfig', false);
 		config.default('devMode', false);
 		config.default('secureWebSocketEndpoint', true);
 
@@ -215,13 +217,36 @@ const staticPath = '../../static';
 
 	[serverHTTP, serverWS] = startServers();
 
-	db = setupDatabase();
+	SQL = new SQLSession(
+		config.get('dbHost'),
+		config.get('dbPort'),
+		config.get('dbUser'),
+		config.get('dbPass'),
+		config.get('dbName'),
+		logs,
+		[
+			{
+				name: 'temperature',
+				definition: `CREATE TABLE \`temperature\` (
+					\`PK\` int(11) NOT NULL,
+					\`frame\` text NOT NULL,
+					\`temperature\` float NOT NULL,
+					\`system\` text NOT NULL,
+					\`time\` timestamp NOT NULL DEFAULT current_timestamp(),
+					PRIMARY KEY (\`PK\`)
+				)`,
+				PK:'PK'
+			}
+		]
+	);
 
 	await startLoopAfterDelay(doPing, 5);
 
 	if (config.get('webEnabled')) {
-		connectToWebServer(true);
-		webLogBoot();
+		connectToWebServer(true).then(()=>{
+			log('Sending boot');
+			webLogBoot();
+		});
 
 		// 1 Minute ping loop
 		setInterval(() => {
@@ -652,7 +677,7 @@ async function getTemperature(header, payload) {
 		'points':{}
 	};
 
-	const grouped = await db.query(dateQuery);
+	const grouped = await SQL.query(dateQuery);
 	if (grouped.length === 0) {
 		return {
 			'command':'data',
@@ -678,7 +703,7 @@ async function getTemperature(header, payload) {
 		query = `SELECT * FROM \`temperature\` WHERE time IN (${whereString}) AND \`system\` = '${header.system}' ORDER BY \`PK\` ASC; `;
 	}
 
-	const rows = await db.query(query);
+	const rows = await SQL.query(query);
 
 	const dataObj = {
 		'command':'data',
@@ -1152,7 +1177,7 @@ async function logTemp() {
 				tempSum += temp;
 				tempValid++;
 				log(`${Frames[index].Name} temperature = ${temp} deg C`, 'D');
-				if (config.get('localDataBase')) db.insert('temperature', {
+				if (config.get('localDataBase')) SQL.insert('temperature', {
 					'frame': Frames[index].Name,
 					'temperature': Frames[index].Temp,
 					'system': config.get('systemName')
@@ -1223,9 +1248,10 @@ function sendSms(msg) {
 	});
 }
 
-function connectToWebServer(retry = false) {	
+async function connectToWebServer(retry = false) {	
 	if(!config.get('webEnabled')) return;
 	let inError = false;
+	let promise;
 
 	if (webServer.address !== config.get('webSocketEndpoint')) {
 		webServer.address = config.get('webSocketEndpoint');
@@ -1241,17 +1267,19 @@ function connectToWebServer(retry = false) {
 		}
 		webServer.socket = new WebSocket(`${protocol}://${webServer.address}`);
 
-		webServer.socket.on('open', function open() {
-			let payload = {};
-			payload.command = 'register';
-			payload.name = config.get('systemName');
-			sendWebData(payload);
-
-			log(`${logs.g}${webServer.address}${logs.reset} Established a connection to webserver`, 'S');
-			webServer.connected = true;
-			webServer.active = true;
-			webServer.attempts = 0;
-		});
+		promise = new Promise(resolve=>{
+			webServer.socket.on('open', function open() {
+				let payload = {};
+				payload.command = 'register';
+				payload.name = config.get('systemName');
+				sendWebData(payload);
+				resolve();
+				log(`${logs.g}${webServer.address}${logs.reset} Established a connection to webserver`, 'S');
+				webServer.connected = true;
+				webServer.active = true;
+				webServer.attempts = 0;
+			});
+		})
 
 		webServer.socket.on('message', function message(msgJSON) {
 			try {
@@ -1313,6 +1341,7 @@ function connectToWebServer(retry = false) {
 		webServer.active = false;
 		log(`Server not responding, changing status to dead: ${logs.r}${webServer.address}${logs.reset}`, 'E');
 	}
+	return promise;
 }
 
 function sendWebData(payload) {
@@ -1323,121 +1352,6 @@ function sendWebData(payload) {
 	if (webServer.connected) {
 		webServer.socket.send(JSON.stringify(packet));
 	}
-}
-
-
-/* Database */
-
-
-class database {
-	constructor() {
-		this.pool = mariadb.createPool({
-			host: config.get('dbHost'),
-			user: config.get('dbUser'),
-			port: config.get('dbPort'),
-			password: config.get('dbPass'),
-			connectionLimit: 5
-		});
-	}
-
-	async init() {
-		log('Initialising SQL database', 'S');
-		try {
-			await this.query(`CREATE DATABASE IF NOT EXISTS ${config.get('dbName')};`);
-			this.pool = mariadb.createPool({
-				host: config.get('dbHost'),
-				user: config.get('dbUser'),
-				port: config.get('dbPort'),
-				password: config.get('dbPass'),
-				database: config.get('dbName'),
-				connectionLimit: 5
-			});
-		} catch (error) {
-			log(`Could not check for or create the required database: ${config.get('dbName')}`, 'E');
-		}
-		try {
-			await this.tableCheck('temperature', `CREATE TABLE \`temperature\` (
-				\`PK\` int(11) NOT NULL,
-				\`frame\` text NOT NULL,
-				\`temperature\` float NOT NULL,
-				\`system\` text NOT NULL,
-				\`time\` timestamp NOT NULL DEFAULT current_timestamp(),
-				PRIMARY KEY (\`PK\`)
-			)`, 'PK');
-		} catch (error) {
-			log('Could not check for or create the required table: temperature', 'E');
-		}
-		log('Tables initialised', 'S');
-	}
-
-	async tableCheck(table, tableDef, pk) {
-		const rows = await this.query(`SELECT count(*) as count
-			FROM information_schema.TABLES
-			WHERE (TABLE_SCHEMA = '${config.get('dbName')}') AND (TABLE_NAME = '${table}')
-		`);
-		if (rows[0].count == 0) {
-			log(`Table: ${table} is being created`, 'S');
-			await this.query(tableDef);
-			await this.query(`ALTER TABLE \`${table}\` MODIFY \`${pk}\` int(11) NOT NULL AUTO_INCREMENT;`);
-		}
-	}
-
-	async get(table, _conditions) {
-		const where = typeof _conditions == 'string' ? _conditions : _conditions.join(' and ');
-		const query = `SELECT * FROM ${table} WHERE ${where}`;
-		const result = await this.query(query);
-		return result;
-	}
-
-	async insert(table, _values) { // { affectedRows: 1, insertId: 1, warningStatus: 0 }
-		const query = `INSERT INTO ${table}(${Object.keys(_values).join(',')}) values ('${Object.values(_values).join('\',\'')}')`;
-		const result = await this.query(query);
-		return result;
-	}
-
-	async update(table, _values, _conditions) {
-		let where = '';
-		switch (typeof _conditions) {
-		case 'undefined':
-			where = '';
-			break;
-		case 'string':
-			where = 'WHERE '+_conditions;
-			break;
-		case 'object':
-			where = 'WHERE '+_conditions.join(' and ');
-			break;
-		default:
-			break;
-		}
-		const values = Object.keys(_values).map(key => `${key} = ${_values[key]}`).join(',');
-		const query = `UPDATE ${table} SET ${values} ${where}`;
-		const result = await this.query(query);
-		return result;
-	}
-
-	async query(query) {
-		try {
-			const conn = await this.pool.getConnection();
-			const rows = await conn.query(query);
-			conn.end();
-			return rows;
-		} catch (error) {
-			logs.error('SQL Error', error);
-		}
-	}
-
-}
-
-function setupDatabase() {
-	if (!config.get('localDataBase')) return;
-	const db = new database;
-	try {
-		db.init();
-	} catch (error) {
-		log('Error setting up SQL connection');
-	}
-	return db;
 }
 
 

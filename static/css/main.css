@@ -181,3 +181,8 @@ button.hidden {
    margin-bottom: auto;
    line-height: normal;
 }
+
+@font-face {
+   font-family: Ubuntu Mono;
+   src: url(../fonts/UbuntuMono-R.ttf);
+ }

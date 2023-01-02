@@ -1,6 +1,6 @@
 {
   "name": "argos",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "OB/Flypack Monitoring",
   "main": "src/main/main.js",
   "dependencies": {
@@ -9,12 +9,12 @@
     "ejs": "^3.1.8",
     "electron-ejs": "^1.2.1",
     "express": "^4.18.2",
-    "mariadb": "^3.0.2",
     "node-fetch": "^2.6.7",
     "source-map-support": "^0.5.21",
     "ws": "^8.11.0",
-    "xeue-config": "^1.5.0",
-    "xeue-logs": "^1.7.0"
+    "xeue-config": "^1.5.2",
+    "xeue-logs": "^1.7.4",
+    "xeue-sql": "^1.0.2"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
