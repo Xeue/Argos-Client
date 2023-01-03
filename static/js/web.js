@@ -14,6 +14,9 @@ let lastMac = -1;
 let lastPhy = -1;
 let lastUps = -1;
 let lastUpsHash = '';
+let lastPing = -1;
+let lastHot = -1;
+let lastBoot = -1;
 
 const templates = {};
 
@@ -87,6 +90,7 @@ function socketDoMessage(header, payload) {
 					pingChart.data.datasets[0].backgroundColor[0] = `rgba(${colour}, 0.2)`;
 					pingChart.data.datasets[0].borderColor[0] = `rgba(${colour}, 1)`;
 				}
+				lastPing = Date.now();
 				pingChart.update();
 				break;
 			case 'boot': {
@@ -96,6 +100,7 @@ function socketDoMessage(header, payload) {
 					const dateBoot = new Date(parseInt(payload.time));
 					bootChart.data.datasets[0].data[dateBoot] = 1;
 				}
+				lastBoot = Date.now();
 				bootChart.update();
 				break;
 			}
@@ -105,6 +110,7 @@ function socketDoMessage(header, payload) {
 				} else {
 					addTemps(payload.points);
 				}
+				lastHot = Date.now();
 				break;
 			}
 		}
@@ -454,6 +460,9 @@ function updateLast() {
 	$('#lastPhy').text(prettifyTime(lastPhy));
 	$('#lastUps').text(prettifyTime(lastUps));
 	$('#lastTra').text(prettifyTime(lastTra));
+	$('#lastPing').text(prettifyTime(lastPing));
+	$('#lastBoot').text(prettifyTime(lastBoot));
+	$('#lastHot').text(prettifyTime(lastHot));
 }
 
 function prettifyTime(time) {
@@ -487,7 +496,7 @@ function prettifyTime(time) {
 		else if (seconds == 1) {
 			return minutes + ' minutes, 1 second ago';
 		} else {
-			return minutes + 'minutes, ' + seconds + ' seconds ago';
+			return minutes + ' minutes, ' + seconds + ' seconds ago';
 		}
 	}
 }

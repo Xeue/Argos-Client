@@ -129,7 +129,7 @@
             </div>
             <div class="text-light" id="col-hot">
                 <h4>IQ Frame Temperatures</h4>
-                <span class="text-muted">Last updated <span id="lastHot"></span></span>
+                <span class="text-muted">Last updated <span id="lastHot">never</span></span>
                 <canvas id="tempChart"></canvas>
                 <div class="buttonBox">
                     <div>
@@ -154,7 +154,7 @@
             <% if (webEnabled) { %>
                 <div class="text-light" id="col-ping">
                     <h4>Argos to internet pings</h4>
-                    <span class="text-muted">Last updated <span id="lastPing"></span></span>
+                    <span class="text-muted">Last updated <span id="lastPing">never</span></span>
                     <canvas id="pingChart"></canvas>
                     <div class="buttonBox">
                         <div>
@@ -178,6 +178,7 @@
                 </div>
                 <div class="text-light" id="col-online">
                     <h4>Argos boots</h4>
+                    <span class="text-muted">Last updated <span id="lastBoot">never</span></span>
                     <canvas id="bootChart"></canvas>
                     <div class="buttonBox">
                         <div>

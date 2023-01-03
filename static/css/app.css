@@ -4,11 +4,11 @@ body {
    inset: 0;
 }
 
-#startConfig {
+.logsView {
    display: none;
 }
 
-body.showLogs #startConfig {
+body.showLogs .logsView {
    display: inline;
 }
 

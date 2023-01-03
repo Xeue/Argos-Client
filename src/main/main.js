@@ -108,7 +108,7 @@ const tempTableDef = {
 		PRIMARY KEY (\`PK\`)
 	)`,
 	PK:'PK'
-}
+};
 const pingFrequency = 30;
 const lldpFrequency = 30;
 const switchStatsFrequency = 30;
@@ -123,7 +123,9 @@ let mainWindow = null;
 let serverHTTP;
 let serverWS;
 let SQL;
-config.loaded = false;
+let configLoaded = false;
+const devEnv = app.isPackaged ? 'src' : '../';
+const __main = path.resolve(__dirname, devEnv);
 
 
 /* Start App */
@@ -224,46 +226,31 @@ config.loaded = false;
 				return true;
 			}
 		});
-		config.loaded = true;
+		configLoaded = true;
 	}
 
 	[serverHTTP, serverWS] = startServers();
 
-	SQL = new SQLSession(
-		config.get('dbHost'),
-		config.get('dbPort'),
-		config.get('dbUser'),
-		config.get('dbPass'),
-		config.get('dbName'),
-		logs,
-		[tempTableDef]
-	);
-
 	await startLoopAfterDelay(doPing, 5);
 
-	if (config.get('webEnabled')) {
-		connectToWebServer(true).then(()=>{
-			log('Sending boot');
-			webLogBoot();
-		});
+	connectToWebServer(true).then(()=>{
+		webLogBoot();
+	});
 
-		// 1 Minute ping loop
-		setInterval(() => {
-			connectToWebServer(true);
-		}, 60*1000);
+	// 1 Minute ping loop
+	setInterval(() => {
+		connectToWebServer(true);
+	}, 60*1000);
 
-		await startLoopAfterDelay(connectToWebServer, 5);
-		await startLoopAfterDelay(webLogPing, pingFrequency);
-	}
-	if (!config.get('devMode')) {
-		await startLoopAfterDelay(lldpLoop, lldpFrequency);
-		await startLoopAfterDelay(checkDevices, devicesFrequency);
-		await startLoopAfterDelay(switchMac, switchStatsFrequency);
-		await startLoopAfterDelay(switchPhy, switchStatsFrequency);
-		await startLoopAfterDelay(switchFibre, switchStatsFrequency);
-		await startLoopAfterDelay(checkUps, upsFrequency);
-		await startLoopAfterDelay(logTemp, tempFrequency);
-	}
+	await startLoopAfterDelay(connectToWebServer, 5);
+	await startLoopAfterDelay(webLogPing, pingFrequency);
+	await startLoopAfterDelay(lldpLoop, lldpFrequency);
+	await startLoopAfterDelay(checkDevices, devicesFrequency);
+	await startLoopAfterDelay(switchMac, switchStatsFrequency);
+	await startLoopAfterDelay(switchPhy, switchStatsFrequency);
+	await startLoopAfterDelay(switchFibre, switchStatsFrequency);
+	await startLoopAfterDelay(checkUps, upsFrequency);
+	await startLoopAfterDelay(logTemp, tempFrequency);
 })().catch(error => {
 	console.log(error);
 });
@@ -302,13 +289,15 @@ async function setUpApp() {
 	});
 
 	ipcMain.on('config', (event, message) => {
-		log(message);
 		switch (message) {
 		case 'start':
 			config.fromAPI(path.join(app.getPath('userData'), 'config.conf'), configQuestion, configDone);
 			break;
 		case 'stop':
 			log('Not implemeneted yet: Cancle config change');
+			break;
+		case 'show':
+			config.print();
 			break;
 		default:
 			break;
@@ -331,7 +320,7 @@ async function setUpApp() {
 		if (BrowserWindow.getAllWindows().length === 0) createWindow();
 	});
 
-	logEvent.on('logSend', (message) => {
+	logEvent.on('logSend', message => {
 		if (!isQuiting) mainWindow.webContents.send('log', message);
 	});
 }
@@ -342,7 +331,7 @@ async function createWindow() {
 		height: 720,
 		autoHideMenuBar: true,
 		webPreferences: {
-			preload: path.resolve(__dirname, 'preload.js')
+			preload: path.resolve(__main, 'main/preload.js')
 		},
 		icon: path.join(__static, 'img/icon/icon.png'),
 		show: false
@@ -367,11 +356,11 @@ async function createWindow() {
 		mainWindow.hide();
 	});
 
-	mainWindow.loadURL(path.resolve(__dirname, '../renderer/app.ejs'));
+	mainWindow.loadURL(path.resolve(__main, 'renderer/app.ejs'));
 
 	await new Promise(resolve => {
 		ipcMain.on('ready', (event, ready) => {
-			if (config.loaded) {
+			if (configLoaded) {
 				mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}`);
 			}
 			resolve();
@@ -385,11 +374,9 @@ async function createWindow() {
 
 function loadData(file) {
 	try {
-		let dataRaw = fs.readFileSync(`${app.getPath('userData')}/data/${file}.json`);
-		let data;
+		const dataRaw = fs.readFileSync(`${app.getPath('userData')}/data/${file}.json`);
 		try {
-			data = JSON.parse(dataRaw);
-			return data;
+			return JSON.parse(dataRaw);
 		} catch (error) {
 			logObj(`There is an error with the syntax of the JSON in ${file}.json file`, error, 'E');
 			return [];
@@ -397,7 +384,7 @@ function loadData(file) {
 	} catch (error) {
 		log(`Cloud not read the file ${file}.json, attempting to create new file`, 'W');
 		logs.debug('File error:', error);
-		let fileData = [];
+		const fileData = [];
 		switch (file) {
 		case 'Devices':
 			fileData[0] = {
@@ -470,7 +457,7 @@ function devices(object) {
 
 
 function setupExpress(expressApp) {
-	expressApp.set('views', path.join(__dirname));
+	expressApp.set('views', path.join(__main, 'main'));
 	expressApp.set('view engine', 'ejs');
 	expressApp.use(express.json());
 	expressApp.use(express.static(__static));
@@ -734,7 +721,7 @@ async function getTemperature(header, payload) {
 
 function onWSClose(socket) {
 	try {
-		let oldId = JSON.parse(JSON.stringify(socket.ID));
+		const oldId = JSON.parse(JSON.stringify(socket.ID));
 		log(`${logs.r}${oldId}${logs.reset} Connection closed`, 'D');
 		socket.connected = false;
 	} catch (e) {
@@ -817,7 +804,7 @@ function makeHeader() {
 }
 
 function distributeData(type, data) {
-	if (config.get('webEnabled')) sendWebData({'command':'log', 'type':type, 'data':data});
+	sendWebData({'command':'log', 'type':type, 'data':data});
 	sendAllData({'command':'log', 'type':type, 'data':data});
 }
 
@@ -826,6 +813,7 @@ function distributeData(type, data) {
 
 
 function lldpLoop() {
+	if (config.get('devMode')) return;
 	let Switches = switches();
 	log('Getting LLDP neighbors', 'A');
 	let promisses = [];
@@ -855,6 +843,7 @@ function lldpLoop() {
 }
 
 function switchMac() {
+	if (config.get('devMode')) return;
 	let Switches = switches();
 	log('Checking for recent interface dropouts', 'A');
 	function processSwitchMac(response, devices) {
@@ -921,6 +910,7 @@ function switchMac() {
 }
 
 function switchPhy() {
+	if (config.get('devMode')) return;
 	const Switches = switches();
 	log('Looking for high numbers of PHY/FEC errors', 'A');
 	function processSwitchPhy(response, devices) {
@@ -982,6 +972,7 @@ function switchPhy() {
 }
 
 function switchFibre() {
+	if (config.get('devMode')) return;
 	let Switches = switches();
 	log('Looking for low fibre levels in trancievers', 'A');
 	function processSwitchFibre(response, devices) {
@@ -1031,6 +1022,7 @@ function switchFibre() {
 }
 
 function checkUps() {
+	if (config.get('devMode')) return;
 	let Ups = ups();
 	log('Getting UPS status', 'A');
 	function getUpsStatus(ip) {
@@ -1082,6 +1074,7 @@ function checkUps() {
 }
 
 function checkDevices() {
+	if (config.get('devMode')) return;
 	log('Checking device lists for missing devices', 'A');
 	let Devices = devices();
 	let missingDevices = {};
@@ -1141,6 +1134,7 @@ function doApi(json, Switch) {
 
 
 async function logTemp() {
+	if (config.get('devMode')) return;
 	let Frames = frames();
 	log('Getting temperatures', 'A');
 
@@ -1204,7 +1198,7 @@ async function logTemp() {
 			log('Warning: Temperature over warning limit, sending SMS', 'W');
 			sendSms(`Commitment to environment sustainability failed, MCR IS MELTING: ${tempAvg} deg C`);
 		}
-		if (config.get('webEnabled')) sendWebData({'command':'log', 'type':'temperature', 'data':Frames});
+		sendWebData({'command':'log', 'type':'temperature', 'data':Frames});
 
 		socketSend.average = tempAvg;
 		const time = new Date().getTime();
@@ -1223,11 +1217,14 @@ async function logTemp() {
 }
 
 function webLogPing() {
+	if (!config.get('webEnabled')) return;
 	log('Pinging webserver', 'A');
 	sendWebData({'command':'log', 'type':'ping'});
 }
 
 function webLogBoot() {
+	if (!config.get('webEnabled')) return;
+	log('Sending boot');
 	sendWebData({'command':'log', 'type':'boot'});
 }
 
@@ -1278,7 +1275,7 @@ async function connectToWebServer(retry = false) {
 				webServer.active = true;
 				webServer.attempts = 0;
 			});
-		})
+		});
 
 		webServer.socket.on('message', function message(msgJSON) {
 			try {
@@ -1344,6 +1341,7 @@ async function connectToWebServer(retry = false) {
 }
 
 function sendWebData(payload) {
+	if (!config.get('webEnabled')) return;
 	let packet = {};
 	let header = makeHeader();
 	packet.header = header;
@@ -1377,6 +1375,18 @@ async function configQuestion(question, current, options) {
 
 function configDone() {
 	mainWindow.webContents.send('configDone', true);
+	if (configLoaded) mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}`);
+	if (config.get('localDataBase')) {
+		SQL = new SQLSession(
+			config.get('dbHost'),
+			config.get('dbPort'),
+			config.get('dbUser'),
+			config.get('dbPass'),
+			config.get('dbName'),
+			logs,
+			[tempTableDef]
+		);
+	}
 }
 
 /* Utility Functions */
