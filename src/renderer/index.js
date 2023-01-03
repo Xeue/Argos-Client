@@ -134,6 +134,14 @@ document.addEventListener('DOMContentLoaded', () => {
 		window.electronAPI.config('start');
 	});
 
+	document.getElementById('showConfig').addEventListener('click', () => {
+		window.electronAPI.config('show');
+	});
+
+	document.getElementById('clearLogs').addEventListener('click', () => {
+		document.getElementById('logs').innerHTML = '';
+	});
+
 	document.getElementById('next').addEventListener('click', () => {
 		const answerCont = document.getElementById('answerCont');
 		let value;

@@ -4,11 +4,11 @@ body {
    inset: 0;
 }
 
-#startConfig {
+.logsView {
    display: none;
 }
 
-body.showLogs #startConfig {
+body.showLogs .logsView {
    display: inline;
 }
 
@@ -44,7 +44,6 @@ label:has(:checked) {
 }
 
 .log {
-   font-family: monospace;
    color: #fff;
    white-space: break-spaces
 }
@@ -178,5 +177,12 @@ button.hidden {
 }
 
 #logs {
+   font-family: Ubuntu Mono;
    margin-bottom: auto;
+   line-height: normal;
 }
+
+@font-face {
+   font-family: Ubuntu Mono;
+   src: url(../fonts/UbuntuMono-R.ttf);
+ }

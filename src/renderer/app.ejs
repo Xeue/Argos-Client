@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <link href="../public/lib/bootstrap.min.css" rel="stylesheet" type="text/css">
-        <link href="../public/css/main.css" rel="stylesheet" type="text/css">
-        <script src="../public/lib/bootstrap.min.js" type="text/javascript"></script>
-        <script src="../public/main.js" type="text/javascript"></script>
+        <link href="<%-static%>/lib/bootstrap.min.css" rel="stylesheet" type="text/css">
+        <link href="<%-static%>/css/app.css" rel="stylesheet" type="text/css">
+        <script src="<%-static%>/lib/bootstrap.min.js" type="text/javascript"></script>
+        <script src="index.js" type="text/javascript"></script>
 
         <title>Argos</title>
-        <link id="favicon_48" rel="icon" href="../public/img/icon/icon.svg" sizes="256x256">
+        <link id="favicon_48" rel="icon" href="<%-static%>/img/icon/icon.svg" sizes="256x256">
     </head>
     <body class="bg-dark" id="body">
         <iframe id="frame"></iframe>
@@ -54,7 +54,9 @@
 
         <nav>
             <button type="button" class="btn btn-danger hidden" id="exit">Exit</button>
-            <button type="button" class="btn btn-secondary" id="startConfig">Edit Config</button>
+            <button type="button" class="btn btn-secondary logsView" id="startConfig">Edit Config</button>
+            <button type="button" class="btn btn-secondary logsView" id="showConfig">Show Config</button>
+            <button type="button" class="btn btn-secondary logsView" id="clearLogs">Clear Logs</button>
             <button type="button" class="btn btn-primary" id="toggleView">Show Logs</button>
         </nav>
     </body>
