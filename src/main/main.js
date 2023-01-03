@@ -17,7 +17,7 @@ const electronEjs = require('electron-ejs');
 const { Promise } = require('node-fetch');
 const AutoLaunch = require('auto-launch');
 
-const ejs = new electronEjs({}, {});
+const ejs = new electronEjs({'static': __static}, {});
 
 /* Data Defines */
 
@@ -97,6 +97,18 @@ const webServer = {
 	'active': false,
 	'attempts': 0
 };
+const tempTableDef = {
+	name: 'temperature',
+	definition: `CREATE TABLE \`temperature\` (
+		\`PK\` int(11) NOT NULL,
+		\`frame\` text NOT NULL,
+		\`temperature\` float NOT NULL,
+		\`system\` text NOT NULL,
+		\`time\` timestamp NOT NULL DEFAULT current_timestamp(),
+		PRIMARY KEY (\`PK\`)
+	)`,
+	PK:'PK'
+}
 const pingFrequency = 30;
 const lldpFrequency = 30;
 const switchStatsFrequency = 30;
@@ -224,20 +236,7 @@ config.loaded = false;
 		config.get('dbPass'),
 		config.get('dbName'),
 		logs,
-		[
-			{
-				name: 'temperature',
-				definition: `CREATE TABLE \`temperature\` (
-					\`PK\` int(11) NOT NULL,
-					\`frame\` text NOT NULL,
-					\`temperature\` float NOT NULL,
-					\`system\` text NOT NULL,
-					\`time\` timestamp NOT NULL DEFAULT current_timestamp(),
-					PRIMARY KEY (\`PK\`)
-				)`,
-				PK:'PK'
-			}
-		]
+		[tempTableDef]
 	);
 
 	await startLoopAfterDelay(doPing, 5);
@@ -343,7 +342,7 @@ async function createWindow() {
 		height: 720,
 		autoHideMenuBar: true,
 		webPreferences: {
-			preload: path.join(__static, 'preload.js')
+			preload: path.resolve(__dirname, 'preload.js')
 		},
 		icon: path.join(__static, 'img/icon/icon.png'),
 		show: false
@@ -368,7 +367,7 @@ async function createWindow() {
 		mainWindow.hide();
 	});
 
-	mainWindow.loadURL(path.join(__static, 'views/main.ejs'));
+	mainWindow.loadURL(path.resolve(__dirname, '../renderer/app.ejs'));
 
 	await new Promise(resolve => {
 		ipcMain.on('ready', (event, ready) => {
@@ -471,7 +470,7 @@ function devices(object) {
 
 
 function setupExpress(expressApp) {
-	expressApp.set('views', path.join(__static, 'views'));
+	expressApp.set('views', path.join(__dirname));
 	expressApp.set('view engine', 'ejs');
 	expressApp.use(express.json());
 	expressApp.use(express.static(__static));
@@ -479,7 +478,7 @@ function setupExpress(expressApp) {
 	expressApp.get('/',  (req, res) =>  {
 		log('New client connected', 'A');
 		res.header('Content-type', 'text/html');
-		res.render('ui', {
+		res.render('web', {
 			switches:switches(),
 			systemName:config.get('systemName'),
 			webSocketEndpoint:config.get('webSocketEndpoint'),
