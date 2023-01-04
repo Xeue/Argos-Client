@@ -14,7 +14,7 @@ const {SQLSession} = require('xeue-sql');
 const {app, BrowserWindow, ipcMain, Tray, Menu} = require('electron');
 const {version} = require('../../package.json');
 const electronEjs = require('electron-ejs');
-const { Promise } = require('node-fetch');
+//const { Promise } = require('node-fetch');
 const AutoLaunch = require('auto-launch');
 
 const ejs = new electronEjs({'static': __static}, {});
@@ -187,8 +187,8 @@ const __main = path.resolve(__dirname, devEnv);
 		config.default('devMode', false);
 		config.default('secureWebSocketEndpoint', true);
 
-		if (!await config.fromFile(path.join(app.getPath('userData'), 'config.conf'))) {
-			await config.fromAPI(path.join(app.getPath('userData'), 'config.conf'), configQuestion, configDone);
+		if (!await config.fromFile(path.join(app.getPath('documents'), 'ArgosData', 'config.conf'))) {
+			await config.fromAPI(path.join(app.getPath('documents'), 'ArgosData', 'config.conf'), configQuestion, configDone);
 		}
 
 		if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
@@ -203,23 +203,25 @@ const __main = path.resolve(__dirname, devEnv);
 		logs.setConf({
 			'createLogFile': config.get('createLogFile'),
 			'logsFileName': 'ArgosLogging',
-			'configLocation': app.getPath('userData'),
+			'configLocation': path.join(app.getPath('documents'), 'ArgosData'),
 			'loggingLevel': config.get('loggingLevel'),
 			'debugLineNum': config.get('debugLineNum'),
 		});
 		log('Running version: v'+version, ['H', 'SERVER', logs.g]);
+		log(`Logging to: ${path.join(app.getPath('documents'), 'ArgosData', 'logs')}`, ['H', 'SERVER', logs.g]);
+		log(`Config saved to: ${path.join(app.getPath('documents'), 'ArgosData', 'config.conf')}`, ['H', 'SERVER', logs.g]);
 		config.print();
 		config.userInput(async command => {
 			switch (command) {
 			case 'config':
-				await config.fromCLI(path.join(app.getPath('userData'), 'config.conf'));
+				await config.fromCLI(path.join(app.getPath('documents'), 'ArgosData', 'config.conf'));
 				if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
 					config.set('debugLineNum', true);
 				}
 				logs.setConf({
 					'createLogFile': config.get('createLogFile'),
 					'logsFileName': 'ArgosLogging',
-					'configLocation': app.getPath('userData'),
+					'configLocation': path.join(app.getPath('documents'), 'ArgosData'),
 					'loggingLevel': config.get('loggingLevel'),
 					'debugLineNum': config.get('debugLineNum')
 				});
@@ -229,6 +231,16 @@ const __main = path.resolve(__dirname, devEnv);
 		configLoaded = true;
 	}
 
+	SQL = new SQLSession(
+		config.get('dbHost'),
+		config.get('dbPort'),
+		config.get('dbUser'),
+		config.get('dbPass'),
+		config.get('dbName'),
+		logs,
+		[tempTableDef]
+	);
+	
 	[serverHTTP, serverWS] = startServers();
 
 	await startLoopAfterDelay(doPing, 5);
@@ -241,7 +253,7 @@ const __main = path.resolve(__dirname, devEnv);
 	setInterval(() => {
 		connectToWebServer(true);
 	}, 60*1000);
-
+	
 	await startLoopAfterDelay(connectToWebServer, 5);
 	await startLoopAfterDelay(webLogPing, pingFrequency);
 	await startLoopAfterDelay(lldpLoop, lldpFrequency);
@@ -291,7 +303,7 @@ async function setUpApp() {
 	ipcMain.on('config', (event, message) => {
 		switch (message) {
 		case 'start':
-			config.fromAPI(path.join(app.getPath('userData'), 'config.conf'), configQuestion, configDone);
+			config.fromAPI(path.join(app.getPath('documents'), 'ArgosData','config.conf'), configQuestion, configDone);
 			break;
 		case 'stop':
 			log('Not implemeneted yet: Cancle config change');
@@ -374,7 +386,7 @@ async function createWindow() {
 
 function loadData(file) {
 	try {
-		const dataRaw = fs.readFileSync(`${app.getPath('userData')}/data/${file}.json`);
+		const dataRaw = fs.readFileSync(`${app.getPath('documents')}/ArgosData/data/${file}.json`);
 		try {
 			return JSON.parse(dataRaw);
 		} catch (error) {
@@ -407,16 +419,16 @@ function loadData(file) {
 			};
 			break;
 		}
-		if (!fs.existsSync(`${app.getPath('userData')}/data/`)){
-			fs.mkdirSync(`${app.getPath('userData')}/data/`);
+		if (!fs.existsSync(`${app.getPath('documents')}/ArgosData/data/`)){
+			fs.mkdirSync(`${app.getPath('documents')}/ArgosData/data/`);
 		}
-		fs.writeFileSync(`${app.getPath('userData')}/data/${file}.json`, JSON.stringify(fileData, null, 4));
+		fs.writeFileSync(`${app.getPath('documents')}/ArgosData/data/${file}.json`, JSON.stringify(fileData, null, 4));
 		return fileData;
 	}
 }
 function writeData(file, data) {
 	try {
-		fs.writeFileSync(`${app.getPath('userData')}/data/${file}.json`, JSON.stringify(data, undefined, 2));
+		fs.writeFileSync(`${app.getPath('documents')}/ArgosData/data/${file}.json`, JSON.stringify(data, undefined, 2));
 	} catch (error) {
 		logObj(`Cloud not write the file ${file}.json, do we have permission to access the file?`, error, 'E');
 	}
@@ -1142,7 +1154,8 @@ async function logTemp() {
 
 	for (let index = 0; index < Frames.length; index++) {
 		const frame = Frames[index];
-		promises.push(fetch('http://'+frame.IP, { method: 'GET' }));
+		const response = await fetch('http://'+frame.IP);
+		promises.push(response.text());
 	}
 
 	const results = await Promise.allSettled(promises);
@@ -1157,11 +1170,11 @@ async function logTemp() {
 		if (frameData.status == 'fulfilled') {
 			try {				
 				let temp = 0;
-				const frameStatData = frameData.value.data.split('<p><b>Temperature In:</b></p>');
+				const frameStatData = frameData.value.split('<p><b>Temperature In:</b></p>');
 				if (typeof frameStatData[1] == 'undefined') return;
 				const frameStat = frameStatData[1].slice(25,27);
 				if (frameStat == 'OK') {
-					let unfilteredTemp = frameData.value.data.split('<p><b>Temperature In:</b></p>')[1].slice(29,33);
+					let unfilteredTemp = frameData.value.split('<p><b>Temperature In:</b></p>')[1].slice(29,33);
 					temp = parseInt(unfilteredTemp.substring(0, unfilteredTemp.indexOf(')')));
 				} else {
 					log(`${Frames[index].Name} frame temperature is not OK`, 'W');
@@ -1170,14 +1183,14 @@ async function logTemp() {
 				tempSum += temp;
 				tempValid++;
 				log(`${Frames[index].Name} temperature = ${temp} deg C`, 'D');
-				if (config.get('localDataBase')) SQL.insert('temperature', {
+				if (config.get('localDataBase')) SQL.insert({
 					'frame': Frames[index].Name,
 					'temperature': Frames[index].Temp,
 					'system': config.get('systemName')
-				});
+				}, 'temperature');
 				socketSend[Frames[index].Name] = Frames[index].Temp;
 			} catch (error) {
-				log(`Can't connect to frame: '${Frames[index].Name}'`, 'W');
+				logObj(`Error processing data for from: '${Frames[index].Name}'`, error, 'W');
 			}
 		} else {
 			log(`Can't connect to frame: '${Frames[index].Name}'`, 'W');
@@ -1375,6 +1388,13 @@ async function configQuestion(question, current, options) {
 
 function configDone() {
 	mainWindow.webContents.send('configDone', true);
+	logs.setConf({
+		'createLogFile': config.get('createLogFile'),
+		'logsFileName': 'ArgosLogging',
+		'configLocation': path.join(app.getPath('documents'), 'ArgosData'),
+		'loggingLevel': config.get('loggingLevel'),
+		'debugLineNum': config.get('debugLineNum'),
+	});
 	if (configLoaded) mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}`);
 	if (config.get('localDataBase')) {
 		SQL = new SQLSession(
