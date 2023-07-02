@@ -17,6 +17,8 @@ let lastUpsHash = '';
 let lastPing = -1;
 let lastHot = -1;
 let lastBoot = -1;
+let lastLocalPingUp = -1;
+let lastLocalPingDown = -1;
 
 const templates = {};
 
@@ -37,6 +39,7 @@ templates.switch = `<% for(i = 0; i < devices.length; i++) { %>
     <td data-type="text" data-key="IP" data-value="<%-devices[i].IP%>"><%-devices[i].IP%></td>
     <td data-type="text" data-key="User" data-value="<%-devices[i].User%>"><%-devices[i].User%></td>
     <td data-type="text" data-key="Pass" data-value="<%-devices[i].Pass%>"><%-devices[i].Pass%></td>
+	<td data-type="select" data-key="Type" data-value="<%-devices[i].Type%>" data-options="Control,Media"><%-devices[i].Type%></td>
     <td>
       <button type="button" class="btn btn-danger editConfig w-50">Edit</button>
       <button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
@@ -131,6 +134,9 @@ function socketDoMessage(header, payload) {
 			break;
 		case 'phy':
 			handlePhyData(payload.data);
+			break;
+		case 'localPing':
+			handleLocalPing(payload.data);
 			break;
 		default:
 			break;
@@ -361,9 +367,9 @@ function handleDevicesData(data) {
 			let s = '<tr><td>' + k + '</td>';
 			for (let index = 0; index < Switches.length; index++) {
 				if (v.includes(Switches[index])) {
-					s += '<td class=\'bg-danger\'>DOWN</td>';
+					s += '<td class=\'bg-danger\'>Down</td>';
 				} else {
-					s += '<td class=\'bg-success\'>UP</td>';
+					s += '<td class=\'bg-success\'>Up</td>';
 				}
 				
 			}
@@ -454,6 +460,42 @@ function handleUPSData(data) {
 	lastUps = Date.now();
 }
 
+function handleLocalPing(data) {
+	const IP = data.IP;
+	const Name = data.Name;
+	const status = data.status;
+	const $upTab = $('#pingLocalUp');
+	const $downTab = $('#pingLocalDown');
+	const $search = $(`.pingStatus[data-ip="${IP}"]`);
+	if ($search.length < 1) {
+		const $row = $(`<tr class="pingStatus" data-ip="${IP}">
+			<td>${Name}</td>
+			<td>${IP}</td>
+		</tr>`);
+		if (status) {
+			$upTab.append($row);
+		} else {
+			$downTab.append($row);
+		}
+	} else {
+		const $table = $search.closest('.table');
+		console.log($table);
+		console.log(($table.is('#pingLocalDown') && status) && true);
+		console.log(($table.is('#pingLocalUp') && !status) && true);
+		if (($table.is('#pingLocalDown') && status) && true) {
+			$upTab.append($search);
+		} else if (($table.is('#pingLocalUp') && !status) && true) {
+			$downTab.append($search);
+		}
+	}
+
+	if (status) {
+		lastLocalPingUp = Date.now();
+	} else {
+		lastLocalPingDown = Date.now();
+	}
+}
+
 function updateLast() {
 	$('#lastAlive').text(prettifyTime(lastAlive));
 	$('#lastMac').text(prettifyTime(lastMac));
@@ -463,6 +505,8 @@ function updateLast() {
 	$('#lastPing').text(prettifyTime(lastPing));
 	$('#lastBoot').text(prettifyTime(lastBoot));
 	$('#lastHot').text(prettifyTime(lastHot));
+	$('#lastLocalPingUp').text(prettifyTime(lastLocalPingUp));
+	$('#lastLocalPingDown').text(prettifyTime(lastLocalPingDown));
 }
 
 function prettifyTime(time) {
@@ -511,14 +555,14 @@ function loading(state) {
 
 function setupWebConnection() {
 	if (!webEnabled) {
-		$('#webBroken').html('<span class="badge badge-pill bg-secondary">Web Monitor Disabled</span>');
+		$('#webBroken').html('<span class="p-2 badge badge-pill bg-secondary">Web Monitor Disabled</span>');
 		return null;
 	}
 
 	renderPingChart();
 	renderBootChart(boots);
 
-	$('#webBroken').html('<span class="badge badge-pill bg-danger">Web Monitor Offline</span>');
+	$('#webBroken').html('<span class="p-2 badge badge-pill bg-danger">Web Monitor Offline</span>');
 	const webConnection = new webSocket([webSocketEndpoint], 'Browser', version, currentSystem, secureWebsockets);
 	webConnection.addEventListener('message', event => {
 		const [header, payload] = event.detail;
@@ -526,10 +570,10 @@ function setupWebConnection() {
 	});
 	webConnection.addEventListener('open', () => {
 		socketDoOpen(webConnection);
-		$('#webBroken').html('<span class="badge badge-pill bg-success">Website Online</span>');
+		$('#webBroken').html('<span class="p-2 badge badge-pill bg-success">Website Online</span>');
 	});
 	webConnection.addEventListener('close', () => {
-		$('#webBroken').html('<span class="badge badge-pill bg-danger">Web Monitor Offline</span>');
+		$('#webBroken').html('<span class="p-2 badge badge-pill bg-danger">Web Monitor Offline</span>');
 	});
 	return webConnection;
 }
@@ -548,10 +592,10 @@ $(document).ready(function() {
 	});
 	localConnection.addEventListener('open', () => {
 		socketDoOpen(localConnection);
-		$('#broken').html('<span class="badge badge-pill bg-success">Argos Online</span>');
+		$('#broken').html('<span class="p-2 badge badge-pill bg-success">Argos Online</span>');
 	});
 	localConnection.addEventListener('close', () => {
-		$('#broken').html('<span class="badge badge-pill bg-danger">Argos Offline</span>');
+		$('#broken').html('<span class="p-2 badge badge-pill bg-danger">Argos Offline</span>');
 	});
 
 	$('#tempFromPick').dateTimePicker({
@@ -615,21 +659,22 @@ $(document).ready(function() {
 			});
 		} else if ($trg.is('#toggleConfig') || $trg.is('#closeConfig')) {
 			if ($('#config').hasClass('hidden')) {
-				$('#toggleConfig').toggleClass('rotate');
 				loading(true);
 				Promise.allSettled([
 					getConfig('switches'),
 					getConfig('devices'),
 					getConfig('ups'),
-					getConfig('frames')
+					getConfig('frames'),
+					getConfig('pings')
 				]).then(values => {
-					const [switches, devices, ups, frames] = values;
+					const [switches, devices, ups, frames, pings] = values;
 					loading(false);
 					$('#config').removeClass('hidden');
 					editors['switches'] = renderEditorTab(switches.value, editors['switches'], templates.switch, 'configSwitches');
 					editors['devices'] = renderEditorTab(devices.value, editors['devices'], templates.devices, 'configDevices');
 					editors['ups'] = renderEditorTab(ups.value, editors['ups'], templates.nameIP, 'configUps');
 					editors['frames'] = renderEditorTab(frames.value, editors['frames'], templates.nameIP, 'configFrames');
+					editors['pings'] = renderEditorTab(pings.value, editors['pings'], templates.nameIP, 'configPings');
 				}).catch(error => {
 					console.error(error);
 				});
@@ -670,6 +715,22 @@ $(document).ready(function() {
 					$td.append($to);
 					break;
 				}
+				case 'select': {
+					let txt = `<select class="btn btn-outline-light" name="${$td.data('key')}">`;
+					const options = $td.data('options').split(',');
+					options.forEach(option => {
+						const selected = option == $td.data('value') ? 'selected' : '';
+						txt += `<option value="${option}" ${selected}>${option}</option>`;
+					});
+					txt += '</select>';
+					const $txt = $(txt);
+					$txt.change(function() {
+						$td.data('value', $txt.val());
+					});
+					$td.html('');
+					$td.append($txt);
+					break;
+				}
 				default:
 					break;
 				}
@@ -694,6 +755,10 @@ $(document).ready(function() {
 					data[$td.data('key-from')] = parseInt($td.data('from'));
 					data[$td.data('key-to')] = parseInt($td.data('to'));
 					$td.removeClass('input-group');
+					break;
+				case 'select':
+					$td.html($td.data('value'));
+					data[$td.data('key')] = $td.data('value');
 					break;
 				default:
 					break;

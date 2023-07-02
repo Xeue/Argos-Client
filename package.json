@@ -1,28 +1,27 @@
 {
   "name": "argos",
-  "version": "3.2.1",
+  "version": "3.3.0",
   "description": "OB/Flypack Monitoring",
-  "main": "src/main/main.js",
+  "main": "main.js",
   "dependencies": {
-    "auto-launch": "^5.0.5",
-    "aws-sdk": "^2.1283.0",
-    "ejs": "^3.1.8",
+    "auto-launch": "^5.0.6",
+    "aws-sdk": "^2.1409.0",
+    "ejs": "^3.1.9",
     "electron-ejs": "^1.2.1",
     "express": "^4.18.2",
     "node-fetch": "^2.6.7",
+    "ping": "^0.4.4",
     "source-map-support": "^0.5.21",
-    "ws": "^8.11.0",
+    "ws": "^8.13.0",
     "xeue-config": "^1.5.3",
-    "xeue-logs": "^1.7.4",
-    "xeue-sql": "^1.1.0"
+    "xeue-logs": "^1.7.5",
+    "xeue-sql": "^2.0.6",
+    "xeue-webserver": "^1.0.5"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron .",
-    "build": "electron-builder --win",
-    "dev": "electron-webpack dev",
-    "compile": "electron-webpack",
-    "build-webpack": "npm run compile && electron-builder"
+    "build": "electron-builder --win"
   },
   "build": {
     "appId": "com.xeue.argos",
@@ -49,9 +48,7 @@
   "author": "Sam Chilton & Ollie Quirke",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^22.0.0",
-    "electron-builder": "^22.10.3",
-    "electron-webpack": "^2.8.2",
-    "webpack": "~4.42.1"
+    "electron": "^25.2.0",
+    "electron-builder": "^24.4.0"
   }
 }

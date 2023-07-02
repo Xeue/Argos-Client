@@ -34,7 +34,6 @@
     <script type="text/javascript" src="lib/jsoneditor.js"></script>
     <script type="text/javascript" src="lib/datetimepicker.js"></script>
     <script type="text/javascript" src="js/web.js"></script>
-
     <title>Argos</title>
     <link id="favicon_48" rel="icon" href="img/icon/icon.svg" sizes="256x256">
 </head>
@@ -42,15 +41,25 @@
 <body class="bg-dark">
     <div id="loading" class="hidden"></div>
 
-    <main class="container-fluid bg-dark">
-        <section class="row mt-1">
-            <div class="btn-group">
-                <div class="w-auto" id="broken"></div>
-                <div class="w-auto ms-2" id="webBroken"></div>
-            </div>
-            <button id="toggleConfig"></button>
-        </section>
-        <section class="mainCont">
+    <nav class="drag navbar navbar-expand-lg navbar-dark bg-title px-2">
+        <a class="navbar-brand" href="#">
+            <img src="img/icon/icon.svg" class="d-inline-block align-top" alt="" width="30" height="30">
+            Argos
+        </a>
+        <div class="btn-group">
+            <div class="w-auto" id="broken"></div>
+            <div class="w-auto ms-2" id="webBroken"></div>
+        </div>
+        <div class="d-flex gap-2 justify-content-center w-100" role="tablist">
+            <button class="btn btn-secondary active" id="nav-media-tab" data-bs-toggle="tab" data-bs-target="#nav-media" type="button" role="tab" aria-controls="nav-media" aria-selected="true">Media</button>
+            <button class="btn btn-secondary disabled" id="nav-control-tab" data-bs-toggle="tab" data-bs-target="#nav-control" type="button" role="tab" aria-controls="nav-control" aria-selected="true">Control</button>
+            <button class="btn btn-secondary" id="nav-control-tab" data-bs-toggle="tab" data-bs-target="#nav-pings" type="button" role="tab" aria-controls="nav-pings" aria-selected="true">Pings</button>
+            <button class="btn btn-secondary" id="toggleConfig">Edit Devices</button>
+            <button class="btn btn-secondary disabled" id="netboxConfig">Netbox Config</button>
+        </div>
+    </nav>
+    <main class="tab-content container-fluid bg-dark pt-3">
+        <section class="tab-pane fade show active mainCont masonry" id="nav-media" data-editor="media" role="tabpanel" aria-labelledby="nav-media-tab">
             <div class="text-light text-muted" id="col-alive">
                 <h4>Missing devices</h4>
                 <span class="text-muted">Last updated <span id="lastAlive"></span></span>
@@ -81,7 +90,7 @@
                     </tbody>
                 </table>
             </div>
-            <div class="text-light text-muted" id="col-phy">
+            <div class="text-light text-muted d-none" id="col-phy">
                 <h4>Uncorrectable data (PHY FEC)</h4>
                 <span class="text-muted">Last updated <span id="lastPhy"></span></span>
                 <table id="phy" class="table table-dark text-muted">
@@ -203,19 +212,47 @@
                 </div>
             <% } %>
         </section>
+        <section class="tab-pane fade" id="nav-control" data-editor="control" role="tabpanel" aria-labelledby="nav-control-tab">Control Here</section>
+        <section class="tab-pane fade masonry" id="nav-pings" data-editor="pings" role="tabpanel" aria-labelledby="nav-pings-tab">
+            <div class="text-light" id="col-pings-up">
+                <h4>Alive Devices</h4>
+                <span class="text-muted">Last updated <span id="lastLocalPingUp">never</span></span>
+                <table id="pingLocalUp" class="table table-dark">
+                    <thead>
+                        <th scope="col" class="bg-success">Name</th>
+                        <th scope="col" class="bg-success">IP</th>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+            <div class="text-light" id="col-pings-down">
+                <h4>Down Devices</h4>
+                <span class="text-muted">Last updated <span id="lastLocalPingDown">never</span></span>
+                <table id="pingLocalDown" class="table table-dark">
+                    <thead>
+                        <th scope="col" class="bg-danger">Name</th>
+                        <th scope="col" class="bg-danger">IP</th>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+        </section>
     </main>
     
-    <article id="config" class="overflow-auto hidden">
+    <article id="config" class="overflow-auto hidden pt-5">
         <section class="bg-dark text-light alert text-nowrap container flex-column d-flex mb-0">
             <div class="row mt-2">
                 <h3 class="w-50">Edit Devices</h3>
             </div>
 
-            <div class="nav nav-tabs nav-justified" id="nav-tab" role="tablist">
-                <button class="nav-link active" id="nav-switches-tab" data-bs-toggle="tab" data-bs-target="#nav-switches" type="button" role="tab" aria-controls="nav-switches" aria-selected="true">Switches</button>
+            <div class="nav nav-pills mb-2 nav-justified" id="nav-tab" role="tablist">
+                <button class="nav-link active" id="nav-switches-tab" data-bs-toggle="tab" data-bs-target="#nav-switches" type="button" role="tab" aria-controls="nav-switches" aria-selected="true">Core Switches</button>
                 <button class="nav-link" id="nav-devices-tab" data-bs-toggle="tab" data-bs-target="#nav-devices" type="button" role="tab" aria-controls="nav-devices" aria-selected="false">Devices</button>
                 <button class="nav-link" id="nav-ups-tab" data-bs-toggle="tab" data-bs-target="#nav-ups" type="button" role="tab" aria-controls="nav-ups" aria-selected="false">Ups</button>
                 <button class="nav-link" id="nav-temperatures-tab" data-bs-toggle="tab" data-bs-target="#nav-temperatures" type="button" role="tab" aria-controls="nav-temperatures" aria-selected="false">Temperatures</button>
+                <button class="nav-link" id="nav-ping-config-tab" data-bs-toggle="tab" data-bs-target="#nav-ping-config" type="button" role="tab" aria-controls="nav-ping-config" aria-selected="false">Pings</button>
             </div>
 
             <section class="tab-content overflow-auto">
@@ -228,6 +265,7 @@
                                     <th class="">IP</th>
                                     <th class="">Username</th>
                                     <th class="">Password</th>
+                                    <th class="">Type</th>
                                     <th class=""></th>
                                 </tr>
                             </thead>
@@ -291,6 +329,24 @@
                     </div>
                     <div class="dataRaw collapse mt-3">
                         <div id="configFramesRaw"></div>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="nav-ping-config" data-editor="pings" role="tabpanel" aria-labelledby="nav-ping-config-tab">
+                    <div class="dataTable collapse show">
+                        <table class="table table-dark" data-editor="pings">
+                            <thead class="position-sticky top-0">
+                                <tr>
+                                    <th class="w-25">Name</th>
+                                    <th class="w-25">IP</th>
+                                    <th class="w-25"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="configPings" data-template="nameIP"></tbody>
+                        </table>
+                    </div>
+                    <div class="dataRaw collapse mt-3">
+                        <div id="configPingsRaw"></div>
                     </div>
                 </div>
             </section>

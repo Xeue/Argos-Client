@@ -1,4 +1,4 @@
-#toggleConfig {
+/*#toggleConfig {
     background-image: url("../img/cog.svg");
     background-position: center;
     background-repeat: no-repeat;
@@ -16,7 +16,7 @@
     background-color: transparent;
     border: none;
     margin: 5px;
-}
+}*/
 
 #toggleConfig:hover {
     opacity: 1;
@@ -72,5 +72,42 @@ td {
 }
 
 #config th {
-  background-color: #161717;
+  background-color: #2a323c83;
+}
+
+nav.drag {
+  app-region: drag;
+}
+
+.btn {
+  app-region: no-drag;
+}
+
+.bg-title {
+  background-color: #313d48;
+}
+
+.masonry {
+  grid-template-rows: masonry;
+  columns: 35rem;
+  column-gap: 1rem;
+  display: block;
+}
+
+.masonry > * {
+  break-inside: avoid;
+  margin-bottom: 1rem;
+  background: #2f3a4366 !important;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  word-wrap: break-word;
+  border: 1px solid rgba(0,0,0,.125);
+  border-radius: 0.25rem;
+  padding: 1rem!important;
+}
+
+.masonry table {
+  margin-bottom: 0 !important;
 }

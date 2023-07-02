@@ -1,8 +1,7 @@
 /* eslint-disable no-unused-vars */
 const serverID = new Date().getTime();
 
-const {WebSocket, WebSocketServer} = require('ws');
-const http = require('http');
+const {WebSocket} = require('ws');
 const express = require('express');
 const fetch = require('node-fetch');
 const AWS = require('aws-sdk');
@@ -11,11 +10,14 @@ const path = require('path');
 const {log, logObj, logs, logEvent} = require('xeue-logs');
 const {config} = require('xeue-config');
 const {SQLSession} = require('xeue-sql');
+const {Server} = require('xeue-webserver');
 const {app, BrowserWindow, ipcMain, Tray, Menu} = require('electron');
-const {version} = require('../../package.json');
+const {version} = require('./package.json');
 const electronEjs = require('electron-ejs');
-//const { Promise } = require('node-fetch');
 const AutoLaunch = require('auto-launch');
+const ping = require('ping');
+
+const __static = __dirname+'/static';
 
 const ejs = new electronEjs({'static': __static}, {});
 
@@ -92,12 +94,12 @@ const data = {
 	'ups': {},
 	'devices':{}
 };
-const webServer = {
+const cloudServer = {
 	'connected': false,
 	'active': false,
 	'attempts': 0
 };
-const tempTableDef = {
+const tables = [{
 	name: 'temperature',
 	definition: `CREATE TABLE \`temperature\` (
 		\`PK\` int(11) NOT NULL,
@@ -108,23 +110,25 @@ const tempTableDef = {
 		PRIMARY KEY (\`PK\`)
 	)`,
 	PK:'PK'
-};
+}];
 const pingFrequency = 30;
 const lldpFrequency = 30;
 const switchStatsFrequency = 30;
 const upsFrequency = 30;
 const devicesFrequency = 30;
 const tempFrequency = minutes(5);
+const localPingFrequency = 10;
 
 /* Globals */
 
 let isQuiting = false;
 let mainWindow = null;
+let webServer;
 let serverHTTP;
 let serverWS;
 let SQL;
 let configLoaded = false;
-const devEnv = app.isPackaged ? 'src' : '../';
+const devEnv = app.isPackaged ? './' : './';
 const __main = path.resolve(__dirname, devEnv);
 
 
@@ -237,13 +241,22 @@ const __main = path.resolve(__dirname, devEnv);
 		config.get('dbUser'),
 		config.get('dbPass'),
 		config.get('dbName'),
-		logs,
-		[tempTableDef]
+		logs
 	);
+	await SQL.init(tables);
 	
-	[serverHTTP, serverWS] = startServers();
+	webServer = new Server(
+		config.get('port'),
+		expressRoutes,
+		logs,
+		version,
+		config,
+		doMessage
+	);
+	log(`Argos can be accessed at http://localhost:${config.get('port')}`, 'C');
 
-	await startLoopAfterDelay(doPing, 5);
+	[serverHTTP, serverWS] = webServer.start();
+	mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}`);
 
 	connectToWebServer(true).then(()=>{
 		webLogBoot();
@@ -254,6 +267,7 @@ const __main = path.resolve(__dirname, devEnv);
 		connectToWebServer(true);
 	}, 60*1000);
 	
+	await startLoopAfterDelay(localPings, localPingFrequency);
 	await startLoopAfterDelay(connectToWebServer, 5);
 	await startLoopAfterDelay(webLogPing, pingFrequency);
 	await startLoopAfterDelay(lldpLoop, lldpFrequency);
@@ -343,10 +357,18 @@ async function createWindow() {
 		height: 720,
 		autoHideMenuBar: true,
 		webPreferences: {
-			preload: path.resolve(__main, 'main/preload.js')
+			contextIsolation: true,
+			preload: path.resolve(__main, 'preload.js')
 		},
 		icon: path.join(__static, 'img/icon/icon.png'),
-		show: false
+		show: false,
+		frame: false,
+		titleBarStyle: 'hidden',
+		titleBarOverlay: {
+			color: '#313d48',
+			symbolColor: '#ffffff',
+			height: 56
+		}
 	});
 
 	if (!app.commandLine.hasSwitch('hidden')) {
@@ -368,7 +390,7 @@ async function createWindow() {
 		mainWindow.hide();
 	});
 
-	mainWindow.loadURL(path.resolve(__main, 'renderer/app.ejs'));
+	mainWindow.loadURL(path.resolve(__main, 'views/app.ejs'));
 
 	await new Promise(resolve => {
 		ipcMain.on('ready', (event, ready) => {
@@ -409,7 +431,8 @@ function loadData(file) {
 				'Name':'Placeholder',
 				'User': 'Username',
 				'Pass': 'Password',
-				'IP':'0.0.0.0'
+				'IP':'0.0.0.0',
+				'Type': 'Media'
 			};
 			break;
 		default:
@@ -434,42 +457,30 @@ function writeData(file, data) {
 	}
 }
 
-function switches(object) {
-	if (typeof object === 'undefined') {
-		return loadData('Switches');
-	} else {
-		writeData('Switches', object);
-	}
+function switches(type) {
+	const Switches = loadData('Switches');
+	if (type !== undefined) return Switches.filter(Switch => Switch.Type == type);
+	return Switches;
 }
-function frames(object) {
-	if (typeof object === 'undefined') {
-		return loadData('Frames');
-	} else {
-		writeData('Frames', object);
-	}
+function frames() {
+	return loadData('Frames');
 }
-
-function ups(object) {
-	if (typeof object === 'undefined') {
-		return loadData('Ups');
-	} else {
-		writeData('Ups', object);
-	}
+function ups() {
+	return loadData('Ups');
 }
-function devices(object) {
-	if (typeof object === 'undefined') {
-		return loadData('Devices');
-	} else {
-		writeData('Devices', object);
-	}
+function devices() {
+	return loadData('Devices');
+}
+function pings() {
+	return loadData('Pings');
 }
 
 
 /* Express setup & Websocket Server */
 
 
-function setupExpress(expressApp) {
-	expressApp.set('views', path.join(__main, 'main'));
+function expressRoutes(expressApp) {
+	expressApp.set('views', path.join(__main, 'views'));
 	expressApp.set('view engine', 'ejs');
 	expressApp.use(express.json());
 	expressApp.use(express.static(__static));
@@ -478,7 +489,7 @@ function setupExpress(expressApp) {
 		log('New client connected', 'A');
 		res.header('Content-type', 'text/html');
 		res.render('web', {
-			switches:switches(),
+			switches:switches('Media'),
 			systemName:config.get('systemName'),
 			webSocketEndpoint:config.get('webSocketEndpoint'),
 			secureWebSocketEndpoint:config.get('secureWebSocketEndpoint'),
@@ -533,6 +544,9 @@ function setupExpress(expressApp) {
 		case 'devices':
 			data = devices();
 			break;
+		case 'pings':
+			data = pings();
+			break;
 		default:
 			break;
 		}
@@ -541,123 +555,53 @@ function setupExpress(expressApp) {
 
 	expressApp.post('/setswitches', (req, res) => {
 		log('Request to set switches config data', 'D');
-		switches(req.body);
+		writeData('Switches', req.body);
 		res.send('Done');
 	});
 	expressApp.post('/setdevices', (req, res) => {
 		log('Request to set devices config data', 'D');
-		devices(req.body);
+		writeData('Devices', req.body);
 		res.send('Done');
 	});
 	expressApp.post('/setups', (req, res) => {
 		log('Request to set ups config data', 'D');
-		ups(req.body);
+		writeData('Ups', req.body);
 		res.send('Done');
 	});
 	expressApp.post('/setframes', (req, res) => {
 		log('Request to set frames config data', 'D');
-		frames(req.body);
+		writeData('Frames', req.body);
+		res.send('Done');
+	});
+	expressApp.post('/setpings', (req, res) => {
+		log('Request to set pings config data', 'D');
+		writeData('Pings', req.body);
 		res.send('Done');
 	});
 }
 
-function startServers() {
-	const expressApp = express();
-	const serverWS = new WebSocketServer({noServer: true});
-	const serverHTTP = http.createServer(expressApp);
 
-	setupExpress(expressApp);
-
-	serverHTTP.listen(config.get('port'));
-	log(`Argos can be accessed at http://localhost:${config.get('port')}`, 'C');
-	mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}`);
-
-	serverHTTP.on('upgrade', (request, socket, head) => {
-		log('Upgrade request received', 'D');
-		serverWS.handleUpgrade(request, socket, head, socket => {
-			serverWS.emit('connection', socket, request);
+async function doMessage(msgObj, socket) {
+	const payload = msgObj.payload;
+	const header = msgObj.header;
+	if (typeof payload.source == 'undefined') {
+		payload.source = 'default';
+	}
+	switch (payload.command) {
+	case 'meta':
+		logObj('Received', msgObj, 'D');
+		socket.send('Received meta');
+		break;
+	case 'register':
+		coreDoRegister(socket, msgObj);
+		break;
+	case 'get':
+		getTemperature(header, payload).then(data => {
+			webServer.sendTo(socket, data);
 		});
-	});
-
-	// Main websocket server functionality
-	serverWS.on('connection', async socket => {
-		log('New client connected', 'D');
-		socket.pingStatus = 'alive';
-		socket.on('message', async (msgJSON)=>{
-			await onWSMessage(msgJSON, socket);
-		});
-		socket.on('close', ()=>{
-			onWSClose(socket);
-		});
-	});
-
-	serverWS.on('error', () => {
-		log('Server failed to start or crashed, please check the port is not in use', 'E');
-		process.exit(1);
-	});
-
-	return [serverHTTP, serverWS];
-}
-
-async function onWSMessage(msgJSON, socket) {
-	let msgObj = {};
-	try {
-		msgObj = JSON.parse(msgJSON);
-		if (msgObj.payload.command !== 'ping' && msgObj.payload.command !== 'pong') {
-			logObj('Received', msgObj, 'A');
-		}
-		const payload = msgObj.payload;
-		const header = msgObj.header;
-		if (typeof payload.source == 'undefined') {
-			payload.source = 'default';
-		}
-		switch (payload.command) {
-		case 'meta':
-			log('Received: '+msgJSON, 'D');
-			socket.send('Received meta');
-			break;
-		case 'register':
-			coreDoRegister(socket, msgObj);
-			break;
-		case 'disconnect':
-			log(`${logs.r}${payload.data.ID}${logs.reset} Connection closed`, 'D');
-			break;
-		case 'pong':
-			socket.pingStatus = 'alive';
-			break;
-		case 'ping':
-			socket.pingStatus = 'alive';
-			sendClientData(socket, {
-				'command': 'pong'
-			});
-			break;
-		case 'error':
-			log(`Device ${header.fromID} has entered an error state`, 'E');
-			log(`Message: ${payload.error}`, 'E');
-			break;
-		case 'get':
-			getTemperature(header, payload).then(data => {
-				sendClientData(socket, data);
-			});
-			break;
-		default:
-			log('Unknown message: '+msgJSON, 'W');
-		}
-	} catch (e) {
-		try {
-			msgObj = JSON.parse(msgJSON);
-			if (msgObj.payload.command !== 'ping' && msgObj.payload.command !== 'pong') {
-				logObj('Received', msgObj, 'A');
-			}
-			if (typeof msgObj.type == 'undefined') {
-				logObj('Server error', e, 'E');
-			} else {
-				log('A device is using old tally format, upgrade it to v4.0 or above', 'E');
-			}
-		} catch (e2) {
-			logObj('Invalid JSON', e, 'E');
-			log('Received: '+msgJSON, 'A');
-		}
+		break;
+	default:
+		logObj('Unknown message', msgObj, 'W');
 	}
 }
 
@@ -731,39 +675,6 @@ async function getTemperature(header, payload) {
 	return dataObj;
 }
 
-function onWSClose(socket) {
-	try {
-		const oldId = JSON.parse(JSON.stringify(socket.ID));
-		log(`${logs.r}${oldId}${logs.reset} Connection closed`, 'D');
-		socket.connected = false;
-	} catch (e) {
-		log('Could not end connection cleanly','E');
-	}
-}
-
-function doPing() {
-	if (config.get('printPings')) log('Doing client pings', 'A');
-	let alive = 0;
-	let dead = 0;
-	serverWS.clients.forEach(client => {
-		if (client.readyState !== 1) return;
-		switch (client.pingStatus) {
-		case 'alive':
-			alive++;
-			sendClientData(client, {'command': 'ping'});
-			client.pingStatus = 'pending';
-			break;
-		case 'pending':
-			client.pingStatus = 'dead';
-			break;
-		default:
-			dead++;
-			break;
-		}
-	});
-	if (config.get('printPings')) log(`Alive: ${alive}, Dead: ${dead}`, 'A');
-}
-
 function coreDoRegister(socket, msgObj) {
 	const header = msgObj.header;
 	if (typeof socket.type == 'undefined') {
@@ -789,19 +700,6 @@ function coreDoRegister(socket, msgObj) {
 	socket.connected = true;
 }
 
-function sendClientData(connection, payload) {
-	connection.send(JSON.stringify({
-		'header': makeHeader(),
-		'payload': payload
-	}));
-}
-
-function sendAllData(payload) {
-	serverWS.clients.forEach(client => {
-		sendClientData(client, payload);
-	});
-}
-
 function makeHeader() {
 	const header = {};
 	header.fromID = serverID;
@@ -816,8 +714,8 @@ function makeHeader() {
 }
 
 function distributeData(type, data) {
-	sendWebData({'command':'log', 'type':type, 'data':data});
-	sendAllData({'command':'log', 'type':type, 'data':data});
+	sendCloudData({'command':'log', 'type':type, 'data':data});
+	webServer.sendToAll({'command':'log', 'type':type, 'data':data});
 }
 
 
@@ -826,7 +724,7 @@ function distributeData(type, data) {
 
 function lldpLoop() {
 	if (config.get('devMode')) return;
-	let Switches = switches();
+	let Switches = switches('Media');
 	log('Getting LLDP neighbors', 'A');
 	let promisses = [];
 	for (let i = 0; i < Switches.length; i++) {
@@ -856,7 +754,7 @@ function lldpLoop() {
 
 function switchMac() {
 	if (config.get('devMode')) return;
-	let Switches = switches();
+	let Switches = switches('Media');
 	log('Checking for recent interface dropouts', 'A');
 	function processSwitchMac(response, devices) {
 		let keys = Object.keys(devices);
@@ -923,7 +821,7 @@ function switchMac() {
 
 function switchPhy() {
 	if (config.get('devMode')) return;
-	const Switches = switches();
+	const Switches = switches('Media');
 	log('Looking for high numbers of PHY/FEC errors', 'A');
 	function processSwitchPhy(response, devices) {
 		const statuses = response.result[1].interfacePhyStatuses;
@@ -985,7 +883,7 @@ function switchPhy() {
 
 function switchFibre() {
 	if (config.get('devMode')) return;
-	let Switches = switches();
+	let Switches = switches('Media');
 	log('Looking for low fibre levels in trancievers', 'A');
 	function processSwitchFibre(response, devices) {
 		let keys = Object.keys(devices);
@@ -1142,6 +1040,21 @@ function doApi(json, Switch) {
 }
 
 
+/* Control Functions */
+
+function localPings() {
+	const hosts = pings();
+	hosts.forEach(function (host) {
+		ping.promise.probe(host.IP, {
+			timeout: 10
+		}).then(function(res) {
+			log(`IP: ${host.IP}, Online: ${res.alive}`, 'A');
+			distributeData('localPing', {'status':res.alive, 'IP':host.IP, 'Name':host.Name});
+		});
+	});
+}
+
+
 /* Web Logging Functions */
 
 
@@ -1211,13 +1124,13 @@ async function logTemp() {
 			log('Warning: Temperature over warning limit, sending SMS', 'W');
 			sendSms(`Commitment to environment sustainability failed, MCR IS MELTING: ${tempAvg} deg C`);
 		}
-		sendWebData({'command':'log', 'type':'temperature', 'data':Frames});
+		sendCloudData({'command':'log', 'type':'temperature', 'data':Frames});
 
 		socketSend.average = tempAvg;
 		const time = new Date().getTime();
 		const points = {};
 		points[time] = socketSend;
-		sendAllData({
+		webServer.sendToAll({
 			'command': 'data',
 			'data': 'temps',
 			'system': config.get('systemName'),
@@ -1232,13 +1145,13 @@ async function logTemp() {
 function webLogPing() {
 	if (!config.get('webEnabled')) return;
 	log('Pinging webserver', 'A');
-	sendWebData({'command':'log', 'type':'ping'});
+	sendCloudData({'command':'log', 'type':'ping'});
 }
 
 function webLogBoot() {
 	if (!config.get('webEnabled')) return;
 	log('Sending boot');
-	sendWebData({'command':'log', 'type':'boot'});
+	sendCloudData({'command':'log', 'type':'boot'});
 }
 
 function sendSms(msg) {
@@ -1253,7 +1166,7 @@ function sendSms(msg) {
 	promise.then(function (data) {
 		log(`Text message sent - messageId: ${data.MessageId}`);
 	}).catch(function (err) {
-		console.error(err, err.stack);
+		logs.error(err, err.stack);
 	});
 }
 
@@ -1262,35 +1175,35 @@ async function connectToWebServer(retry = false) {
 	let inError = false;
 	let promise;
 
-	if (webServer.address !== config.get('webSocketEndpoint')) {
-		webServer.address = config.get('webSocketEndpoint');
-		webServer.conneceted = false;
-		if (typeof webServer.socket !== 'undefined') webServer.socket.close();
-		delete webServer.socket;
+	if (cloudServer.address !== config.get('webSocketEndpoint')) {
+		cloudServer.address = config.get('webSocketEndpoint');
+		cloudServer.conneceted = false;
+		if (typeof cloudServer.socket !== 'undefined') cloudServer.socket.close();
+		delete cloudServer.socket;
 	}
 
-	if ((!webServer.connected && webServer.active && webServer.attempts < 3) || (retry && !webServer.connected)) {
+	if ((!cloudServer.connected && cloudServer.active && cloudServer.attempts < 3) || (retry && !cloudServer.connected)) {
 		const protocol = config.get('secureWebSocketEndpoint') ? 'wss' : 'ws';
 		if (retry) {
-			log(`Retrying connection to dead server: ${logs.r}${protocol}://${webServer.address}${logs.reset}`, 'W');
+			log(`Retrying connection to dead server: ${logs.r}${protocol}://${cloudServer.address}${logs.reset}`, 'W');
 		}
-		webServer.socket = new WebSocket(`${protocol}://${webServer.address}`);
+		cloudServer.socket = new WebSocket(`${protocol}://${cloudServer.address}`);
 
 		promise = new Promise(resolve=>{
-			webServer.socket.on('open', function open() {
+			cloudServer.socket.on('open', function open() {
 				let payload = {};
 				payload.command = 'register';
 				payload.name = config.get('systemName');
-				sendWebData(payload);
+				sendCloudData(payload);
 				resolve();
-				log(`${logs.g}${webServer.address}${logs.reset} Established a connection to webserver`, 'S');
-				webServer.connected = true;
-				webServer.active = true;
-				webServer.attempts = 0;
+				log(`${logs.g}${cloudServer.address}${logs.reset} Established a connection to webserver`, 'S');
+				cloudServer.connected = true;
+				cloudServer.active = true;
+				cloudServer.attempts = 0;
 			});
 		});
 
-		webServer.socket.on('message', function message(msgJSON) {
+		cloudServer.socket.on('message', function message(msgJSON) {
 			try {
 				const msgObj = JSON.parse(msgJSON);
 				if (msgObj.payload.command !== 'ping' && msgObj.payload.command !== 'pong') {
@@ -1300,7 +1213,7 @@ async function connectToWebServer(retry = false) {
 				}
 				switch (msgObj.payload.command) {
 				case 'ping':
-					sendWebData({
+					sendCloudData({
 						'command': 'pong'
 					});
 					break;
@@ -1332,35 +1245,34 @@ async function connectToWebServer(retry = false) {
 			}
 		});
 
-		webServer.socket.on('close', function close() {
-			webServer.connected = false;
-			delete webServer.socket;
-			webServer.attempts++;
+		cloudServer.socket.on('close', function close() {
+			cloudServer.connected = false;
+			delete cloudServer.socket;
+			cloudServer.attempts++;
 			if (!inError) {
-				log(`${logs.r}${webServer.address}${logs.reset} Outbound webserver connection closed`, 'W');
+				log(`${logs.r}${cloudServer.address}${logs.reset} Outbound webserver connection closed`, 'W');
 			}
 		});
 
-		webServer.socket.on('error', function error() {
+		cloudServer.socket.on('error', function error() {
 			inError = true;
-			log(`Could not connect to server: ${logs.r}${webServer.address}${logs.reset}`, 'E');
+			log(`Could not connect to server: ${logs.r}${cloudServer.address}${logs.reset}`, 'E');
 		});
 		
-	} else if (!webServer.connected && webServer.active) {
-		webServer.active = false;
-		log(`Server not responding, changing status to dead: ${logs.r}${webServer.address}${logs.reset}`, 'E');
+	} else if (!cloudServer.connected && cloudServer.active) {
+		cloudServer.active = false;
+		log(`Server not responding, changing status to dead: ${logs.r}${cloudServer.address}${logs.reset}`, 'E');
 	}
 	return promise;
 }
 
-function sendWebData(payload) {
+function sendCloudData(payload) {
 	if (!config.get('webEnabled')) return;
 	let packet = {};
-	let header = makeHeader();
-	packet.header = header;
+	packet.header = makeHeader();
 	packet.payload = payload;
-	if (webServer.connected) {
-		webServer.socket.send(JSON.stringify(packet));
+	if (cloudServer.connected) {
+		cloudServer.socket.send(JSON.stringify(packet));
 	}
 }
 
@@ -1386,7 +1298,7 @@ async function configQuestion(question, current, options) {
 	return awaitMessage;
 }
 
-function configDone() {
+async function configDone() {
 	mainWindow.webContents.send('configDone', true);
 	logs.setConf({
 		'createLogFile': config.get('createLogFile'),
@@ -1403,9 +1315,9 @@ function configDone() {
 			config.get('dbUser'),
 			config.get('dbPass'),
 			config.get('dbName'),
-			logs,
-			[tempTableDef]
+			logs
 		);
+		await SQL.init(tables);
 	}
 }
 
