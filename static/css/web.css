@@ -18,6 +18,10 @@
     margin: 5px;
 }*/
 
+html {
+  height: 100%;
+}
+
 #toggleConfig:hover {
     opacity: 1;
 }

@@ -38,7 +38,7 @@
     <link id="favicon_48" rel="icon" href="img/icon/icon.svg" sizes="256x256">
 </head>
 
-<body class="bg-dark">
+<body class="bg-dark h-100 d-flex flex-column">
     <div id="loading" class="hidden"></div>
 
     <nav class="drag navbar navbar-expand-lg navbar-dark bg-title px-2">
@@ -58,7 +58,7 @@
             <button class="btn btn-secondary disabled" id="netboxConfig">Netbox Config</button>
         </div>
     </nav>
-    <main class="tab-content container-fluid bg-dark pt-3">
+    <main class="tab-content container-fluid bg-dark py-3 overflow-auto">
         <section class="tab-pane fade show active mainCont masonry" id="nav-media" data-editor="media" role="tabpanel" aria-labelledby="nav-media-tab">
             <div class="text-light text-muted" id="col-alive">
                 <h4>Missing devices</h4>

@@ -479,9 +479,6 @@ function handleLocalPing(data) {
 		}
 	} else {
 		const $table = $search.closest('.table');
-		console.log($table);
-		console.log(($table.is('#pingLocalDown') && status) && true);
-		console.log(($table.is('#pingLocalUp') && !status) && true);
 		if (($table.is('#pingLocalDown') && status) && true) {
 			$upTab.append($search);
 		} else if (($table.is('#pingLocalUp') && !status) && true) {
