@@ -40,6 +40,7 @@ templates.switch = `<% for(i = 0; i < devices.length; i++) { %>
     <td data-type="text" data-key="User" data-value="<%-devices[i].User%>"><%-devices[i].User%></td>
     <td data-type="text" data-key="Pass" data-value="<%-devices[i].Pass%>"><%-devices[i].Pass%></td>
 	<td data-type="select" data-key="Type" data-value="<%-devices[i].Type%>" data-options="Control,Media"><%-devices[i].Type%></td>
+	<td data-type="select" data-key="OS" data-value="<%-devices[i].OS%>" data-options="EOS,NX-OS,IOS"><%-devices[i].OS%></td>
     <td>
       <button type="button" class="btn btn-danger editConfig w-50">Edit</button>
       <button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
@@ -742,10 +743,11 @@ $(document).ready(function() {
 			let data = {};
 			$row.children().each(function() {
 				let $td = $(this);
+				let value = $td.data('value');
 				switch ($td.data('type')) {
 				case 'text':
-					$td.html($td.data('value'));
-					data[$td.data('key')] = $td.data('value');
+					$td.html(value);
+					data[$td.data('key')] = value;
 					break;
 				case 'range':
 					$td.html(`${$td.data('from')} to ${$td.data('to')}`);
@@ -754,8 +756,9 @@ $(document).ready(function() {
 					$td.removeClass('input-group');
 					break;
 				case 'select':
-					$td.html($td.data('value'));
-					data[$td.data('key')] = $td.data('value');
+					if (value == "") value = $td.children()[0].value
+					$td.html(value);
+					data[$td.data('key')] = value;
 					break;
 				default:
 					break;

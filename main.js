@@ -16,10 +16,23 @@ const {version} = require('./package.json');
 const electronEjs = require('electron-ejs');
 const AutoLaunch = require('auto-launch');
 const ping = require('ping');
+const https = require('https');
+
+const httpsAgent = new https.Agent({
+	rejectUnauthorized: false,
+});
 
 const __static = __dirname+'/static';
 
 const ejs = new electronEjs({'static': __static}, {});
+
+Array.prototype.symDiff = function(x) {
+	return this.filter(y => !x.includes(y)).concat(x => !y.includes(x));
+}
+
+Array.prototype.diff = function(x) {
+	return this.filter(y => !x.includes(y));
+}
 
 /* Data Defines */
 
@@ -92,7 +105,8 @@ const data = {
 	'phy': {},
 	'mac': {},
 	'ups': {},
-	'devices':{}
+	'devices':{},
+	'controlNeighbors':{}
 };
 const cloudServer = {
 	'connected': false,
@@ -111,6 +125,86 @@ const tables = [{
 	)`,
 	PK:'PK'
 }];
+
+const SwitchRequests = {
+	'NX-OS': {
+		'neighborRequest': {
+			"jsonrpc": "2.0",
+			"method": "cli",
+			"params": {
+				"cmd": "show cdp neighbors",
+				"version": 1
+			},
+			"id": 1
+		}
+	},
+	'EOS': {
+		'neighborRequest': {
+			'jsonrpc': '2.0',
+			'method': 'runCmds',
+			'params': {
+				'format': 'json',
+				'timestamps': false,
+				'autoComplete': false,
+				'expandAliases': false,
+				'cmds': [
+					'enable',
+					'show lldp neighbors'
+				],
+				'version': 1
+			},
+			'id': ''
+		},
+		'transRequest': {
+			'jsonrpc': '2.0',
+			'method': 'runCmds',
+			'params': {
+				'format': 'json',
+				'timestamps': false,
+				'autoComplete': false,
+				'expandAliases': false,
+				'cmds': [
+					'show interfaces transceiver'
+				],
+				'version': 1
+			},
+			'id': 'EapiExplorer-1'
+		},
+		'macRequest': {
+			'jsonrpc': '2.0',
+			'method': 'runCmds',
+			'params': {
+				'format': 'text',
+				'timestamps': false,
+				'autoComplete': false,
+				'expandAliases': false,
+				'cmds': [
+					'enable',
+					'show interfaces mac'
+				],
+				'version': 1
+			},
+			'id': ''
+		},
+		'phyRequest': {
+			'jsonrpc': '2.0',
+			'method': 'runCmds',
+			'params': {
+				'format': 'json',
+				'timestamps': false,
+				'autoComplete': false,
+				'expandAliases': false,
+				'cmds': [
+					'enable',
+					'show interfaces phy detail'
+				],
+				'version': 1
+			},
+			'id': ''
+		}
+	}
+}
+
 const pingFrequency = 30;
 const lldpFrequency = 30;
 const switchStatsFrequency = 30;
@@ -271,6 +365,7 @@ const __main = path.resolve(__dirname, devEnv);
 	await startLoopAfterDelay(connectToWebServer, 5);
 	await startLoopAfterDelay(webLogPing, pingFrequency);
 	await startLoopAfterDelay(lldpLoop, lldpFrequency);
+	await startLoopAfterDelay(controlLoop, lldpFrequency);
 	await startLoopAfterDelay(checkDevices, devicesFrequency);
 	await startLoopAfterDelay(switchMac, switchStatsFrequency);
 	await startLoopAfterDelay(switchPhy, switchStatsFrequency);
@@ -432,7 +527,8 @@ function loadData(file) {
 				'User': 'Username',
 				'Pass': 'Password',
 				'IP':'0.0.0.0',
-				'Type': 'Media'
+				'Type': 'Media',
+				'OS': 'Media'
 			};
 			break;
 		default:
@@ -1039,6 +1135,43 @@ function doApi(json, Switch) {
 	});
 }
 
+function doApi2(request, Switch) {
+	const ip = Switch.IP;
+	const user = Switch.User;
+	const pass = Switch.Pass;
+	const OS = Switch.OS;
+	let endPoint = '';
+	let protocol = 'http';
+
+	switch (OS) {
+		case 'EOS':
+			endPoint = 'command-api'
+			protocol = 'http';
+		case 'NX-OS':
+			endPoint = 'ins'
+			protocol = 'https';
+		default:
+			break;
+	}
+	log(`Polling switch API endpoint ${protocol}://${ip}/${endPoint} for data`, 'D');
+	return fetch(`${protocol}://${ip}/${endPoint}`, {
+		method: 'POST',
+		headers: {
+			'content-type': 'application/json-rpc',
+			'Authorization': 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64')
+		},
+		body: JSON.stringify(SwitchRequests[OS][request]),
+		agent: httpsAgent,
+	}).then((response) => {
+		if (response.status === 200) {
+			return response.json().then((jsonRpcResponse) => { return jsonRpcResponse; });
+		}
+	}).catch((error)=>{
+		log(`Failed to connect to switch ${ip}`, 'E');
+		logObj(error, 'D');
+	});
+}
+
 
 /* Control Functions */
 
@@ -1051,6 +1184,65 @@ function localPings() {
 			log(`IP: ${host.IP}, Online: ${res.alive}`, 'A');
 			distributeData('localPing', {'status':res.alive, 'IP':host.IP, 'Name':host.Name});
 		});
+	});
+}
+
+function controlLoop() {
+	//if (config.get('devMode')) return;
+	let Switches = switches('Control');
+	log('Getting Control neighbors', 'A');
+	let promisses = [];
+	for (let i = 0; i < Switches.length; i++) {
+		let Switch = Switches[i];
+		promisses.push(doApi2('neighborRequest', Switch));
+	}
+	return Promise.all(promisses).then((values) => {
+		for (let i = 0; i < values.length; i++) {
+			if (typeof values[i] !== 'undefined') {
+				switch (Switches[i].OS) {
+					case 'NX-OS': {
+						let neighbors = values[i].result.body.TABLE_cdp_neighbor_brief_info.ROW_cdp_neighbor_brief_info;
+						data.controlNeighbors[Switches[i].Name] = [];
+						let thisSwitch = data.controlNeighbors[Switches[i].Name];
+						for (let j in neighbors) {
+							const neighbor = neighbors[j];
+							if (!neighbor.intf_id?.includes('mgmt')) {
+								thisSwitch.push({
+									'interface': neighbor.intf_id,
+									'lldp': neighbor.device_id,
+									'model': neighbor.platform_id,
+									'port': neighbor.port_id
+								});
+							}
+						}
+						break;
+					}
+					case 'EOS': {
+						let neighbors = values[i].result[1].lldpNeighbors;
+						data.neighbors[Switches[i].Name] = {};
+						let thisSwitch = data.neighbors[Switches[i].Name];
+						for (let j in neighbors) {
+							let t = neighbors[j];
+							if (!t.port.includes('Ma')) {
+								thisSwitch[t.port] = { lldp: t.neighborDevice };
+							}
+						}
+						break;
+					}
+					default:
+						break;
+				}
+			} else {
+				log(`(LLDP/CDP) Return data from control switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
+			}
+		}
+		/*for (const port in data.controlNeighbors) {
+			const neighbor = data.controlNeighbors[port];
+
+		}*/
+		distributeData('controlNeighbors', data.controlNeighbors);
+	}).catch(error => {
+		logs.error('Error collecting switch data', error);
 	});
 }
 

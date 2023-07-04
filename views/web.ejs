@@ -52,7 +52,7 @@
         </div>
         <div class="d-flex gap-2 justify-content-center w-100" role="tablist">
             <button class="btn btn-secondary active" id="nav-media-tab" data-bs-toggle="tab" data-bs-target="#nav-media" type="button" role="tab" aria-controls="nav-media" aria-selected="true">Media</button>
-            <button class="btn btn-secondary disabled" id="nav-control-tab" data-bs-toggle="tab" data-bs-target="#nav-control" type="button" role="tab" aria-controls="nav-control" aria-selected="true">Control</button>
+            <button class="btn btn-secondary" id="nav-control-tab" data-bs-toggle="tab" data-bs-target="#nav-control" type="button" role="tab" aria-controls="nav-control" aria-selected="true">Control</button>
             <button class="btn btn-secondary" id="nav-control-tab" data-bs-toggle="tab" data-bs-target="#nav-pings" type="button" role="tab" aria-controls="nav-pings" aria-selected="true">Pings</button>
             <button class="btn btn-secondary" id="toggleConfig">Edit Devices</button>
             <button class="btn btn-secondary disabled" id="netboxConfig">Netbox Config</button>
@@ -160,6 +160,8 @@
                     </div>
                 </div>
             </div>
+        </section>
+        <section class="tab-pane fade masonry" id="nav-control" data-editor="control" role="tabpanel" aria-labelledby="nav-control-tab">
             <% if (webEnabled) { %>
                 <div class="text-light" id="col-ping">
                     <h4>Argos to internet pings</h4>
@@ -208,11 +210,9 @@
                             <button class="bootBut btn btn-secondary btn-sm" data-time="7200">2 Hours</button>
                         </div>
                     </div>
-                    <pre class="infoBox" id="bootTime"></pre>
                 </div>
             <% } %>
         </section>
-        <section class="tab-pane fade" id="nav-control" data-editor="control" role="tabpanel" aria-labelledby="nav-control-tab">Control Here</section>
         <section class="tab-pane fade masonry" id="nav-pings" data-editor="pings" role="tabpanel" aria-labelledby="nav-pings-tab">
             <div class="text-light" id="col-pings-up">
                 <h4>Alive Devices</h4>
@@ -266,6 +266,7 @@
                                     <th class="">Username</th>
                                     <th class="">Password</th>
                                     <th class="">Type</th>
+                                    <th class="">OS</th>
                                     <th class=""></th>
                                 </tr>
                             </thead>
