@@ -40,7 +40,7 @@ templates.switch = `<% for(i = 0; i < devices.length; i++) { %>
     <td data-type="text" data-key="User" data-value="<%-devices[i].User%>"><%-devices[i].User%></td>
     <td data-type="text" data-key="Pass" data-value="<%-devices[i].Pass%>"><%-devices[i].Pass%></td>
 	<td data-type="select" data-key="Type" data-value="<%-devices[i].Type%>" data-options="Control,Media"><%-devices[i].Type%></td>
-	<td data-type="select" data-key="OS" data-value="<%-devices[i].OS%>" data-options="EOS,NX-OS,IOS"><%-devices[i].OS%></td>
+	<td data-type="select" data-key="OS" data-value="<%-devices[i].OS%>" data-options="EOS,NXOS,IOS"><%-devices[i].OS%></td>
     <td>
       <button type="button" class="btn btn-danger editConfig w-50">Edit</button>
       <button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
@@ -125,10 +125,16 @@ function socketDoMessage(header, payload) {
 			handleUPSData(payload.data);
 			break;
 		case 'fibre':
-			handleFibreData(payload.data);
+			handleFibreData(payload.data, 'Media');
+			break;
+		case 'fibre_control':
+			handleFibreData(payload.data, 'Control');
 			break;
 		case 'devices':
-			handleDevicesData(payload.data);
+			handleDevicesData(payload.data, 'Media');
+			break;
+		case 'devices_control':
+			handleDevicesData(payload.data, 'Control');
 			break;
 		case 'mac':
 			handleMacData(payload.data);
@@ -332,49 +338,56 @@ function renderBootChart(boots) {
 
 /* Device data handeling */
 
-function handleFibreData(data) {
-	$('table#tra tbody').empty();
+function handleFibreData(data, type) {
+	const table = `[data-type="${type}"] table[data-catagory="fibre"]`;
+	$(`${table} tbody`).empty();
 	if (Object.keys(data).length == 0) {
-		$('div#col-tra').addClass('text-muted');
-		$('table#tra').addClass('text-muted');
+		$(`[data-type="${type}"][data-type="fibre"]`).addClass('text-muted');
+		$(table).addClass('text-muted');
 	}
 	else {
-		$('div#col-tra').removeClass('text-muted');
-		$('table#tra').removeClass('text-muted');
-		$.each(data, (k, v) => {
-			let lldp = v.lldp ? v.lldp : '<em class="text-muted">n/a</em>';
+		$(`[data-type="${type}"][data-type="fibre"]`).removeClass('text-muted');
+		$(table).removeClass('text-muted');
+		$.each(data, (k, device) => {
+			const lldp = device.lldp ? device.lldp : '<em class="text-muted">n/a</em>';
 			let feeding;
-			if (typeof v.description !== 'undefined') {
-				feeding = v.description;
+			if (typeof device.description !== 'undefined') {
+				feeding = device.description;
 			} else {
 				feeding = '<em class="text-muted">n/a</em>';
 			}
-			let s = `<tr><td>${v.switch}</td><td>${v.port}</td><td>${lldp}</td><td>${feeding}</td><td>${v.rxPower} dBm</td></tr>`;
-			$('table#tra tbody').append(s);
+			const row = `<tr>
+				<td>${device.switch}</td>
+				<td>${device.port}</td>
+				<td>${lldp}</td>
+				<td>${feeding}</td>
+				<td>${device.rxPower} dBm</td>
+			</tr>`;
+			$(`${table} tbody`).append(row);
 		});
 	}
 	lastTra = Date.now();
 }
 
-function handleDevicesData(data) {
-	$('table#alive tbody').empty();
+function handleDevicesData(data, type) {
+	const table = `[data-type="${type}"] table[data-catagory="alive"]`;
+	$(`${table} tbody`).empty();
 	if (Object.keys(data).length == 0) {
-		$('div#col-alive').addClass('text-muted');
-		$('table#alive').addClass('text-muted');
+		$(`[data-type="${type}"][data-type="alive"]`).addClass('text-muted');
+		$(table).addClass('text-muted');
 	} else {
-		$('div#col-alive').removeClass('text-muted');
-		$('table#alive').removeClass('text-muted');
-		$.each(data, (k, v) => {
-			let s = '<tr><td>' + k + '</td>';
-			for (let index = 0; index < Switches.length; index++) {
-				if (v.includes(Switches[index])) {
-					s += '<td class=\'bg-danger\'>Down</td>';
+		$(`[data-type="${type}"][data-type="alive"]`).removeClass('text-muted');
+		$(table).removeClass('text-muted');
+		$.each(data, (port, lldp) => {
+			let row = '<tr><td>' + port + '</td>';
+			for (let index = 0; index < ControlSwitches.length; index++) {
+				if (lldp.includes(ControlSwitches[index])) {
+					row += '<td class=\'bg-danger\'>Down</td>';
 				} else {
-					s += '<td class=\'bg-success\'>Up</td>';
+					row += '<td class=\'bg-success\'>Up</td>';
 				}
-				
 			}
-			$('table#alive tbody').append(s);
+			$(`${table} tbody`).append(row);
 		});
 	}
 	lastAlive = Date.now();

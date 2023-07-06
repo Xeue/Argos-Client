@@ -36,77 +36,25 @@ Array.prototype.diff = function(x) {
 
 /* Data Defines */
 
-const fibreRequest = {
-	'jsonrpc': '2.0',
-	'method': 'runCmds',
-	'params': {
-		'format': 'json',
-		'timestamps': false,
-		'autoComplete': false,
-		'expandAliases': false,
-		'cmds': [
-			'show interfaces transceiver'
-		],
-		'version': 1
-	},
-	'id': 'EapiExplorer-1'
-};
-const lldpRequest = {
-	'jsonrpc': '2.0',
-	'method': 'runCmds',
-	'params': {
-		'format': 'json',
-		'timestamps': false,
-		'autoComplete': false,
-		'expandAliases': false,
-		'cmds': [
-			'enable',
-			'show lldp neighbors'
-		],
-		'version': 1
-	},
-	'id': ''
-};
-const macRequest = {
-	'jsonrpc': '2.0',
-	'method': 'runCmds',
-	'params': {
-		'format': 'text',
-		'timestamps': false,
-		'autoComplete': false,
-		'expandAliases': false,
-		'cmds': [
-			'enable',
-			'show interfaces mac'
-		],
-		'version': 1
-	},
-	'id': ''
-};
-const phyRequest = {
-	'jsonrpc': '2.0',
-	'method': 'runCmds',
-	'params': {
-		'format': 'json',
-		'timestamps': false,
-		'autoComplete': false,
-		'expandAliases': false,
-		'cmds': [
-			'enable',
-			'show interfaces phy detail'
-		],
-		'version': 1
-	},
-	'id': ''
-};
 const data = {
-	'neighbors': {},
-	'fibre':{},
-	'phy': {},
-	'mac': {},
+	'neighbors': {
+		'Control': {},
+		'Media': {}
+	},
+	'fibre':{
+		'Control': {},
+		'Media': {}
+	},
+	'mac': {
+		'Control': {},
+		'Media': {}
+	},
+	'devices':{
+		'Control':{},
+		'Media':{}
+	},
 	'ups': {},
-	'devices':{},
-	'controlNeighbors':{}
+	'phy': {}
 };
 const cloudServer = {
 	'connected': false,
@@ -127,12 +75,30 @@ const tables = [{
 }];
 
 const SwitchRequests = {
-	'NX-OS': {
+	'NXOS': {
 		'neighborRequest': {
 			"jsonrpc": "2.0",
 			"method": "cli",
 			"params": {
 				"cmd": "show cdp neighbors",
+				"version": 1
+			},
+			"id": 1
+		},
+		'transRequest': {
+			"jsonrpc": "2.0",
+			"method": "cli",
+			"params": {
+				"cmd": "show interface transceiver details",
+				"version": 1
+			},
+			"id": 1
+		},
+		'flapRequest': {
+			"jsonrpc": "2.0",
+			"method": "cli",
+			"params": {
+				"cmd": "show interface mac",
 				"version": 1
 			},
 			"id": 1
@@ -170,7 +136,7 @@ const SwitchRequests = {
 			},
 			'id': 'EapiExplorer-1'
 		},
-		'macRequest': {
+		'flapRequest': {
 			'jsonrpc': '2.0',
 			'method': 'runCmds',
 			'params': {
@@ -218,8 +184,6 @@ const localPingFrequency = 10;
 let isQuiting = false;
 let mainWindow = null;
 let webServer;
-let serverHTTP;
-let serverWS;
 let SQL;
 let configLoaded = false;
 const devEnv = app.isPackaged ? './' : './';
@@ -349,7 +313,7 @@ const __main = path.resolve(__dirname, devEnv);
 	);
 	log(`Argos can be accessed at http://localhost:${config.get('port')}`, 'C');
 
-	[serverHTTP, serverWS] = webServer.start();
+	webServer.start();
 	mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}`);
 
 	connectToWebServer(true).then(()=>{
@@ -364,12 +328,15 @@ const __main = path.resolve(__dirname, devEnv);
 	await startLoopAfterDelay(localPings, localPingFrequency);
 	await startLoopAfterDelay(connectToWebServer, 5);
 	await startLoopAfterDelay(webLogPing, pingFrequency);
-	await startLoopAfterDelay(lldpLoop, lldpFrequency);
-	await startLoopAfterDelay(controlLoop, lldpFrequency);
-	await startLoopAfterDelay(checkDevices, devicesFrequency);
-	await startLoopAfterDelay(switchMac, switchStatsFrequency);
-	await startLoopAfterDelay(switchPhy, switchStatsFrequency);
-	await startLoopAfterDelay(switchFibre, switchStatsFrequency);
+	await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Media');
+	await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Control');
+	await startLoopAfterDelay(checkDevices, devicesFrequency, 'Media', true);
+	await startLoopAfterDelay(checkDevices, devicesFrequency, 'Control', false);
+	await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Media');
+	//await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Control');
+	await startLoopAfterDelay(switchPhy, switchStatsFrequency, 'Media');
+	await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Media');
+	await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Control');
 	await startLoopAfterDelay(checkUps, upsFrequency);
 	await startLoopAfterDelay(logTemp, tempFrequency);
 })().catch(error => {
@@ -586,6 +553,7 @@ function expressRoutes(expressApp) {
 		res.header('Content-type', 'text/html');
 		res.render('web', {
 			switches:switches('Media'),
+			controlSwitches:switches('Control'),
 			systemName:config.get('systemName'),
 			webSocketEndpoint:config.get('webSocketEndpoint'),
 			secureWebSocketEndpoint:config.get('secureWebSocketEndpoint'),
@@ -620,7 +588,7 @@ function expressRoutes(expressApp) {
 
 	expressApp.get('/devices', (req, res) => {
 		log('Request for devices data', 'D');
-		res.send(JSON.stringify(data.devices));
+		res.send(JSON.stringify(data.devices.Media));
 	});
 
 	expressApp.get('/getConfig', (req, res) => {
@@ -818,104 +786,68 @@ function distributeData(type, data) {
 /* Switch poll functions */
 
 
-function lldpLoop() {
-	if (config.get('devMode')) return;
-	let Switches = switches('Media');
-	log('Getting LLDP neighbors', 'A');
-	let promisses = [];
+async function lldpLoop(switchType) {
+	const Switches = switches(switchType);
+	log(`Getting LLDP neighbors for ${switchType} switches`, 'A');
+	const promisses = [];
 	for (let i = 0; i < Switches.length; i++) {
-		let Switch = Switches[i];
-		promisses.push(doApi(lldpRequest, Switch));
+		promisses.push(doApi('neighborRequest', Switches[i]));
 	}
-	return Promise.all(promisses).then((values) => {
-		for (let i = 0; i < values.length; i++) {
-			if (typeof values[i] !== 'undefined') {
-				let neighbors = values[i].result[1].lldpNeighbors;
-				data.neighbors[Switches[i].Name] = {};
-				let thisSwitch = data.neighbors[Switches[i].Name];
-				for (let j in neighbors) {
-					let t = neighbors[j];
-					if (!t.port.includes('Ma')) {
-						thisSwitch[t.port] = { lldp: t.neighborDevice };
-					}
-				}
-			} else {
-				log(`(LLDP) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
-			}
+	const values = await Promise.all(promisses);
+	for (let i = 0; i < values.length; i++) {
+		if (values[i] === undefined) {
+			log(`(LLDP) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
+			continue;
 		}
-
-		distributeData('lldp', data.neighbors);
-	});
+		switch (Switches[i].OS) {
+			case 'NXOS': {
+				NXOS.handleLLDP(values[i].result, switchType, Switches[i].Name);
+				break;
+			}
+			case 'EOS': {
+				EOS.handleLLDP(values[i].result[1], switchType, Switches[i].Name);
+				break;
+			}
+			default:
+				break;
+		}
+	}
+	distributeData('lldp', data.neighbors[switchType]);
 }
 
-function switchMac() {
-	if (config.get('devMode')) return;
-	let Switches = switches('Media');
+async function switchFlap(switchType) {
+	const Switches = switches(switchType);
 	log('Checking for recent interface dropouts', 'A');
-	function processSwitchMac(response, devices) {
-		let keys = Object.keys(devices);
-		let split = response.result[1].output.split('\n');
-		for (let i = 8; i < split.length; i++) {
-			let t = split[i];
-			let mac = {
-				int: t.substr(0, 19).trim(),
-				config: t.substr(19, 7).trim(),
-				oper: t.substr(26, 9).trim(),
-				phy: t.substr(34, 16).trim(),
-				mac: t.substr(50, 6).trim(),
-				last: t.substr(54, t.length).trim()
-			};
-
-			if (mac.config == 'Up') {
-				if (!keys.includes(mac.int)) {
-					devices[mac.int] = {};
-				}
-				devices[mac.int].mac = {};
-				devices[mac.int].mac.operState = mac.oper;
-				devices[mac.int].mac.phyState = mac.phy;
-				devices[mac.int].mac.macFault = mac.mac;
-				devices[mac.int].mac.lastChange = mac.last;
-				devices[mac.int].description = getDescription(devices[mac.int].lldp);
-				devices[mac.int].port = mac.int;
-			}
-		}
-		return devices;
-	}
-
-	let promisses = [];
+	const promisses = [];
 	for (let i = 0; i < Switches.length; i++) {
-		promisses.push(doApi(macRequest, Switches[i]));
+		promisses.push(doApi('flapRequest', Switches[i]));
 	}
-	return Promise.all(promisses).then((values) => {
-		let filteredDevices = [];
-		for (let i = 0; i < values.length; i++) {
-			if (typeof values[i] !== 'undefined') {
-				let procDev = clearEmpties(processSwitchMac(values[i], data.neighbors[Switches[i].Name]));
-
-				for (let dev in procDev) {
-					if (typeof procDev[dev].mac !== 'undefined') {
-						if(!('lastChange' in procDev[dev].mac)) {
-							log(procDev[dev]+' seems to have an issue','W');
-						}
-						let time = procDev[dev].mac.lastChange.split(':');
-						let timeTotal = parseInt(time[0]) * 3600 + parseInt(time[1]) * 60 + parseInt(time[2]);
-						if (timeTotal < 300) {
-							procDev[dev].switch = Switches[i].Name;
-							filteredDevices.push(procDev[dev]);
-						}
-					}
-				}
-
-			} else {
-				log(`(MAC) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
-			}
+	const values = await Promise.all(promisses);
+	const filteredDevices = [];
+	for (let i = 0; i < values.length; i++) {
+		if (values[i] === undefined) {
+			log(`(FLAP) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
+			continue;
 		}
-		data.mac = filteredDevices;
-		distributeData('mac', data.mac);
-	});
+		switch (Switches[i].OS) {
+			case 'NXOS': {
+				NXOS.handleFlap(filteredDevices, values[i], switchType, Switches[i].Name)
+				break;
+			}
+			case 'EOS': {
+				EOS.handleFlap(filteredDevices, values[i], switchType, Switches[i].Name)
+				break;
+			}
+			default:
+				break;
+		}
+	}
+	data.mac[switchType] = filteredDevices;
+	const type = switchType == 'Media' ? 'flap' : 'flap_control';
+	distributeData(type, data.mac[switchType]);
 }
 
-function switchPhy() {
+function switchPhy(switchType) {
 	if (config.get('devMode')) return;
 	const Switches = switches('Media');
 	log('Looking for high numbers of PHY/FEC errors', 'A');
@@ -953,13 +885,13 @@ function switchPhy() {
 
 	let promisses = [];
 	for (let i = 0; i < Switches.length; i++) {
-		promisses.push(doApi(phyRequest, Switches[i]));
+		promisses.push(doApi('phyRequest', Switches[i]));
 	}
 	return Promise.all(promisses).then((values) => {
 		let filteredDevices = [];
 		for (let i = 0; i < values.length; i++) {
 			if (typeof values[i] !== 'undefined') {
-				let procDev = processSwitchPhy(values[i], data.neighbors[Switches[i].Name]);
+				let procDev = processSwitchPhy(values[i], data.neighbors[switchType][Switches[i].Name]);
 
 				for (let dev in procDev) {
 					if ('phy' in procDev[dev]) {
@@ -977,54 +909,36 @@ function switchPhy() {
 	});
 }
 
-function switchFibre() {
-	if (config.get('devMode')) return;
-	let Switches = switches('Media');
+async function switchFibre(switchType) {
+	const Switches = switches(switchType);
 	log('Looking for low fibre levels in trancievers', 'A');
-	function processSwitchFibre(response, devices) {
-		let keys = Object.keys(devices);
-		let ints = response.result[0].interfaces;
-		for (let i in ints) {
-			let int = ints[i];
-			if ('rxPower' in int) {
-				if (!keys.includes(i)) {
-					devices[i] = {};
-				}
-				devices[i].port = i;
-				devices[i].description = getDescription(devices[i].lldp);
-				devices[i].rxPower = int.rxPower.toFixed(1);
-				if ('txPower' in int)
-					devices[i].txPower = int.txPower.toFixed(1);
-			}
-		}
-		return devices;
-	}
-
-	let promisses = [];
+	const promisses = [];
 	for (let i = 0; i < Switches.length; i++) {
-		promisses.push(doApi(fibreRequest, Switches[i]));
+		promisses.push(doApi('transRequest', Switches[i]));
 	}
-	return Promise.all(promisses).then((values) => {
-		let filteredDevices = [];
-		for (let i = 0; i < values.length; i++) {
-			if (typeof values[i] !== 'undefined') {
-				let procDev = processSwitchFibre(values[i], data.neighbors[Switches[i].Name]);
-
-				for (let dev in procDev) {
-					if ('txPower' in procDev[dev] && 'rxPower' in procDev[dev]) {
-						if (procDev[dev].rxPower < -9 && procDev[dev].rxPower > -30 && procDev[dev].txPower > -30) {
-							procDev[dev].switch = Switches[i].Name;
-							filteredDevices.push(procDev[dev]);
-						}
-					}
-				}
-			} else {
-				log(`(TRANS) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
-			}
+	const values = await Promise.all(promisses);
+	const filteredDevices = [];
+	for (let i = 0; i < values.length; i++) {
+		if (values[i] === undefined) {
+			log(`(TRANS) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
+			continue;
 		}
-		data.fibre = filteredDevices;
-		distributeData('fibre', data.fibre);
-	});
+		switch (Switches[i].OS) {
+			case 'NXOS': {
+				NXOS.handleFibre(filteredDevices, values[i], switchType, Switches[i].Name)
+				break;
+			}
+			case 'EOS': {
+				EOS.handleFibre(filteredDevices, values[i], switchType, Switches[i].Name)
+				break;
+			}
+			default:
+				break;
+		}
+	}
+	data.fibre[switchType] = filteredDevices;
+	const type = switchType == 'Media' ? 'fibre' : 'fibre_control';
+	distributeData(type, data.fibre[switchType]);
 }
 
 function checkUps() {
@@ -1079,63 +993,46 @@ function checkUps() {
 	});
 }
 
-function checkDevices() {
-	if (config.get('devMode')) return;
+function checkDevices(switchType, fromList) {
 	log('Checking device lists for missing devices', 'A');
-	let Devices = devices();
-	let missingDevices = {};
+	const Devices = devices();
+	const missingDevices = {};
 	let expectedDevices = [];
-	for (let i in Devices) {
-		expectedDevices = [...new Set([...expectedDevices, ...parseTempalteString(Devices[i].name)])];
-	}
-
-	for (const Switch in data.neighbors) {
-		if (Object.hasOwnProperty.call(data.neighbors, Switch)) {
-			let lldpNeighborsObj = data.neighbors[Switch];
-			let lldpNeighbors = [];
-			for (let port in lldpNeighborsObj) {
-				let Neighbor = lldpNeighborsObj[port];
-				if (Neighbor.lldp) {
-					lldpNeighbors.push(Neighbor.lldp);
-				}
-			}
-			const missingSwitchDevices = expectedDevices.filter(x => !lldpNeighbors.includes(x));
-			for (let index = 0; index < missingSwitchDevices.length; index++) {
-				const device = missingSwitchDevices[index];
-				if (typeof missingDevices[device] === 'undefined') {
-					missingDevices[device] = [];
-				}
-				missingDevices[device].push(Switch);
+	if (fromList) {
+		for (let i in Devices) {
+			expectedDevices = [...new Set([...expectedDevices, ...parseTempalteString(Devices[i].name)])];
+		}
+	} else {
+		for (const switchName in data.neighbors[switchType]) {
+			const Switch = data.neighbors[switchType][switchName];				
+			for (const [port, properties] of Object.entries(Switch)) {
+				expectedDevices.push(properties.lldp);
 			}
 		}
+		expectedDevices = [...new Set(expectedDevices)].filter(Boolean);
 	}
-	data.devices = missingDevices;
-	distributeData('devices', data.devices);
-}
 
-function doApi(json, Switch) {
-	const ip = Switch.IP;
-	const user = Switch.User;
-	const pass = Switch.Pass;
-	log(`Polling switch API endpoint http://${ip}/command-api for data`, 'D');
-	return fetch(`http://${ip}/command-api`, {
-		method: 'POST',
-		headers: {
-			'content-type': 'expressApplication/json',
-			'Authorization': 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64')
-		},
-		body: JSON.stringify(json),
-	}).then((response) => {
-		if (response.status === 200) {
-			return response.json().then((jsonRpcResponse) => { return jsonRpcResponse; });
+	for (const Switch in data.neighbors[switchType]) {
+		if (!Object.hasOwnProperty.call(data.neighbors[switchType], Switch)) continue;
+		const lldpNeighborsObj = data.neighbors[switchType][Switch];
+		const lldpNeighbors = [];
+		for (let port in lldpNeighborsObj) {
+			const Neighbor = lldpNeighborsObj[port];
+			if (Neighbor.lldp) lldpNeighbors.push(Neighbor.lldp);
 		}
-	}).catch((error)=>{
-		log(`Failed to connect to switch ${ip}`, 'E');
-		logObj(error, 'D');
-	});
+		const missingSwitchDevices = expectedDevices.filter(x => !lldpNeighbors.includes(x));
+		for (let index = 0; index < missingSwitchDevices.length; index++) {
+			const device = missingSwitchDevices[index];
+			if (missingDevices[device] === undefined) missingDevices[device] = [];
+			missingDevices[device].push(Switch);
+		}
+	}
+	data.devices[switchType] = missingDevices;
+	const type = switchType == 'Media' ? 'devices' : 'devices_control';
+	distributeData(type, data.devices[switchType]);
 }
 
-function doApi2(request, Switch) {
+function doApi(request, Switch) {
 	const ip = Switch.IP;
 	const user = Switch.User;
 	const pass = Switch.Pass;
@@ -1143,26 +1040,31 @@ function doApi2(request, Switch) {
 	let endPoint = '';
 	let protocol = 'http';
 
-	switch (OS) {
-		case 'EOS':
-			endPoint = 'command-api'
-			protocol = 'http';
-		case 'NX-OS':
-			endPoint = 'ins'
-			protocol = 'https';
-		default:
-			break;
-	}
-	log(`Polling switch API endpoint ${protocol}://${ip}/${endPoint} for data`, 'D');
-	return fetch(`${protocol}://${ip}/${endPoint}`, {
+	const options = {
 		method: 'POST',
 		headers: {
 			'content-type': 'application/json-rpc',
 			'Authorization': 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64')
 		},
 		body: JSON.stringify(SwitchRequests[OS][request]),
-		agent: httpsAgent,
-	}).then((response) => {
+	}
+
+	switch (OS) {
+		case 'EOS':
+			endPoint = 'command-api'
+			protocol = 'http';
+			break;
+		case 'NXOS':
+			endPoint = 'ins'
+			protocol = 'https';
+			options.agent = httpsAgent;
+			break;
+		default:
+			break;
+	}
+	log(`Polling switch API endpoint ${protocol}://${ip}/${endPoint} for data`, 'D');
+
+	return fetch(`${protocol}://${ip}/${endPoint}`, options).then((response) => {
 		if (response.status === 200) {
 			return response.json().then((jsonRpcResponse) => { return jsonRpcResponse; });
 		}
@@ -1176,6 +1078,7 @@ function doApi2(request, Switch) {
 /* Control Functions */
 
 function localPings() {
+	if (config.get('devMode')) return;
 	const hosts = pings();
 	hosts.forEach(function (host) {
 		ping.promise.probe(host.IP, {
@@ -1184,65 +1087,6 @@ function localPings() {
 			log(`IP: ${host.IP}, Online: ${res.alive}`, 'A');
 			distributeData('localPing', {'status':res.alive, 'IP':host.IP, 'Name':host.Name});
 		});
-	});
-}
-
-function controlLoop() {
-	//if (config.get('devMode')) return;
-	let Switches = switches('Control');
-	log('Getting Control neighbors', 'A');
-	let promisses = [];
-	for (let i = 0; i < Switches.length; i++) {
-		let Switch = Switches[i];
-		promisses.push(doApi2('neighborRequest', Switch));
-	}
-	return Promise.all(promisses).then((values) => {
-		for (let i = 0; i < values.length; i++) {
-			if (typeof values[i] !== 'undefined') {
-				switch (Switches[i].OS) {
-					case 'NX-OS': {
-						let neighbors = values[i].result.body.TABLE_cdp_neighbor_brief_info.ROW_cdp_neighbor_brief_info;
-						data.controlNeighbors[Switches[i].Name] = [];
-						let thisSwitch = data.controlNeighbors[Switches[i].Name];
-						for (let j in neighbors) {
-							const neighbor = neighbors[j];
-							if (!neighbor.intf_id?.includes('mgmt')) {
-								thisSwitch.push({
-									'interface': neighbor.intf_id,
-									'lldp': neighbor.device_id,
-									'model': neighbor.platform_id,
-									'port': neighbor.port_id
-								});
-							}
-						}
-						break;
-					}
-					case 'EOS': {
-						let neighbors = values[i].result[1].lldpNeighbors;
-						data.neighbors[Switches[i].Name] = {};
-						let thisSwitch = data.neighbors[Switches[i].Name];
-						for (let j in neighbors) {
-							let t = neighbors[j];
-							if (!t.port.includes('Ma')) {
-								thisSwitch[t.port] = { lldp: t.neighborDevice };
-							}
-						}
-						break;
-					}
-					default:
-						break;
-				}
-			} else {
-				log(`(LLDP/CDP) Return data from control switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
-			}
-		}
-		/*for (const port in data.controlNeighbors) {
-			const neighbor = data.controlNeighbors[port];
-
-		}*/
-		distributeData('controlNeighbors', data.controlNeighbors);
-	}).catch(error => {
-		logs.error('Error collecting switch data', error);
 	});
 }
 
@@ -1587,13 +1431,138 @@ function clearEmpties(o) {
 	return o;
 }
 
-async function startLoopAfterDelay(callback, seconds) {
-	setInterval(callback, seconds * 1000);
-	callback();
+async function startLoopAfterDelay(callback, seconds, ...arguments) {
+	setInterval(callback, seconds * 1000, ...arguments);
+	callback(...arguments);
 	log('Starting '+callback.name, 'A');
 	await sleep(1);
 }
 
 async function sleep(seconds) {
 	await new Promise (resolve => setTimeout(resolve, 1000*seconds));
+}
+
+
+const EOS = {
+	handleLLDP: (result, switchType, switchName) => {
+		const neighbors = result.lldpNeighbors;
+		data.neighbors[switchType][switchName] = {};
+		const thisSwitch = data.neighbors[switchType][switchName];
+		for (let j in neighbors) {
+			const neighbor = neighbors[j];
+			if (neighbor.port.includes('Ma')) continue
+			thisSwitch[neighbor.port] = { lldp: neighbor.neighborDevice };
+		}
+	},
+	handleFibre: (filteredDevices, result, switchType, switchName) => {
+		const devices = data.neighbors[switchType][switchName];
+		const keys = Object.keys(devices);
+		const interfaces = result.result[0].interfaces;
+		for (let interfaceName in interfaces) {
+			const interface = interfaces[i];
+			if ('rxPower' in interface === false) continue
+			if (!keys.includes(interfaceName)) devices[interfaceName] = {};
+			devices[interfaceName].port = interfaceName;
+			devices[interfaceName].description = getDescription(devices[interfaceName].lldp);
+			devices[interfaceName].rxPower = interface.rxPower.toFixed(1);
+			if ('txPower' in interface) devices[interfaceName].txPower = interface.txPower.toFixed(1);
+		}
+		for (let deviceName in devices) {
+			const device = devices[deviceName];
+			if ('txPower' in device === false) continue;
+			if ('rxPower' in device === false) continue;
+			if (device.rxPower < -9 && device.rxPower > -30 && device.txPower > -30) {
+				device.switch = switchName;
+				filteredDevices.push(device);
+			}
+		}
+	},
+	handleFlap: (filteredDevices, result, switchType, switchName) => {
+
+	}
+}
+
+const NXOS = {
+	handleLLDP: (result, switchType, switchName) => {
+		const neighbors = result.body.TABLE_cdp_neighbor_brief_info.ROW_cdp_neighbor_brief_info;
+		const switchTypeObject = data.neighbors[switchType];
+		switchTypeObject[switchName] = {};
+		const thisSwitch = data.neighbors[switchType][switchName];
+		for (let j in neighbors) {
+			const neighbor = neighbors[j];
+			if (neighbor.intf_id?.includes('mgmt')) continue
+			thisSwitch[neighbor.intf_id] = {
+				'interface': neighbor.intf_id,
+				'lldp': neighbor.device_id,
+				'model': neighbor.platform_id,
+				'port': neighbor.port_id
+			};
+		}
+	},
+	handleFibre: (filteredDevices, result, switchType, switchName) => {
+		const devices = data.neighbors[switchType][switchName];
+		const keys = Object.keys(devices);
+		const interfaces = result.result.body.TABLE_interface.ROW_interface;
+		for (const interfaceNum in interfaces) {
+			const interface = interfaces[interfaceNum];
+			const interfaceName = interface.interface;
+			if (interface.TABLE_lane === undefined) continue;
+			const lanes = Array.isArray(interface.TABLE_lane.ROW_lane) ? interface.TABLE_lane.ROW_lane : [interface.TABLE_lane.ROW_lane];
+			for (let laneNumber = 0; laneNumber < lanes.length; laneNumber++) {
+				const lane = lanes[laneNumber];
+				const interfaceLaneName = lanes.length > 1 ? `${interfaceName}/${laneNumber+1}` : interfaceName;
+				if ('rx_pwr' in lane === false) continue
+				if (!keys.includes(interfaceLaneName)) devices[interfaceLaneName] = {};
+				devices[interfaceLaneName].port = interfaceLaneName;
+				devices[interfaceLaneName].description = getDescription(devices[interfaceLaneName].lldp);
+				devices[interfaceLaneName].rxPower = Number(lane.rx_pwr).toFixed(1);
+				if ('tx_pwr' in lane) devices[interfaceLaneName].txPower = Number(interface.tx_pwr).toFixed(1);
+			}
+		}
+		for (let deviceNumber in devices) {
+			const device = devices[deviceNumber];
+			if ('txPower' in device === false) continue;
+			if ('rxPower' in device === false) continue;
+			if (device.rxPower > -11) continue;
+			device.switch = switchName;
+			filteredDevices.push(device);
+		}
+	},
+	handleFlap: (filteredDevices, result, switchType, switchName) => {
+		let devices = data.neighbors[switchType][switchName];
+		const keys = Object.keys(devices);
+		const split = result.output.split('\n');
+		for (let i = 8; i < split.length; i++) {
+			const t = split[i];
+			const mac = {
+				int: t.substr(0, 19).trim(),
+				config: t.substr(19, 7).trim(),
+				oper: t.substr(26, 9).trim(),
+				phy: t.substr(34, 16).trim(),
+				mac: t.substr(50, 6).trim(),
+				last: t.substr(54, t.length).trim()
+			};
+
+			if (mac.config !== 'Up') continue;
+			if (keys.includes(mac.int)) devices[mac.int] = {};
+			devices[mac.int].mac = {};
+			devices[mac.int].mac.operState = mac.oper;
+			devices[mac.int].mac.phyState = mac.phy;
+			devices[mac.int].mac.macFault = mac.mac;
+			devices[mac.int].mac.lastChange = mac.last;
+			devices[mac.int].description = getDescription(devices[mac.int].lldp);
+			devices[mac.int].port = mac.int;
+		}
+		devices = clearEmpties(devices);
+		for (let deviceNumber in devices) {
+			const device = devices[deviceNumber]
+			if (device.mac === undefined) continue;
+			if(!('lastChange' in device.mac)) log(device+' seems to have an issue','W');
+			const time = device.mac.lastChange.split(':');
+			const timeTotal = parseInt(time[0]) * 3600 + parseInt(time[1]) * 60 + parseInt(time[2]);
+			if (timeTotal > 300) continue;
+			device.switch = switchName;
+			filteredDevices.push(device);
+		}
+	}
 }

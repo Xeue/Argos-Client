@@ -19,6 +19,11 @@
                 "<%- switches[prop].Name%>",
             <% }); %>
         ]
+        let ControlSwitches = [
+            <% Object.keys(controlSwitches).forEach(prop => { %>
+                "<%- controlSwitches[prop].Name%>",
+            <% }); %>
+        ]
         const webEnabled = <%=webEnabled%>
         const webSocketEndpoint = '<%=webSocketEndpoint%>'
         const secureWebsockets = <%=secureWebSocketEndpoint%>
@@ -60,10 +65,10 @@
     </nav>
     <main class="tab-content container-fluid bg-dark py-3 overflow-auto">
         <section class="tab-pane fade show active mainCont masonry" id="nav-media" data-editor="media" role="tabpanel" aria-labelledby="nav-media-tab">
-            <div class="text-light text-muted" id="col-alive">
+            <div class="text-light text-muted brick" data-type="Media" data-catagory="alive">
                 <h4>Missing devices</h4>
                 <span class="text-muted">Last updated <span id="lastAlive"></span></span>
-                <table id="alive" class="table table-dark text-muted">
+                <table data-catagory="alive" class="table table-dark text-muted">
                     <thead>
                         <th scope="col">Name</th>
                         <% Object.keys(switches).forEach(function(prop) { %>
@@ -121,10 +126,10 @@
                     </tbody>
                 </table>
             </div>
-            <div class="text-light text-muted" id="col-tra">
+            <div class="text-light text-muted brick" data-type="Media" data-catagory="fibre">
                 <h4>Low SFP/QSFP fibre RX levels</h4>
                 <span class="text-muted">Last updated <span id="lastTra"></span></span>
-                <table id="tra" class="table table-dark text-muted">
+                <table data-catagory="fibre" class="table table-dark text-muted">
                     <thead>
                         <th scope="col">Switch</th>
                         <th scope="col">Port</th>
@@ -162,6 +167,35 @@
             </div>
         </section>
         <section class="tab-pane fade masonry" id="nav-control" data-editor="control" role="tabpanel" aria-labelledby="nav-control-tab">
+            <div class="text-light text-muted brick" data-type="Control" data-catagory="alive">
+                <h4>Missing devices</h4>
+                <span class="text-muted">Last updated <span id="lastAlive"></span></span>
+                <table data-catagory="alive" class="table table-dark text-muted">
+                    <thead>
+                        <th scope="col">Name</th>
+                        <% Object.keys(controlSwitches).forEach(function(prop) { %>
+                            <th scope="col"><%- controlSwitches[prop].Name%></th>
+                        <% }); %>
+                    </thead>
+                    <tbody data-template="devices">
+                    </tbody>
+                </table>
+            </div>
+            <div class="text-light text-muted brick" data-type="Control" data-catagory="fibre">
+                <h4>Low SFP/QSFP fibre RX levels</h4>
+                <span class="text-muted">Last updated <span id="lastTra"></span></span>
+                <table data-catagory="fibre" class="table table-dark text-muted">
+                    <thead>
+                        <th scope="col">Switch</th>
+                        <th scope="col">Port</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">RX power</th>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
             <% if (webEnabled) { %>
                 <div class="text-light" id="col-ping">
                     <h4>Argos to internet pings</h4>
