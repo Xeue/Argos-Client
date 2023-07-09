@@ -2774,7 +2774,8 @@ fieldset:disabled .btn {
 .show>.btn-secondary.dropdown-toggle {
  color:#fff;
  background-color:#565e64;
- border-color:#51585e
+ border-color:rgb(81, 88, 94);
+ outline: rgb(101, 108, 111) 3px solid;
 }
 .btn-check:active+.btn-secondary:focus,
 .btn-check:checked+.btn-secondary:focus,

@@ -98,6 +98,14 @@ nav.drag {
   display: block;
 }
 
+.masonry-2 {
+  column-count: 2;
+}
+
+.masonry-1 {
+  column-count: 1;
+}
+
 .masonry > * {
   break-inside: avoid;
   margin-bottom: 1rem;

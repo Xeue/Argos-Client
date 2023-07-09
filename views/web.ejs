@@ -7,9 +7,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <!-- Bootstrap CSS -->
-    <link href="lib/bootstrap.min.css" rel="stylesheet">
-    <link href="lib/jsoneditor.css" rel="stylesheet">
-    <link href="lib/datetimepicker.css" rel="stylesheet">
+    <link href="lib/bootstrap.min.css" rel="stylesheet" type="text/css">
+    <link href="lib/jsoneditor.css" rel="stylesheet" type="text/css">
+    <link href="lib/datetimepicker.css" rel="stylesheet" type="text/css">
+    <link href="lib/multiselect.css" rel="stylesheet" type="text/css"/>
     <link href="css/web.css" rel="stylesheet">
     <script type="text/javascript">
         const currentSystem = "<%=systemName%>"
@@ -24,9 +25,10 @@
                 "<%- controlSwitches[prop].Name%>",
             <% }); %>
         ]
-        const webEnabled = <%=webEnabled%>
-        const webSocketEndpoint = '<%=webSocketEndpoint%>'
-        const secureWebsockets = <%=secureWebSocketEndpoint%>
+        let syslogSourceList = <%- JSON.stringify(pings) %>;
+        const webEnabled = <%=webEnabled%>;
+        const webSocketEndpoint = '<%=webSocketEndpoint%>';
+        const secureWebsockets = <%=secureWebSocketEndpoint%>;
     </script>
     <script type="text/javascript" src="lib/jquery-3.6.0.min.js"></script>
     <script type="text/javascript" src="lib/bootstrap.min.js"></script>
@@ -38,6 +40,7 @@
     <script type="text/javascript" src="lib/chart-adapter-moment.js"></script>
     <script type="text/javascript" src="lib/jsoneditor.js"></script>
     <script type="text/javascript" src="lib/datetimepicker.js"></script>
+    <script type="text/javascript" src="lib/multiselect.js"></script>
     <script type="text/javascript" src="js/web.js"></script>
     <title>Argos</title>
     <link id="favicon_48" rel="icon" href="img/icon/icon.svg" sizes="256x256">
@@ -58,7 +61,8 @@
         <div class="d-flex gap-2 justify-content-center w-100" role="tablist">
             <button class="btn btn-secondary active" id="nav-media-tab" data-bs-toggle="tab" data-bs-target="#nav-media" type="button" role="tab" aria-controls="nav-media" aria-selected="true">Media</button>
             <button class="btn btn-secondary" id="nav-control-tab" data-bs-toggle="tab" data-bs-target="#nav-control" type="button" role="tab" aria-controls="nav-control" aria-selected="true">Control</button>
-            <button class="btn btn-secondary" id="nav-control-tab" data-bs-toggle="tab" data-bs-target="#nav-pings" type="button" role="tab" aria-controls="nav-pings" aria-selected="true">Pings</button>
+            <button class="btn btn-secondary" id="nav-pings-tab" data-bs-toggle="tab" data-bs-target="#nav-pings" type="button" role="tab" aria-controls="nav-pings" aria-selected="true">Pings</button>
+            <button class="btn btn-secondary" id="nav-syslog-tab" data-bs-toggle="tab" data-bs-target="#nav-syslog" type="button" role="tab" aria-controls="nav-syslog" aria-selected="true">Syslog</button>
             <button class="btn btn-secondary" id="toggleConfig">Edit Devices</button>
             <button class="btn btn-secondary disabled" id="netboxConfig">Netbox Config</button>
         </div>
@@ -247,7 +251,7 @@
                 </div>
             <% } %>
         </section>
-        <section class="tab-pane fade masonry" id="nav-pings" data-editor="pings" role="tabpanel" aria-labelledby="nav-pings-tab">
+        <section class="tab-pane fade masonry masonry-2" id="nav-pings" data-editor="pings" role="tabpanel" aria-labelledby="nav-pings-tab">
             <div class="text-light" id="col-pings-up">
                 <h4>Alive Devices</h4>
                 <span class="text-muted">Last updated <span id="lastLocalPingUp">never</span></span>
@@ -269,6 +273,56 @@
                         <th scope="col" class="bg-danger">IP</th>
                     </thead>
                     <tbody>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        <section class="tab-pane fase masonry masonry-1" id="nav-syslog" data-editor="syslog" role="tabpanel" aria-labelledby="nav-syslog-tab">
+            <div class="text-light brick" data-type="Control" data-catagory="syslog">
+                <div class="d-flex justify-content-between flex-wrap">
+                    <h4>Syslogs</h4>
+                    <div class="buttonBox d-flex gap-2 flex-wrap">
+                        <div class="d-flex align-self-center">
+                            <label for="syslogSelect" class="pe-2 pt-1">Devices</label>
+                            <select id="syslogSelect" multiple>
+                                <option value="all" selected="selected">All</option>
+                                <% Object.keys(pings).forEach(IP => { %>
+                                    <option value="<%- IP %>"><%- pings[IP] %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                        <div class="d-flex align-self-center">
+                            <span class="pe-2 pt-1">During the last</span>
+                            <select id="syslogDurationPreset" class="btn bg-secondary text-light d-inline active">
+                                <option value="live" selected>Live updates</option>
+                                <option value="7200">2 Hours</button>
+                                <option value="21600">6 Hours</button>
+                                <option value="43200">12 Hours</button>
+                                <option value="86400">Day</button>
+                                <option value="604800">Week</button>
+                                <option value="2419200">Month</button>
+                            </select>
+                        </div>
+                        <div class="d-flex align-self-center">
+                            <span class="pe-2">Or select from</span>
+                            <button id="syslogFromPick" class="btn btn-secondary btn-sm"></button>
+                            <input type="hidden" id="syslogFrom" value="">
+                            <span class="px-2">until</span>
+                            <button id="syslogToPick" class="btn btn-secondary btn-sm"></button>
+                            <input type="hidden" id="syslogTo" value="">
+                        </div>
+                    </div>
+                </div>
+                <span class="text-muted">Last updated <span id="lastSyslog"></span></span>
+                <table data-catagory="syslog" class="table table-dark table-sm" data-mode="live">
+                    <thead>
+                        <tr>
+                            <th>Message</th>
+                            <th>From</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody data-template="syslog">
                     </tbody>
                 </table>
             </div>

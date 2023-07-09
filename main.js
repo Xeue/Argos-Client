@@ -11,6 +11,7 @@ const {log, logObj, logs, logEvent} = require('xeue-logs');
 const {config} = require('xeue-config');
 const {SQLSession} = require('xeue-sql');
 const {Server} = require('xeue-webserver');
+const {SysLogServer} = require('./syslog.js');
 const {app, BrowserWindow, ipcMain, Tray, Menu} = require('electron');
 const {version} = require('./package.json');
 const electronEjs = require('electron-ejs');
@@ -67,6 +68,17 @@ const tables = [{
 		\`PK\` int(11) NOT NULL,
 		\`frame\` text NOT NULL,
 		\`temperature\` float NOT NULL,
+		\`system\` text NOT NULL,
+		\`time\` timestamp NOT NULL DEFAULT current_timestamp(),
+		PRIMARY KEY (\`PK\`)
+	)`,
+	PK:'PK'
+},{
+	name: 'syslog',
+	definition: `CREATE TABLE \`syslog\` (
+		\`PK\` int(11) NOT NULL,
+		\`message\` text NOT NULL,
+		\`ip\` varchar(15) NOT NULL,
 		\`system\` text NOT NULL,
 		\`time\` timestamp NOT NULL DEFAULT current_timestamp(),
 		PRIMARY KEY (\`PK\`)
@@ -202,6 +214,7 @@ const __main = path.resolve(__dirname, devEnv);
 		logs.printHeader('Argos Monitoring');
 		config.useLogger(logs);
 		config.require('port', [], 'What port shall the server use');
+		config.require('syslogPort', [], 'What port shall the server listen to syslog messages on');
 		config.require('systemName', [], 'What is the name of the system');
 		config.require('warningTemperature', [], 'What temperature shall alerts be sent at');
 		config.require('webEnabled', {true: 'Yes', false: 'No'}, 'Should this system report back to an argos server');
@@ -233,6 +246,7 @@ const __main = path.resolve(__dirname, devEnv);
 		}
 
 		config.default('port', 8080);
+		config.default('syslogPort', 514);
 		config.default('systemName', 'Unknown');
 		config.default('warningTemperature', 35);
 		config.default('webEnabled', false);
@@ -311,9 +325,16 @@ const __main = path.resolve(__dirname, devEnv);
 		config,
 		doMessage
 	);
+
+	syslogServer = new SysLogServer(
+		config.get('syslogPort'),
+		logs,
+		doSysLogMessage
+	);
 	log(`Argos can be accessed at http://localhost:${config.get('port')}`, 'C');
 
 	webServer.start();
+	syslogServer.start();
 	mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}`);
 
 	connectToWebServer(true).then(()=>{
@@ -329,13 +350,12 @@ const __main = path.resolve(__dirname, devEnv);
 	await startLoopAfterDelay(connectToWebServer, 5);
 	await startLoopAfterDelay(webLogPing, pingFrequency);
 	await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Media');
-	await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Control');
 	await startLoopAfterDelay(checkDevices, devicesFrequency, 'Media', true);
-	await startLoopAfterDelay(checkDevices, devicesFrequency, 'Control', false);
 	await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Media');
-	//await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Control');
 	await startLoopAfterDelay(switchPhy, switchStatsFrequency, 'Media');
 	await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Media');
+	await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Control');
+	await startLoopAfterDelay(checkDevices, devicesFrequency, 'Control', false);
 	await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Control');
 	await startLoopAfterDelay(checkUps, upsFrequency);
 	await startLoopAfterDelay(logTemp, tempFrequency);
@@ -537,6 +557,14 @@ function devices() {
 function pings() {
 	return loadData('Pings');
 }
+function syslogSourceList() {
+	const pingList = pings();
+	const sourceList = {};
+	pingList.forEach(pair => {
+		sourceList[pair.IP] = pair.Name;
+	})
+	return sourceList;
+}
 
 
 /* Express setup & Websocket Server */
@@ -558,7 +586,8 @@ function expressRoutes(expressApp) {
 			webSocketEndpoint:config.get('webSocketEndpoint'),
 			secureWebSocketEndpoint:config.get('secureWebSocketEndpoint'),
 			webEnabled:config.get('webEnabled'),
-			version: version
+			version: version,
+			pings:syslogSourceList()
 		});
 	});
 
@@ -660,13 +689,45 @@ async function doMessage(msgObj, socket) {
 		coreDoRegister(socket, msgObj);
 		break;
 	case 'get':
-		getTemperature(header, payload).then(data => {
-			webServer.sendTo(socket, data);
-		});
+		switch (payload.data) {
+			case 'temperature':
+				getTemperature(header, payload).then(data => {
+					webServer.sendTo(socket, data);
+				});
+				break;
+			case 'syslog':
+				getSyslog(header, payload).then(data => {
+					webServer.sendTo(socket, data);
+				})
+			default:
+				break;
+		}
 		break;
 	default:
 		logObj('Unknown message', msgObj, 'W');
 	}
+}
+
+async function doSysLogMessage(msg, info) {
+	const message = msg.toString().replace(/\'/g, '"');
+	if (config.get('localDataBase')) SQL.insert({
+		'message': message,
+		'ip': info.address,
+		'system': config.get('systemName')
+	}, 'syslog');
+	webServer.sendToAll({
+		'command': 'data',
+		'data': 'syslog',
+		'system': config.get('systemName'),
+		'replace': false,
+		'logs': [{
+			'message': message,
+			'ip': info.address,
+			'system': config.get('systemName'),
+			'time': new Date()
+		}]
+	})
+
 }
 
 async function getTemperature(header, payload) {
@@ -737,6 +798,46 @@ async function getTemperature(header, payload) {
 	});
 
 	return dataObj;
+}
+
+async function getSyslog(header, payload) {
+	log(`Getting syslogs for ${header.system}, ips: ${payload.ips.join(',')}`, 'D');
+	const from = payload.from;
+	const to = payload.to;
+	let whereIP = '';
+	if (payload.ips.length > 0 && !payload.ips.includes('all')) {
+		const ips = payload.ips.map(ip => `'${ip}'`);
+		whereIP = `AND \`ip\` IN (${ips.join(',')})`
+	}
+	const dateQuery = `SELECT * FROM \`syslog\` WHERE time BETWEEN FROM_UNIXTIME(${from}) AND FROM_UNIXTIME(${to}) AND \`system\` = '${header.system}' ${whereIP}; `;
+
+	if (!config.get('localDataBase')) return {
+		'command':'data',
+		'data':'syslog',
+		'system':header.system,
+		'replace':true,
+		'logs':[]
+	};
+
+	const rows = await SQL.query(dateQuery);
+
+	if (rows.length === 0) {
+		return {
+			'command':'data',
+			'data':'syslog',
+			'system':header.system,
+			'replace':true,
+			'logs':[]
+		};
+	}
+
+	return dataObj = {
+		'command': 'data',
+		'data': 'syslog',
+		'system': header.system,
+		'replace': true,
+		'logs': rows
+	};
 }
 
 function coreDoRegister(socket, msgObj) {
@@ -1023,6 +1124,7 @@ function checkDevices(switchType, fromList) {
 		const missingSwitchDevices = expectedDevices.filter(x => !lldpNeighbors.includes(x));
 		for (let index = 0; index < missingSwitchDevices.length; index++) {
 			const device = missingSwitchDevices[index];
+			if (device == undefined || device == "") continue;
 			if (missingDevices[device] === undefined) missingDevices[device] = [];
 			missingDevices[device].push(Switch);
 		}
@@ -1450,7 +1552,8 @@ const EOS = {
 		const thisSwitch = data.neighbors[switchType][switchName];
 		for (let j in neighbors) {
 			const neighbor = neighbors[j];
-			if (neighbor.port.includes('Ma')) continue
+			if (!Object.hasOwnProperty.call(neighbor, 'port')) continue;
+			if (neighbor.port.includes('Ma')) continue;
 			thisSwitch[neighbor.port] = { lldp: neighbor.neighborDevice };
 		}
 	},
@@ -1459,7 +1562,7 @@ const EOS = {
 		const keys = Object.keys(devices);
 		const interfaces = result.result[0].interfaces;
 		for (let interfaceName in interfaces) {
-			const interface = interfaces[i];
+			const interface = interfaces[interfaceName];
 			if ('rxPower' in interface === false) continue
 			if (!keys.includes(interfaceName)) devices[interfaceName] = {};
 			devices[interfaceName].port = interfaceName;
@@ -1478,7 +1581,41 @@ const EOS = {
 		}
 	},
 	handleFlap: (filteredDevices, result, switchType, switchName) => {
+		let devices = data.neighbors[switchType][switchName];
+		const keys = Object.keys(devices);
+		const split = result.result[1].output.split('\n');
+		for (let i = 8; i < split.length; i++) {
+			const t = split[i];
+			const mac = {
+				int: t.substr(0, 19).trim(),
+				config: t.substr(19, 7).trim(),
+				oper: t.substr(26, 9).trim(),
+				phy: t.substr(34, 16).trim(),
+				mac: t.substr(50, 6).trim(),
+				last: t.substr(54, t.length).trim()
+			};
 
+			if (mac.config !== 'Up') continue;
+			if (!keys.includes(mac.int)) devices[mac.int] = {};
+			devices[mac.int].mac = {};
+			devices[mac.int].mac.operState = mac.oper;
+			devices[mac.int].mac.phyState = mac.phy;
+			devices[mac.int].mac.macFault = mac.mac;
+			devices[mac.int].mac.lastChange = mac.last;
+			devices[mac.int].description = getDescription(devices[mac.int].lldp);
+			devices[mac.int].port = mac.int;
+		}
+		devices = clearEmpties(devices);
+		for (let deviceNumber in devices) {
+			const device = devices[deviceNumber]
+			if (device.mac === undefined) continue;
+			if(!('lastChange' in device.mac)) log(device+' seems to have an issue','W');
+			const time = device.mac.lastChange.split(':');
+			const timeTotal = parseInt(time[0]) * 3600 + parseInt(time[1]) * 60 + parseInt(time[2]);
+			if (timeTotal > 300) continue;
+			device.switch = switchName;
+			filteredDevices.push(device);
+		}
 	}
 }
 
@@ -1490,7 +1627,8 @@ const NXOS = {
 		const thisSwitch = data.neighbors[switchType][switchName];
 		for (let j in neighbors) {
 			const neighbor = neighbors[j];
-			if (neighbor.intf_id?.includes('mgmt')) continue
+			if (!Object.hasOwnProperty.call(neighbor, 'intf_id')) continue;
+			if (neighbor.intf_id?.includes('mgmt')) continue;
 			thisSwitch[neighbor.intf_id] = {
 				'interface': neighbor.intf_id,
 				'lldp': neighbor.device_id,

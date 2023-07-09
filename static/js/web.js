@@ -1,5 +1,5 @@
 /* eslint-disable no-undef */
-let server = window.location;
+let server = window.location.origin + "/";
 
 let editors = {};
 
@@ -97,7 +97,7 @@ function socketDoMessage(header, payload) {
 				lastPing = Date.now();
 				pingChart.update();
 				break;
-			case 'boot': {
+			case 'boot':
 				if (payload.replace) {
 					bootChart.data.datasets[0].data = payload.points;
 				} else {
@@ -107,7 +107,6 @@ function socketDoMessage(header, payload) {
 				lastBoot = Date.now();
 				bootChart.update();
 				break;
-			}
 			case 'temps':
 				if (payload.replace) {
 					replaceTemps(payload.points);
@@ -115,6 +114,9 @@ function socketDoMessage(header, payload) {
 					addTemps(payload.points);
 				}
 				lastHot = Date.now();
+				break;
+			case 'syslog':
+				handleSyslogMessage(payload);
 				break;
 			}
 		}
@@ -151,6 +153,54 @@ function socketDoMessage(header, payload) {
 		break;
 	default:
 
+	}
+}
+
+function syslogFormat(message) {
+	let formatted = message.replace(/down/g, '<span class="text-danger">down</span>');
+	formatted = formatted.replace(/Link failure/g, '<span class="text-danger">Link failure</span>');
+	formatted = formatted.replace(/none/g, '<span class="text-warning">none</span>');
+	formatted = formatted.replace(/changed/g, '<span class="text-warning">changed</span>');
+	formatted = formatted.replace(/ up/g, '<span class="text-success"> up</span>');
+	formatted = formatted.replace(/consistent/g, '<span class="text-success">consistent</span>');
+
+	formatted = formatted.replace(/Ethernet(.*?)\/([0-9]{1,3})\/([0-9]{1,3})/g, '<span class="text-info">Ethernet$1/$2/$3</span>');
+	formatted = formatted.replace(/Ethernet(.*?)\/([0-9]{1,3})/g, '<span class="text-info">Ethernet$1/$2</span>');
+	formatted = formatted.replace(/vPC ([0-9]{1,3})/g, '<span class="text-info">vPC $1</span>');
+	formatted = formatted.replace(/port-channel([0-9]{1,3})/g, '<span class="text-info">port-channel$1</span>');
+	return formatted
+}
+
+function handleSyslogMessage(payload) {
+	const $tbody = $('table[data-catagory="syslog"] tbody');
+	const type = $('table[data-catagory="syslog"]').attr('data-mode');
+	const ips = $('#syslogSelect').val();
+	if (payload.replace) $tbody.empty();
+	if (type === 'duration' && !payload.replace) return;
+	if (type === 'live' && payload.replace) return;
+	try {
+		payload.logs.forEach(log => {
+			if (!(ips.includes(log.ip) || ips.includes('all'))) return;
+			const maxLogs = 499;
+			const dateTime = new Date(log.time)
+			const message = syslogFormat(log.message);
+			const name = syslogSourceList[log.ip] || log.ip;
+			const $liveLogs = $('.logType_live');
+			if ($liveLogs.length > maxLogs) {
+				for (let index = maxLogs; index < $liveLogs.length; index++) {
+					console.log(index);
+					const log = $liveLogs[index];
+					log.remove();
+				}
+			}
+			$tbody.prepend(`<tr class="logType_${type}">
+				<td>${message}</td>
+				<td class="text-nowrap">${name}</td>
+				<td class="text-nowrap">${dateTime.toLocaleString()}</td>
+			</tr>`);
+		})
+	} catch (error) {
+		$tbody.prepend('<tr><td colspan="3">No Logs Found</td></tr>');
 	}
 }
 
@@ -380,12 +430,27 @@ function handleDevicesData(data, type) {
 		$(table).removeClass('text-muted');
 		$.each(data, (port, lldp) => {
 			let row = '<tr><td>' + port + '</td>';
-			for (let index = 0; index < ControlSwitches.length; index++) {
-				if (lldp.includes(ControlSwitches[index])) {
-					row += '<td class=\'bg-danger\'>Down</td>';
-				} else {
-					row += '<td class=\'bg-success\'>Up</td>';
-				}
+			switch (type) {
+				case 'Control':
+					for (let index = 0; index < ControlSwitches.length; index++) {
+						if (lldp.includes(ControlSwitches[index])) {
+							row += '<td class=\'bg-danger\'>Down</td>';
+						} else {
+							row += '<td class=\'bg-success\'>Up</td>';
+						}
+					}
+					break;
+				case 'Media':
+					for (let index = 0; index < Switches.length; index++) {
+						if (lldp.includes(Switches[index])) {
+							row += '<td class=\'bg-danger\'>Down</td>';
+						} else {
+							row += '<td class=\'bg-success\'>Up</td>';
+						}
+					}
+					break;
+				default:
+					break;
 			}
 			$(`${table} tbody`).append(row);
 		});
@@ -633,6 +698,20 @@ $(document).ready(function() {
 		dateFormat: 'YYYY-MM-DD HH:mm',
 		title: 'To'
 	});
+	$('#syslogFromPick').dateTimePicker({
+		dateFormat: 'YYYY-MM-DD HH:mm',
+		title: 'From'
+	});
+	$('#syslogToPick').dateTimePicker({
+		dateFormat: 'YYYY-MM-DD HH:mm',
+		title: 'To'
+	});
+
+	const syslogChoices = new Choices('#syslogSelect', {
+		removeItems: true,
+		removeItemButton: true,
+		searchPlaceholderValue: "Select Devices",
+	});
 
 	$(document).click(function(e) {
 		const $trg = $(e.target);
@@ -869,8 +948,76 @@ $(document).ready(function() {
 				'from': parseInt($('#bootFrom').val()),
 				'to': parseInt($('#bootTo').val())
 			});
+		} else if ($trg.is('#syslogFrom') || $trg.is('#syslogTo')) {
+			$('#syslogDurationPreset').removeClass('active');
+			localConnection.send({
+				'command':'get',
+				'data':'syslog',
+				'from': parseInt($('#syslogFrom').val()),
+				'to': parseInt($('#syslogTo').val()),
+				'ips': $('#syslogSelect').val()
+			})
+		} else if ($trg.is('#syslogSelect')) {
+			const $btn = $('#syslogDurationPreset.active');
+			let to = parseInt($('#syslogTo').val());
+			let from = parseInt($('#syslogFrom').val());
+			if ($btn) {
+				const value = $btn.val();
+				to = new Date().getTime()/1000;
+				if (value == "live") {
+					from = to;
+					$('table[data-catagory="syslog"]').attr('data-mode', 'live');
+				} else {
+					from = to - parseInt(value);;
+					$('table[data-catagory="syslog"]').attr('data-mode', 'duration');
+				}
+			}
+			localConnection.send({
+				'command':'get',
+				'data':'syslog',
+				'from': from,
+				'to': to,
+				'ips': $('#syslogSelect').val()
+			})
+		} else if ($trg.is('#syslogDurationPreset')) {
+			const value = $trg.val();
+			let to = new Date().getTime()/1000;
+			let from = to;
+			if (value == "live") {
+				$('table[data-catagory="syslog"]').attr('data-mode', 'live');
+			} else {
+				from = to - parseInt(value);
+				$('table[data-catagory="syslog"]').attr('data-mode', 'duration');
+			}
+
+			$trg.addClass('active');
+			localConnection.send({
+				'command':'get',
+				'data':'syslog',
+				'from': from,
+				'to': to,
+				'ips': $('#syslogSelect').val()
+			});
 		}
 	});
+
+	switch (location.hash) {
+		case "#media":
+			$('#nav-media-tab').click();
+			break;
+		case "#control":
+			$('#nav-control-tab').click();
+			break;
+		case "#pings":
+			$('#nav-pings-tab').click();
+			break;
+		case "#syslog":
+			$('#nav-syslog-tab').click();
+			break;
+		default:
+			break;
+	}
+
 });
 
 function getConfig(catagory) {
