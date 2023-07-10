@@ -283,6 +283,7 @@
                     <h4>Syslogs</h4>
                     <div class="buttonBox d-flex gap-2 flex-wrap">
                         <div class="d-flex align-self-center">
+                            <button id="syslogHistogramToggle" class="btn btn-sm btn-secondary me-2"></button>
                             <label for="syslogSelect" class="pe-2 pt-1">Devices</label>
                             <select id="syslogSelect" multiple>
                                 <option value="all" selected="selected">All</option>
@@ -295,12 +296,15 @@
                             <span class="pe-2 pt-1">During the last</span>
                             <select id="syslogDurationPreset" class="btn bg-secondary text-light d-inline active">
                                 <option value="live" selected>Live updates</option>
+                                <option value="3600">1 Hour</button>
                                 <option value="7200">2 Hours</button>
                                 <option value="21600">6 Hours</button>
                                 <option value="43200">12 Hours</button>
-                                <option value="86400">Day</button>
+                                <option value="86400">1 Day</button>
+                                <option value="259200">3 Days</button>
                                 <option value="604800">Week</button>
                                 <option value="2419200">Month</button>
+                                <option value="290304000">All</button>
                             </select>
                         </div>
                         <div class="d-flex align-self-center">
@@ -325,6 +329,7 @@
                     <tbody data-template="syslog">
                     </tbody>
                 </table>
+                <canvas id="syslogHistogram"></canvas>
             </div>
         </section>
     </main>
@@ -440,11 +445,15 @@
                 </div>
             </section>
 
-            <div class="mt-3 mx-0 align-self-end">
+            <div class="mt-3 mx-0 align-self-end d-flex gap-1">
+                <input id="csvUpload" class="form-control" type="file" accept="text/csv" name="csvUpload" size="30">
+                <button class="btn btn-primary tableImport" type="button" disabled>Import CSV</button>
+                <button class="btn btn-primary tableExport" type="button">Export as CSV</button>
                 <button class="btn btn-primary toggleTableRaw" type="button">Toggle View</button>
                 <button class="btn btn-primary tableNew" type="button">Add new</button>
                 <button class="btn btn-success tableSave" type="button">Save</button>
                 <button id="closeConfig" class="btn btn-danger">Close</button>
+                <div id="testId"></div>
             </div>
         </section>
     </article>

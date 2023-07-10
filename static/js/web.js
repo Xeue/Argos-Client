@@ -6,6 +6,7 @@ let editors = {};
 let pingChart;
 let tempChart;
 let bootChart;
+let syslogHistogram;
 let pings = {};
 let boots = {};
 let lastTra = -1;
@@ -179,6 +180,19 @@ function handleSyslogMessage(payload) {
 	if (type === 'duration' && !payload.replace) return;
 	if (type === 'live' && payload.replace) return;
 	try {
+		const points = {};
+
+		let rangeTime;
+		let firstTime;
+		let lastTime;
+		let fullRangeTime;
+		if (payload.replace) {
+			firstTime = new Date(payload.logs.at(1).time);
+			lastTime = new Date(payload.logs.at(-1).time);
+			fullRangeTime = lastTime - firstTime;
+			rangeTime = fullRangeTime/75;
+		}
+
 		payload.logs.forEach(log => {
 			if (!(ips.includes(log.ip) || ips.includes('all'))) return;
 			const maxLogs = 499;
@@ -198,9 +212,23 @@ function handleSyslogMessage(payload) {
 				<td class="text-nowrap">${name}</td>
 				<td class="text-nowrap">${dateTime.toLocaleString()}</td>
 			</tr>`);
-		})
+			if (payload.replace) {
+				const interval = Math.floor((dateTime - firstTime)/rangeTime);
+				const intervalIdentifier = new Date(interval*rangeTime + firstTime.getTime());
+				if (points[intervalIdentifier] == undefined) {
+					points[intervalIdentifier] = 1;
+				} else {
+					points[intervalIdentifier]++;
+				}
+			}
+		});
+		if (payload.replace) {
+			syslogHistogram.data.datasets[0].data = points;
+			syslogHistogram.update();
+		}
 	} catch (error) {
 		$tbody.prepend('<tr><td colspan="3">No Logs Found</td></tr>');
+		console.error(error);
 	}
 }
 
@@ -384,6 +412,52 @@ function renderBootChart(boots) {
 	};
 	bootChart = new Chart(ctx, config);
 
+}
+
+function renderSyslogChart() {
+	const ctx = $('#syslogHistogram');
+	const data = {
+		datasets: [
+			{
+				label: 'Logs Frequency',
+				data: [],
+				backgroundColor: [
+					'rgba(128, 255, 128, 0.6)'
+				],
+				borderColor: [
+					'rgba(128, 255, 128, 1)'
+				],
+				cubicInterpolationMode: 'monotone',
+				tension: 0.4
+			}
+		]
+	};
+	const config = {
+		type: 'bar',
+		data: data,
+		options: {
+			responsive: true,
+			maintainAspectRatio: false,
+			interaction: {
+				mode: 'index',
+				intersect: false,
+			},
+			stacked: false,
+			scales: {
+				x: {
+					type: 'time',
+					time: {
+						displayFormats: {
+							second: 'YY/MM/DD H:mm:ss',
+							minute: 'YY/MM/DD H:mm',
+							hour: 'YY/MM/DD H:mm'
+						}
+					}
+				}
+			}
+		},
+	};
+	syslogHistogram = new Chart(ctx, config);
 }
 
 /* Device data handeling */
@@ -637,6 +711,7 @@ function setupWebConnection() {
 
 	renderPingChart();
 	renderBootChart(boots);
+	renderSyslogChart();
 
 	$('#webBroken').html('<span class="p-2 badge badge-pill bg-danger">Web Monitor Offline</span>');
 	const webConnection = new webSocket([webSocketEndpoint], 'Browser', version, currentSystem, secureWebsockets);
@@ -771,6 +846,40 @@ $(document).ready(function() {
 			} else {
 				$('#config').addClass('hidden');
 			}
+		} else if ($trg.hasClass('tableExport')) {
+			const $active = $trg.closest('.alert.container').find('.tab-pane.active');
+			const $table = $active.find('table');
+			const editor = $table.data('editor');
+			const editorJSON = editors[editor].get();
+			let csv = Object.keys(editorJSON[0]).join(',') + '\n';
+			for (let index = 0; index < editorJSON.length; index++) {
+				csv += Object.values(editorJSON[index]).join(',') + '\n';
+			}
+			download(`${editor}.csv`,csv);
+		} else if ($trg.hasClass('tableImport')) {
+			const $active = $trg.closest('.alert.container').find('.tab-pane.active');
+			const $table = $active.find('table.table');
+			const $body = $table.find('tbody');
+			const editor = $table.data('editor');
+			const files = $('#csvUpload')[0].files;
+			const reader = new FileReader();
+			reader.onload = event => {
+				const rows = event.target.result.split('\n');
+				const headers = rows[0].split(',');
+				const newEditor = []
+				for (let index = 1; index < rows.length - 1; index++) {
+					const row = rows[index].split(',');
+					const item = {};
+					for (let i = 0; i < headers.length; i++) {
+						item[headers[i].replace('\r','')] = row[i].replace('\r','');
+					}
+					newEditor.push(item);
+				}
+				editors[editor].set(newEditor);
+				editors[editor].expandAll();
+				$body.html(ejs.render(templates[$body.data('template')], {devices: newEditor}));
+			};
+			reader.readAsText(files[0]);
 		} else if ($trg.hasClass('toggleTableRaw')) {
 			const $active = $trg.closest('.alert.container').find('.tab-pane.active');
 			$active.find('.dataTable').collapse('toggle');
@@ -922,6 +1031,9 @@ $(document).ready(function() {
 			$tbody.children().each(function(index) {
 				$(this).attr('data-index', index);
 			});
+		} else if ($trg.is('#syslogHistogramToggle')) {
+			const $cont = $('div[data-catagory="syslog"]');
+			$cont.toggleClass('showHistogram');
 		}
 	});
 
@@ -998,6 +1110,8 @@ $(document).ready(function() {
 				'to': to,
 				'ips': $('#syslogSelect').val()
 			});
+		} else if ($trg.is('#csvUpload')) {
+			$('.tableImport').attr('disabled',$trg.val()=='');
 		}
 	});
 
@@ -1041,4 +1155,14 @@ function renderEditorTab(devicesData, editor, template, element) {
 	editor.expandAll();
 	$(`#${element}`).html(ejs.render(template, {devices: devicesData}));
 	return editor;
+}
+
+function download(filename, text) {
+	var element = document.createElement('a')
+	element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text))
+	element.setAttribute('download', filename)
+	element.style.display = 'none'
+	document.body.appendChild(element)
+	element.click()
+	document.body.removeChild(element)
 }

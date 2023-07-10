@@ -76,7 +76,7 @@ td {
 }
 
 #config th {
-  background-color: #2a323c83;
+  background-color: rgb(37, 43, 50);
 }
 
 nav.drag {
@@ -122,4 +122,27 @@ nav.drag {
 
 .masonry table {
   margin-bottom: 0 !important;
+}
+
+#syslogHistogram {
+  visibility: hidden;
+  height: 0vh !important;
+}
+
+#syslogHistogramToggle::after {
+  content: "Show Histogram";
+}
+
+.showHistogram table[data-catagory="syslog"] {
+  display: none;
+  top: 100vh;
+}
+
+.showHistogram #syslogHistogram {
+  visibility: visible;
+  height: 60vh !important;
+}
+
+.showHistogram #syslogHistogramToggle::after {
+  content: "Show Logs";
 }
