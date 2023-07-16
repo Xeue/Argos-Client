@@ -62,9 +62,9 @@
             <button class="btn btn-secondary active" id="nav-media-tab" data-bs-toggle="tab" data-bs-target="#nav-media" type="button" role="tab" aria-controls="nav-media" aria-selected="true">Media</button>
             <button class="btn btn-secondary" id="nav-control-tab" data-bs-toggle="tab" data-bs-target="#nav-control" type="button" role="tab" aria-controls="nav-control" aria-selected="true">Control</button>
             <button class="btn btn-secondary" id="nav-pings-tab" data-bs-toggle="tab" data-bs-target="#nav-pings" type="button" role="tab" aria-controls="nav-pings" aria-selected="true">Pings</button>
+            <button class="btn btn-secondary" id="nav-debug-tab" data-bs-toggle="tab" data-bs-target="#nav-debug" type="button" role="tab" aria-controls="nav-debug" aria-selected="true">Debug</button>
             <button class="btn btn-secondary" id="nav-syslog-tab" data-bs-toggle="tab" data-bs-target="#nav-syslog" type="button" role="tab" aria-controls="nav-syslog" aria-selected="true">Syslog</button>
             <button class="btn btn-secondary" id="toggleConfig">Edit Devices</button>
-            <button class="btn btn-secondary disabled" id="netboxConfig">Netbox Config</button>
         </div>
     </nav>
     <main class="tab-content container-fluid bg-dark py-3 overflow-auto">
@@ -169,6 +169,19 @@
                     </div>
                 </div>
             </div>
+            <div class="text-light text-muted brick" data-type="Media" data-catagory="interfaces">
+                <h4>Port Monitoring</h4>
+                <span class="text-muted">Last updated <span id="lastInterfaces"></span></span>
+                <table data-catagory="interfaces" class="table table-dark text-muted">
+                    <thead>
+                        <th scope="col">Port Info</th>
+                        <th scope="col">Errors</th>
+                        <th scope="col">Usage</th>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
         </section>
         <section class="tab-pane fade masonry" id="nav-control" data-editor="control" role="tabpanel" aria-labelledby="nav-control-tab">
             <div class="text-light text-muted brick" data-type="Control" data-catagory="alive">
@@ -195,6 +208,19 @@
                         <th scope="col">Name</th>
                         <th scope="col">Description</th>
                         <th scope="col">RX power</th>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+            <div class="text-light text-muted brick" data-type="Control" data-catagory="interfaces">
+                <h4>Port Monitoring</h4>
+                <span class="text-muted">Last updated <span id="lastInterfaces"></span></span>
+                <table data-catagory="interfaces" class="table table-dark text-muted">
+                    <thead>
+                        <th scope="col">Port Info</th>
+                        <th scope="col">Errors</th>
+                        <th scope="col">Usage</th>
                     </thead>
                     <tbody>
                     </tbody>
@@ -277,6 +303,50 @@
                 </table>
             </div>
         </section>
+        <section class="tab-pane fade masonry" id="nav-debug" data-editor="debug" role="tabpanel" aria-labelledby="nav-debug-tab">
+            <div class="text-light text-muted brick" data-type="Media" data-catagory="power">
+                <h4>Media Switchs PSU Info</h4>
+                <span class="text-muted">Last updated <span id="lastPower"></span></span>
+                <table data-catagory="power" class="table table-dark text-muted">
+                    <thead>
+                        <th scope="col">Switch</th>
+                        <th scope="col">Power Output</th>
+                        <th scope="col">Uptime</th>
+                        <th scope="col">Status</th>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+            <div class="text-light text-muted brick" data-type="Media" data-catagory="temperature">
+                <h4>Media Switchs Temperatures</h4>
+                <span class="text-muted">Last updated <span id="lastTemperature"></span></span>
+                <table data-catagory="temperature" class="table table-dark text-muted">
+                    <thead>
+                        <th scope="col">Switch</th>
+                        <th scope="col">Module</th>
+                        <th scope="col">Temperature</th>
+                        <th scope="col">Status</th>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+            <div class="text-light text-muted brick" data-type="Media" data-catagory="fans">
+                <h4>Media Switchs Fans Info</h4>
+                <span class="text-muted">Last updated <span id="lastFans"></span></span>
+                <table data-catagory="fans" class="table table-dark text-muted">
+                    <thead>
+                        <th scope="col">Switch</th>
+                        <th scope="col">Fan Module</th>
+                        <th scope="col">Speed</th>
+                        <th scope="col">Status</th>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+        </section>
         <section class="tab-pane fase masonry masonry-1" id="nav-syslog" data-editor="syslog" role="tabpanel" aria-labelledby="nav-syslog-tab">
             <div class="text-light brick" data-type="Control" data-catagory="syslog">
                 <div class="d-flex justify-content-between flex-wrap">
@@ -342,6 +412,7 @@
 
             <div class="nav nav-pills mb-2 nav-justified" id="nav-tab" role="tablist">
                 <button class="nav-link active" id="nav-switches-tab" data-bs-toggle="tab" data-bs-target="#nav-switches" type="button" role="tab" aria-controls="nav-switches" aria-selected="true">Core Switches</button>
+                <button class="nav-link" id="nav-ports-tab" data-bs-toggle="tab" data-bs-target="#nav-ports" type="button" role="tab" aria-controls="nav-ports" aria-selected="false">Port Monitoring</button>
                 <button class="nav-link" id="nav-devices-tab" data-bs-toggle="tab" data-bs-target="#nav-devices" type="button" role="tab" aria-controls="nav-devices" aria-selected="false">Devices</button>
                 <button class="nav-link" id="nav-ups-tab" data-bs-toggle="tab" data-bs-target="#nav-ups" type="button" role="tab" aria-controls="nav-ups" aria-selected="false">Ups</button>
                 <button class="nav-link" id="nav-temperatures-tab" data-bs-toggle="tab" data-bs-target="#nav-temperatures" type="button" role="tab" aria-controls="nav-temperatures" aria-selected="false">Temperatures</button>
@@ -368,6 +439,24 @@
                     </div>
                     <div class="dataRaw collapse mt-3">
                         <div id="configSwitchesRaw"></div>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="nav-ports" data-editor="ports" role="tabpanel" aria-labelledby="nav-ports-tab">
+                    <div class="dataTable collapse show">
+                        <table class="table table-dark" data-editor="ports">
+                            <thead class="position-sticky top-0">
+                                <tr>
+                                    <th class="w-25">Switch</th>
+                                    <th class="w-25">Port</th>
+                                    <th class="w-25"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="configPorts" data-template="ports"></tbody>
+                        </table>
+                    </div>
+                    <div class="dataRaw collapse mt-3">
+                        <div id="configPortsRaw"></div>
                     </div>
                 </div>
 

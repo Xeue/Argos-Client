@@ -60,6 +60,18 @@ templates.devices = `<% for(i = 0; i < devices.length; i++) { %>
   </tr>
 <% } %>`;
 
+templates.ports = `<% for(i = 0; i < devices.length; i++) { %>
+	<tr data-index="<%=i%>" data-template="ports">
+		<td data-type="select" data-key="Switch" data-value="<%-devices[i].Switch%>" data-options="<%-switches.join(',')%>"><%-devices[i].Switch%></td>
+		<td data-type="text" data-key="Port" data-value="<%-devices[i].Port%>"><%-devices[i].Port%></td>
+	  	<td>
+			<button type="button" class="btn btn-danger editConfig w-50">Edit</button>
+			<button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
+	  	</td>
+	</tr>
+<% } %>`;
+
+
 function socketDoOpen(socket) {
 	console.log('Registering as client');
 	socket.send({'command':'register'});
@@ -147,6 +159,30 @@ function socketDoMessage(header, payload) {
 			break;
 		case 'localPing':
 			handleLocalPing(payload.data);
+			break;
+		case 'power':
+			handleSwitchPower(payload.data, 'Media');
+			break;
+		case 'power_control':
+			handleSwitchPower(payload.data, 'Control');
+			break;
+		case 'temperature':
+			handleSwitchTemperature(payload.data, 'Media');
+			break;
+		case 'temperature_control':
+			handleSwitchTemperature(payload.data, 'Control');
+			break;
+		case 'fans':
+			handleDevicesFans(payload.data, 'Media');
+			break;
+		case 'fans_control':
+			handleDevicesFans(payload.data, 'Control');
+			break;
+		case 'interfaces':
+			handleInterfaces(payload.data, 'Media');
+			break;
+		case 'interfaces_control':
+			handleInterfaces(payload.data, 'Control');
 			break;
 		default:
 			break;
@@ -646,6 +682,169 @@ function handleLocalPing(data) {
 	}
 }
 
+function handleSwitchPower(data, type) {
+	const table = `[data-type="${type}"] table[data-catagory="power"]`;
+	$(`${table} tbody`).empty();
+	if (Object.keys(data).length == 0) {
+		$(`[data-type="${type}"][data-type="power"]`).addClass('text-muted');
+		$(table).addClass('text-muted');
+	} else {
+		$(`[data-type="${type}"][data-type="power"]`).removeClass('text-muted');
+		$(table).removeClass('text-muted');
+
+		$.each(data, (switchName, PSUs) => {
+			for (const PSUIndex in PSUs) {
+				if (Object.hasOwnProperty.call(PSUs, PSUIndex)) {
+					const PSU = PSUs[PSUIndex];
+					const timeOffset = new Date();
+					let seconds = Math.floor(timeOffset/1000 - PSU.uptime);
+					let minutes = Math.floor(seconds/60);
+					let hours = Math.floor(minutes/60);
+					const days = Math.floor(hours/24);
+					hours = hours-(days*24);
+					minutes = minutes-(days*24*60)-(hours*60);
+					seconds = seconds-(days*24*60*60)-(hours*60*60)-(minutes*60);
+
+					let time = "";
+
+					if (days > 0) time += ` ${days} days`
+					if (hours > 0) time += ` ${hours}h`
+					if (minutes > 0) time += ` ${minutes}m`
+					if (seconds > 0) time += ` ${seconds}s`
+
+					$(`${table} tbody`).append(`<tr>
+						<td>${switchName}</td>
+						<td>${PSU.outputPower} Watts</td>
+						<td>${time}</td>
+						<td class="text-center ${PSU.inAlert ? "bg-success" : "bg-danger"}">${PSU.inAlert ? "Good" : "Error"}</td>
+					</tr>`);
+				}
+			}
+		});
+	}
+	lastSwitchPower = Date.now();
+}
+
+function handleSwitchTemperature(data, type) {
+	const table = `[data-type="${type}"] table[data-catagory="temperature"]`;
+	$(`${table} tbody`).empty();
+	if (Object.keys(data).length == 0) {
+		$(`[data-type="${type}"][data-type="temperature"]`).addClass('text-muted');
+		$(table).addClass('text-muted');
+	} else {
+		$(`[data-type="${type}"][data-type="temperature"]`).removeClass('text-muted');
+		$(table).removeClass('text-muted');
+		$.each(data, (switchName, temperatures) => {
+			for (const moduleName in temperatures) {
+				const temperature = temperatures[moduleName];
+				$(`${table} tbody`).append(`<tr>
+					<td>${switchName}</td>
+					<td>${moduleName}</td>
+					<td>${Math.floor(temperature.temp)} °C</td>
+					<td class="text-center ${temperature.inAlert ? "bg-success" : "bg-danger"}">${temperature.inAlert ? "Good" : "Error"}</td>
+				</tr>`);
+			}
+		});
+	}
+	lastSwitchTemperature = Date.now();
+}
+
+function handleDevicesFans(data, type) {
+	const table = `[data-type="${type}"] table[data-catagory="fans"]`;
+	$(`${table} tbody`).empty();
+	if (Object.keys(data).length == 0) {
+		$(`[data-type="${type}"][data-type="fans"]`).addClass('text-muted');
+		$(table).addClass('text-muted');
+	} else {
+		$(`[data-type="${type}"][data-type="fans"]`).removeClass('text-muted');
+		$(table).removeClass('text-muted');
+		$.each(data, (switchName, fans) => {
+			for (const moduleName in fans) {
+				const fan = fans[moduleName];
+				$(`${table} tbody`).append(`<tr>
+					<td>${switchName}</td>
+					<td>${moduleName}</td>
+					<td>${Math.floor(fan.speed)}%</td>
+					<td class="text-center ${fan.inAlert ? "bg-success" : "bg-danger"}">${fan.inAlert ? "Good" : "Error"}</td>
+				</tr>`);
+			}
+		});
+	}
+	lastSwitchTemperature = Date.now();
+}
+
+function handleInterfaces(data, type) {
+	if (data == undefined) return;
+	const table = `[data-type="${type}"] table[data-catagory="interfaces"]`;
+	$(`${table} tbody`).empty();
+	if (Object.keys(data).length == 0) {
+		$(`[data-type="${type}"][data-type="interfaces"]`).addClass('text-muted');
+		$(table).addClass('text-muted');
+	} else {
+		$(`[data-type="${type}"][data-type="interfaces"]`).removeClass('text-muted');
+		$(table).removeClass('text-muted');
+		for (const Switch in data) {
+			for (const Port in data[Switch]) {
+				const portInfo = data[Switch][Port];
+
+				let time = "";
+
+				if (Number(portInfo.lastFlap)) {
+					const timeOffset = new Date();
+					let seconds = Math.floor(timeOffset/1000 - portInfo.lastFlap);
+					let minutes = Math.floor(seconds/60);
+					let hours = Math.floor(minutes/60);
+					const days = Math.floor(hours/24);
+					hours = hours-(days*24);
+					minutes = minutes-(days*24*60)-(hours*60);
+					seconds = seconds-(days*24*60*60)-(hours*60*60)-(minutes*60);
+					if (days > 0) time += ` ${days} days`;
+					if (hours > 0) time += ` ${hours}:${minutes}:${seconds}`;
+				} else {
+					time = portInfo.lastFlap;
+				}
+
+				const inErrors = portInfo.inErrors > 0 ? `<div>Input Errors: ${portInfo.inErrors}</div>` : '';
+				const outErrors = portInfo.outErrors > 0 ? `<div>Output Errors: ${portInfo.outErrors}</div>` : '';
+				const inDiscards = portInfo.inDiscards > 0 ? `<div>Input Discards: ${portInfo.inDiscards}</div>` : '';
+				const outDiscards = portInfo.outDiscards > 0 ? `<div>Output Discards: ${portInfo.outDiscards}</div>` : '';
+				const outPercent = Math.round(100*portInfo.outRate/portInfo.maxRate);
+				const outGbps = Math.round(portInfo.outRate/1000000000);
+				const inPercent = Math.round(100*portInfo.inRate/portInfo.maxRate);
+				const inGbps = Math.round(portInfo.inRate/1000000000);
+				const outColour = `hsl(${130 - outPercent*1.3}deg 100% 30.36%)`;
+				const inColour = `hsl(${120 - inPercent*1.3}deg 100% 30.36%)`;
+
+				$(`${table} tbody`).append(`<tr>
+					<td class="text-center ${portInfo.connected ? "bg-success" : "bg-danger"}">
+						<div>${Switch} - ${portInfo.connected ? "UP" : "Down"}</div>
+						<div>${Port}</div>
+						<div>${portInfo.description}</div>
+					</td>
+					<td>
+						<div>Port Flaps: ${portInfo.flapCount}</div>
+						<div>Last Flap: ${time}</div>
+						${inErrors}
+						${outErrors}
+						${inDiscards}
+						${outDiscards}
+					</td>
+					<td>
+						<div class="d-flex">
+							<div>
+								<div>Out: ${outPercent}% - ${outGbps}Gbps</div>
+								<div>In: ${inPercent}% - ${inGbps}Gbps</div>
+							</div>
+							<div class="pie text-right" style="--p:${outPercent};--b:10px;--c:${outColour};--pi:${inPercent};--ci:${inColour}"></div>
+						</div>
+					</td>
+				</tr>`);
+			}
+		}
+	}
+	lastSwitchTemperature = Date.now();
+}
+
 function updateLast() {
 	$('#lastAlive').text(prettifyTime(lastAlive));
 	$('#lastMac').text(prettifyTime(lastMac));
@@ -827,15 +1026,17 @@ $(document).ready(function() {
 				loading(true);
 				Promise.allSettled([
 					getConfig('switches'),
+					getConfig('ports'),
 					getConfig('devices'),
 					getConfig('ups'),
 					getConfig('frames'),
 					getConfig('pings')
 				]).then(values => {
-					const [switches, devices, ups, frames, pings] = values;
+					const [switches, ports, devices, ups, frames, pings] = values;
 					loading(false);
 					$('#config').removeClass('hidden');
 					editors['switches'] = renderEditorTab(switches.value, editors['switches'], templates.switch, 'configSwitches');
+					editors['ports'] = renderEditorTab(ports.value, editors['ports'], templates.ports, 'configPorts');
 					editors['devices'] = renderEditorTab(devices.value, editors['devices'], templates.devices, 'configDevices');
 					editors['ups'] = renderEditorTab(ups.value, editors['ups'], templates.nameIP, 'configUps');
 					editors['frames'] = renderEditorTab(frames.value, editors['frames'], templates.nameIP, 'configFrames');
@@ -877,7 +1078,7 @@ $(document).ready(function() {
 				}
 				editors[editor].set(newEditor);
 				editors[editor].expandAll();
-				$body.html(ejs.render(templates[$body.data('template')], {devices: newEditor}));
+				$body.html(ejs.render(templates[$body.data('template')], {devices: newEditor, switches: Switches.concat(ControlSwitches)}));
 			};
 			reader.readAsText(files[0]);
 		} else if ($trg.hasClass('toggleTableRaw')) {
@@ -993,6 +1194,10 @@ $(document).ready(function() {
 				dummyData[0].Name = 'New Device';
 				dummyData[0].IP = 'IP Address';
 				break;
+			case 'ports':
+				dummyData[0].Switch = 'Switch';
+				dummyData[0].Port = 'Port';
+				break;
 			case 'devices':
 				dummyData[0].name = 'New Device';
 				dummyData[0].description = 'Description';
@@ -1000,7 +1205,7 @@ $(document).ready(function() {
 			default:
 				break;
 			}
-			const $new = $(ejs.render(templates[template], {'devices': dummyData}));
+			const $new = $(ejs.render(templates[template], {'devices': dummyData, switches: Switches.concat(ControlSwitches)}));
 			$new.attr('data-index', index);
 			$tbody.append($new);
 			$new.find('.editConfig').trigger('click');
@@ -1143,7 +1348,7 @@ function renderEditorTab(devicesData, editor, template, element) {
 		const container = document.getElementById(`${element}Raw`);
 		let options = {
 			'onChange': function() {
-				$(`#${element}`).html(ejs.render(template, {devices: editor.get()}));
+				$(`#${element}`).html(ejs.render(template, {devices: editor.get(), switches: Switches.concat(ControlSwitches)}));
 			},
 			'mode': 'tree',
 			'mainMenuBar': false,
@@ -1153,7 +1358,7 @@ function renderEditorTab(devicesData, editor, template, element) {
 	}
 	editor.set(devicesData);
 	editor.expandAll();
-	$(`#${element}`).html(ejs.render(template, {devices: devicesData}));
+	$(`#${element}`).html(ejs.render(template, {devices: devicesData, switches: Switches.concat(ControlSwitches)}));
 	return editor;
 }
 
@@ -1165,4 +1370,15 @@ function download(filename, text) {
 	document.body.appendChild(element)
 	element.click()
 	document.body.removeChild(element)
+}
+
+
+
+function forObject(object, callback) {
+	for (const key in object) {
+		if (Object.hasOwnProperty.call(object, key)) {
+			const value = object[key];
+			callback(key, value);
+		}
+	}
 }

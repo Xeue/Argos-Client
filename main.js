@@ -54,6 +54,22 @@ const data = {
 		'Control':{},
 		'Media':{}
 	},
+	'power': {
+		'Control':{},
+		'Media':{}
+	},
+	'fans': {
+		'Control':{},
+		'Media':{}
+	},
+	'temperature': {
+		'Control':{},
+		'Media':{}
+	},
+	'interfaces': {
+		'Control':{},
+		'Media':{}
+	},
 	'ups': {},
 	'phy': {}
 };
@@ -111,6 +127,60 @@ const SwitchRequests = {
 			"method": "cli",
 			"params": {
 				"cmd": "show interface mac",
+				"version": 1
+			},
+			"id": 1
+		},
+		'power': {
+			'jsonrpc': '2.0',
+			'method': 'runCmds',
+			'params': {
+				'format': 'json',
+				'timestamps': false,
+				'autoComplete': false,
+				'expandAliases': false,
+				'cmds': [
+					'show system environment power'
+				],
+				'version': 1
+			},
+			'id': ''
+		},
+		'fans': {
+			'jsonrpc': '2.0',
+			'method': 'runCmds',
+			'params': {
+				'format': 'json',
+				'timestamps': false,
+				'autoComplete': false,
+				'expandAliases': false,
+				'cmds': [
+					'show system environment cooling'
+				],
+				'version': 1
+			},
+			'id': ''
+		},
+		'temperature': {
+			'jsonrpc': '2.0',
+			'method': 'runCmds',
+			'params': {
+				'format': 'json',
+				'timestamps': false,
+				'autoComplete': false,
+				'expandAliases': false,
+				'cmds': [
+					'show system environment temperature'
+				],
+				'version': 1
+			},
+			'id': ''
+		},
+		'interfaces': {
+			"jsonrpc": "2.0",
+			"method": "cli",
+			"params": {
+				"cmd": "show interface",
 				"version": 1
 			},
 			"id": 1
@@ -179,6 +249,70 @@ const SwitchRequests = {
 				'version': 1
 			},
 			'id': ''
+		},
+		'power': {
+			'jsonrpc': '2.0',
+			'method': 'runCmds',
+			'params': {
+				'format': 'json',
+				'timestamps': false,
+				'autoComplete': false,
+				'expandAliases': false,
+				'cmds': [
+					'enable',
+					'show system environment power'
+				],
+				'version': 1
+			},
+			'id': ''
+		},
+		'fans': {
+			'jsonrpc': '2.0',
+			'method': 'runCmds',
+			'params': {
+				'format': 'json',
+				'timestamps': false,
+				'autoComplete': false,
+				'expandAliases': false,
+				'cmds': [
+					'enable',
+					'show system environment cooling'
+				],
+				'version': 1
+			},
+			'id': ''
+		},
+		'temperature': {
+			'jsonrpc': '2.0',
+			'method': 'runCmds',
+			'params': {
+				'format': 'json',
+				'timestamps': false,
+				'autoComplete': false,
+				'expandAliases': false,
+				'cmds': [
+					'enable',
+					'show system environment temperature'
+				],
+				'version': 1
+			},
+			'id': ''
+		},
+		'interfaces': {
+			'jsonrpc': '2.0',
+			'method': 'runCmds',
+			'params': {
+				'format': 'json',
+				'timestamps': false,
+				'autoComplete': false,
+				'expandAliases': false,
+				'cmds': [
+					'enable',
+					'show interfaces'
+				],
+				'version': 1
+			},
+			'id': ''
 		}
 	}
 }
@@ -190,6 +324,8 @@ const upsFrequency = 30;
 const devicesFrequency = 30;
 const tempFrequency = minutes(5);
 const localPingFrequency = 10;
+const envFrequency = 30;
+const interfaceFrequency = 30;
 
 /* Globals */
 
@@ -346,14 +482,18 @@ const __main = path.resolve(__dirname, devEnv);
 		connectToWebServer(true);
 	}, 60*1000);
 	
+	await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Media');
+	await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Control');
 	await startLoopAfterDelay(localPings, localPingFrequency);
 	await startLoopAfterDelay(connectToWebServer, 5);
 	await startLoopAfterDelay(webLogPing, pingFrequency);
+	await startLoopAfterDelay(switchEnv, envFrequency, 'Media');
 	await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Media');
 	await startLoopAfterDelay(checkDevices, devicesFrequency, 'Media', true);
 	await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Media');
 	await startLoopAfterDelay(switchPhy, switchStatsFrequency, 'Media');
 	await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Media');
+	await startLoopAfterDelay(switchEnv, envFrequency, 'Control');
 	await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Control');
 	await startLoopAfterDelay(checkDevices, devicesFrequency, 'Control', false);
 	await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Control');
@@ -518,6 +658,12 @@ function loadData(file) {
 				'OS': 'Media'
 			};
 			break;
+		case 'Ports':
+			fileData[0] = {
+				'Switch':'Placeholder',
+				'Port': 'Ethernet1/1/1',
+			};
+			break;
 		default:
 			fileData[0] = {
 				'Name':'Placeholder',
@@ -564,6 +710,12 @@ function syslogSourceList() {
 		sourceList[pair.IP] = pair.Name;
 	})
 	return sourceList;
+}
+function ports(type) {
+	const Ports = loadData('Ports');
+	const Switches = switches(type).map(arr => arr.Name);
+	if (type !== undefined) return Ports.filter(port => Switches.includes(port.Switch));
+	return Ports;
 }
 
 
@@ -628,6 +780,9 @@ function expressRoutes(expressApp) {
 		case 'switches':
 			data = switches();
 			break;
+		case 'ports':
+			data = ports();
+			break;
 		case 'frames':
 			data = frames();
 			break;
@@ -649,6 +804,11 @@ function expressRoutes(expressApp) {
 	expressApp.post('/setswitches', (req, res) => {
 		log('Request to set switches config data', 'D');
 		writeData('Switches', req.body);
+		res.send('Done');
+	});
+	expressApp.post('/setports', (req, res) => {
+		log('Request to set ports config data', 'D');
+		writeData('Ports', req.body);
 		res.send('Done');
 	});
 	expressApp.post('/setdevices', (req, res) => {
@@ -968,7 +1128,7 @@ function switchPhy(switchType) {
 					devices[portName].phy.changes = fec.uncorrectedCodewords.changes;
 					devices[portName].phy.lastChange = fec.uncorrectedCodewords.lastChange;
 					devices[portName].port = portName;
-					devices[portName].description = getDescription(devices[portName].lldp);
+					devices[portName].description = getDescription(portName, switchType);
 				}
 			} else if (fec?.encoding == 'fireCode') {
 				if (fec.perLaneUncorrectedFecBlocks[0].value > 100) {
@@ -977,7 +1137,7 @@ function switchPhy(switchType) {
 					devices[portName].phy.changes = fec.perLaneUncorrectedFecBlocks[0].changes;
 					devices[portName].phy.lastChange = fec.perLaneUncorrectedFecBlocks[0].lastChange;
 					devices[portName].port = portName;
-					devices[portName].description = getDescription(devices[portName].lldp);
+					devices[portName].description = getDescription(portName, switchType);
 				}
 			}
 		}
@@ -1040,6 +1200,91 @@ async function switchFibre(switchType) {
 	data.fibre[switchType] = filteredDevices;
 	const type = switchType == 'Media' ? 'fibre' : 'fibre_control';
 	distributeData(type, data.fibre[switchType]);
+}
+
+async function switchEnv(switchType) {
+	const Switches = switches(switchType);
+	log('Checking switch environment paramaters', 'A');
+	const promissesP = [];
+	const promissesT = [];
+	const promissesF = [];
+	for (let i = 0; i < Switches.length; i++) {
+		promissesP.push(doApi('power', Switches[i]));
+		promissesT.push(doApi('temperature', Switches[i]));
+		promissesF.push(doApi('fans', Switches[i]));
+	}
+	const valuesP = await Promise.all(promissesP);
+	const valuesT = await Promise.all(promissesT);
+	const valuesF = await Promise.all(promissesF);
+	for (let i = 0; i < Switches.length; i++) {
+		if (valuesP[i] === undefined
+		|| valuesT[i] === undefined
+		|| valuesF[i] === undefined) {
+			log(`(ENV) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
+			continue;
+		}
+		switch (Switches[i].OS) {
+			case 'NXOS': {
+				NXOS.handlePower(valuesP[i], switchType, Switches[i].Name);
+				NXOS.handleTemperature(valuesT[i], switchType, Switches[i].Name);
+				NXOS.handleFans(valuesF[i], switchType, Switches[i].Name);
+				break;
+			}
+			case 'EOS': {
+				EOS.handlePower(valuesP[i], switchType, Switches[i].Name);
+				EOS.handleTemperature(valuesT[i], switchType, Switches[i].Name);
+				EOS.handleFans(valuesF[i], switchType, Switches[i].Name);
+				break;
+			}
+			default:
+				break;
+		}
+	}
+	const typeP = switchType == 'Media' ? 'power' : 'power_control';
+	const typeT = switchType == 'Media' ? 'temperature' : 'temperature_control';
+	const typeF = switchType == 'Media' ? 'fans' : 'fans_control';
+	distributeData(typeP, data.power[switchType]);
+	distributeData(typeT, data.temperature[switchType]);
+	distributeData(typeF, data.fans[switchType]);
+}
+
+async function switchInterfaces(switchType) {
+	const Switches = switches(switchType);
+	log('Checking switch interfaces', 'A');
+	const promisses = [];
+	for (let i = 0; i < Switches.length; i++) {
+		promisses.push(doApi('interfaces', Switches[i]));
+	}
+	const values = await Promise.all(promisses);
+	const filteredPorts = {};
+	for (let i = 0; i < Switches.length; i++) {
+		if (values[i] === undefined) {
+			log(`(INT) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
+			continue;
+		}
+		switch (Switches[i].OS) {
+			case 'NXOS': {
+				NXOS.handleInterfaces(values[i], switchType, Switches[i].Name);
+				break;
+			}
+			case 'EOS': {
+				EOS.handleInterfaces(values[i], switchType, Switches[i].Name);
+				break;
+			}
+			default:
+				break;
+		}
+	}
+	ports(switchType).forEach(port => {
+		if (filteredPorts[switchType] === undefined) filteredPorts[switchType] = {};
+		if (filteredPorts[switchType][port.Switch] === undefined) filteredPorts[switchType][port.Switch] = {};
+		if (Object.keys(data.interfaces[switchType][port.Switch]).includes(port.Port)) {
+			filteredPorts[switchType][port.Switch][port.Port] = data.interfaces[switchType][port.Switch][port.Port];
+		}
+
+	})
+	const type = switchType == 'Media' ? 'interfaces' : 'interfaces_control';
+	distributeData(type, filteredPorts[switchType]);
 }
 
 function checkUps() {
@@ -1504,11 +1749,9 @@ function parseTempalteString(string) {
 	return returnArray;
 }
 
-function getDescription(deviceName) {
-	if (typeof deviceName !== 'undefined') {
-		const map = devices().reduce((obj, item) => Object.assign(obj, { [item.name]: item.description }), {});
-		let trimmedDeviceName = deviceName.slice(0, deviceName.lastIndexOf('_') + 1);
-		return map[trimmedDeviceName];
+function getDescription(portName, switchType, switchName) {
+	if (data.interfaces[switchType][switchName][portName]) {
+		return data.interfaces[switchType][switchName][portName].description;
 	} else {
 		return undefined;
 	}
@@ -1518,19 +1761,13 @@ function minutes(mins) {
 	return parseInt(mins) * 60;
 }
 
-function clearEmpties(o) {
-	for (let k in o) {
-		if (!o[k] || typeof o[k] !== 'object') {
-			continue; // If null or not an object, skip to the next iteration
-		}
-
-		// The property is an object
-		clearEmpties(o[k]); // <-- Make a recursive call on the nested object
-		if (Object.keys(o[k]).length === 0) {
-			delete o[k]; // The object had no properties, so delete that property
-		}
+function clearEmpties(object) {
+	for (let key in object) {
+		if (!object[key] || typeof object[key] !== 'object') continue;
+		clearEmpties(object[key]);
+		if (Object.keys(object[key]).length === 0) delete object[key];
 	}
-	return o;
+	return object;
 }
 
 async function startLoopAfterDelay(callback, seconds, ...arguments) {
@@ -1566,7 +1803,7 @@ const EOS = {
 			if ('rxPower' in interface === false) continue
 			if (!keys.includes(interfaceName)) devices[interfaceName] = {};
 			devices[interfaceName].port = interfaceName;
-			devices[interfaceName].description = getDescription(devices[interfaceName].lldp);
+			devices[interfaceName].description = getDescription(interfaceName, switchType, switchName);
 			devices[interfaceName].rxPower = interface.rxPower.toFixed(1);
 			if ('txPower' in interface) devices[interfaceName].txPower = interface.txPower.toFixed(1);
 		}
@@ -1602,7 +1839,7 @@ const EOS = {
 			devices[mac.int].mac.phyState = mac.phy;
 			devices[mac.int].mac.macFault = mac.mac;
 			devices[mac.int].mac.lastChange = mac.last;
-			devices[mac.int].description = getDescription(devices[mac.int].lldp);
+			devices[mac.int].description = getDescription(mac.int, switchType, switchName);
 			devices[mac.int].port = mac.int;
 		}
 		devices = clearEmpties(devices);
@@ -1615,6 +1852,84 @@ const EOS = {
 			if (timeTotal > 300) continue;
 			device.switch = switchName;
 			filteredDevices.push(device);
+		}
+	},
+	handlePower: (result, switchType, switchName) => {
+		const power = {};
+		const PSUs = result.result[1].powerSupplies;
+		for (const PSUIndex in PSUs) {
+			if (Object.hasOwnProperty.call(PSUs, PSUIndex)) {
+				const PSU = PSUs[PSUIndex];
+				const inAlert = PSU.status == "ok" ? false : true;
+				power[PSUIndex] = {
+					"outputPower": PSU.outputPower,
+					"inAlert": inAlert,
+					"uptime": PSU.uptime
+				};
+			}
+		}
+		data.power[switchType][switchName] = power;
+	},
+	handleTemperature: (result, switchType, switchName) => {
+		const slots = result.result[1].cardSlots;
+		const temperature = {};
+		slots.forEach(slot => {
+			const temps = slot.tempSensors.map(sensor => sensor.currentTemperature);
+			const alerts = slot.tempSensors.filter(sensor => sensor.inAlertState);
+			const inAlert = alerts.length > 0 ? false : true;
+			const temp = temps.reduce((partialSum, a) => partialSum + a, 0)/temps.length;
+			temperature[`${slot.entPhysicalClass} ${slot.relPos}`] = {
+				"temp": temp,
+				"inAlert": inAlert
+			};
+		});
+		data.temperature[switchType][switchName] = temperature;
+	},
+	handleFans: (result, switchType, switchName) => {
+		const psuSlots = result.result[1].powerSupplySlots;
+		const traySlots = result.result[1].fanTraySlots;
+		const fans = {};
+		psuSlots.forEach(slot => {
+			const speeds = slot.fans.map(fan => fan.actualSpeed);
+			const speed = speeds.reduce((partialSum, a) => partialSum + a, 0)/speeds.length
+			const inAlert = slot.status !== "ok" ? false : true;
+			fans[slot.label] = {
+				"speed": speed,
+				"inAlert": inAlert
+			};
+		});
+		traySlots.forEach(slot => {
+			const speeds = slot.fans.map(fan => fan.actualSpeed);
+			const speed = speeds.reduce((partialSum, a) => partialSum + a, 0)/speeds.length
+			const inAlert = slot.status !== "ok" ? false : true;
+			fans['Tray'+slot.label] = {
+				"speed": speed,
+				"inAlert": inAlert
+			};
+		});
+		data.fans[switchType][switchName] = fans;
+	},
+	handleInterfaces: (result, switchType, switchName) => {
+		const interfaces = result.result[1].interfaces;
+		data.interfaces[switchType][switchName] = {};
+		for (const interfaceName in interfaces) {
+			if (interfaces.hasOwnProperty.call(interfaces, interfaceName)) {
+				const interface = interfaces[interfaceName];
+				if (interface.hardware !== "ethernet") continue;
+				data.interfaces[switchType][switchName][interfaceName] = {
+					"connected": interface.interfaceStatus == "connected" ? true : false,
+					"description": interface.description,
+					"inRate": interface.interfaceStatistics.inBitsRate,
+					"outRate": interface.interfaceStatistics.outBitsRate,
+					"maxRate": interface.bandwidth,
+					"lastFlap": interface.lastStatusChangeTimestamp,
+					"flapCount": interface.interfaceCounters.linkStatusChanges,
+					"outErrors": interface.interfaceCounters.totalOutErrors,
+					"outDiscards": interface.interfaceCounters.outDiscards,
+					"inErrors": interface.interfaceCounters.totalInErrors,
+					"inDiscards": interface.interfaceCounters.inDiscards
+				}
+			}
 		}
 	}
 }
@@ -1652,7 +1967,7 @@ const NXOS = {
 				if ('rx_pwr' in lane === false) continue
 				if (!keys.includes(interfaceLaneName)) devices[interfaceLaneName] = {};
 				devices[interfaceLaneName].port = interfaceLaneName;
-				devices[interfaceLaneName].description = getDescription(devices[interfaceLaneName].lldp);
+				devices[interfaceLaneName].description = getDescription(interfaceLaneName, switchType, switchName);
 				devices[interfaceLaneName].rxPower = Number(lane.rx_pwr).toFixed(1);
 				if ('tx_pwr' in lane) devices[interfaceLaneName].txPower = Number(interface.tx_pwr).toFixed(1);
 			}
@@ -1688,7 +2003,7 @@ const NXOS = {
 			devices[mac.int].mac.phyState = mac.phy;
 			devices[mac.int].mac.macFault = mac.mac;
 			devices[mac.int].mac.lastChange = mac.last;
-			devices[mac.int].description = getDescription(devices[mac.int].lldp);
+			devices[mac.int].description = getDescription(mac.int, switchType, switchName);
 			devices[mac.int].port = mac.int;
 		}
 		devices = clearEmpties(devices);
@@ -1702,5 +2017,34 @@ const NXOS = {
 			device.switch = switchName;
 			filteredDevices.push(device);
 		}
+	},
+	handlePower: (result, switchType, switchName) => {
+		logs.object(result);
+	},
+	handleTemperature: (result, switchType, switchName) => {
+		logs.object(result);
+	},
+	handleFans: (result, switchType, switchName) => {
+		logs.object(result);
+	},
+	handleInterfaces: (result, switchType, switchName) => {
+		const interfaces = result.result.body.TABLE_interface.ROW_interface;
+		data.interfaces[switchType][switchName] = {};
+		interfaces.forEach(interface => {
+			const interfaceName = interface.interface;
+			data.interfaces[switchType][switchName][interfaceName] = {
+				"connected": interface.state == "up" ? true : false,
+				"description": interface.desc,
+				"inRate": interface.eth_inrate1_bits,
+				"outRate": interface.eth_outrate1_bits,
+				"maxRate": interface.eth_bw,
+				"lastFlap": interface.eth_link_flapped,
+				"flapCount": 1,
+				"outErrors": interface.eth_outerr,
+				"outDiscards": interface.eth_outdiscard,
+				"inErrors": interface.eth_inerr,
+				"inDiscards": interface.eth_indiscard
+			}
+		})
 	}
 }
