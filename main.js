@@ -7,8 +7,8 @@ const fetch = require('node-fetch');
 const AWS = require('aws-sdk');
 const fs = require('fs');
 const path = require('path');
-const {log, logObj, logs, logEvent} = require('xeue-logs');
-const {config} = require('xeue-config');
+const {Logs} = require('xeue-logs');
+const {Config} = require('xeue-config');
 const {SQLSession} = require('xeue-sql');
 const {Server} = require('xeue-webserver');
 const {SysLogServer} = require('./syslog.js');
@@ -331,12 +331,32 @@ const interfaceFrequency = 30;
 
 let isQuiting = false;
 let mainWindow = null;
-let webServer;
 let SQL;
 let configLoaded = false;
 const devEnv = app.isPackaged ? './' : './';
 const __main = path.resolve(__dirname, devEnv);
 
+const logger = new Logs(
+	false,
+	'ArgosLogging',
+	path.join(app.getPath('documents'), 'ArgosData'),
+	'D',
+	false
+)
+const config = new Config(
+	logger
+);
+const webServer = new Server(
+	expressRoutes,
+	logger,
+	version,
+	config,
+	doMessage
+);
+const syslogServer = new SysLogServer(
+	logger,
+	doSysLogMessage
+);
 
 /* Start App */
 
@@ -347,8 +367,7 @@ const __main = path.resolve(__dirname, devEnv);
 	await createWindow();
 
 	{ /* Config */
-		logs.printHeader('Argos Monitoring');
-		config.useLogger(logs);
+		logger.printHeader('Argos Monitoring');
 		config.require('port', [], 'What port shall the server use');
 		config.require('syslogPort', [], 'What port shall the server listen to syslog messages on');
 		config.require('systemName', [], 'What is the name of the system');
@@ -412,16 +431,17 @@ const __main = path.resolve(__dirname, devEnv);
 			AWS.config.credentials = new AWS.Credentials(config.get('awsAccessKeyId'), config.get('awsSecretAccessKey'));
 		}
 
-		logs.setConf({
+		logger.setConf({
 			'createLogFile': config.get('createLogFile'),
 			'logsFileName': 'ArgosLogging',
 			'configLocation': path.join(app.getPath('documents'), 'ArgosData'),
 			'loggingLevel': config.get('loggingLevel'),
 			'debugLineNum': config.get('debugLineNum'),
 		});
-		log('Running version: v'+version, ['H', 'SERVER', logs.g]);
-		log(`Logging to: ${path.join(app.getPath('documents'), 'ArgosData', 'logs')}`, ['H', 'SERVER', logs.g]);
-		log(`Config saved to: ${path.join(app.getPath('documents'), 'ArgosData', 'config.conf')}`, ['H', 'SERVER', logs.g]);
+
+		logger.log('Running version: v'+version, ['H', 'SERVER', logger.g]);
+		logger.log(`Logging to: ${path.join(app.getPath('documents'), 'ArgosData', 'logs')}`, ['H', 'SERVER', logger.g]);
+		logger.log(`Config saved to: ${path.join(app.getPath('documents'), 'ArgosData', 'config.conf')}`, ['H', 'SERVER', logger.g]);
 		config.print();
 		config.userInput(async command => {
 			switch (command) {
@@ -430,7 +450,7 @@ const __main = path.resolve(__dirname, devEnv);
 				if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
 					config.set('debugLineNum', true);
 				}
-				logs.setConf({
+				logger.setConf({
 					'createLogFile': config.get('createLogFile'),
 					'logsFileName': 'ArgosLogging',
 					'configLocation': path.join(app.getPath('documents'), 'ArgosData'),
@@ -443,34 +463,22 @@ const __main = path.resolve(__dirname, devEnv);
 		configLoaded = true;
 	}
 
-	SQL = new SQLSession(
-		config.get('dbHost'),
-		config.get('dbPort'),
-		config.get('dbUser'),
-		config.get('dbPass'),
-		config.get('dbName'),
-		logs
-	);
-	await SQL.init(tables);
-	
-	webServer = new Server(
-		config.get('port'),
-		expressRoutes,
-		logs,
-		version,
-		config,
-		doMessage
-	);
+	if (config.get('localDataBase')) {
+		SQL = new SQLSession(
+			config.get('dbHost'),
+			config.get('dbPort'),
+			config.get('dbUser'),
+			config.get('dbPass'),
+			config.get('dbName'),
+			logger
+		);
+		await SQL.init(tables);
+	}
 
-	syslogServer = new SysLogServer(
-		config.get('syslogPort'),
-		logs,
-		doSysLogMessage
-	);
-	log(`Argos can be accessed at http://localhost:${config.get('port')}`, 'C');
+	webServer.start(config.get('port'));
+	syslogServer.start(config.get('syslogPort'));
 
-	webServer.start();
-	syslogServer.start();
+	logger.log(`Argos can be accessed at http://localhost:${config.get('port')}`, 'C');
 	mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}`);
 
 	connectToWebServer(true).then(()=>{
@@ -542,7 +550,7 @@ async function setUpApp() {
 			config.fromAPI(path.join(app.getPath('documents'), 'ArgosData','config.conf'), configQuestion, configDone);
 			break;
 		case 'stop':
-			log('Not implemeneted yet: Cancle config change');
+			logger.log('Not implemeneted yet: Cancle config change');
 			break;
 		case 'show':
 			config.print();
@@ -568,7 +576,7 @@ async function setUpApp() {
 		if (BrowserWindow.getAllWindows().length === 0) createWindow();
 	});
 
-	logEvent.on('logSend', message => {
+	logger.on('logSend', message => {
 		if (!isQuiting) mainWindow.webContents.send('log', message);
 	});
 }
@@ -634,12 +642,12 @@ function loadData(file) {
 		try {
 			return JSON.parse(dataRaw);
 		} catch (error) {
-			logObj(`There is an error with the syntax of the JSON in ${file}.json file`, error, 'E');
+			logger.object(`There is an error with the syntax of the JSON in ${file}.json file`, error, 'E');
 			return [];
 		}
 	} catch (error) {
-		log(`Cloud not read the file ${file}.json, attempting to create new file`, 'W');
-		logs.debug('File error:', error);
+		logger.log(`Cloud not read the file ${file}.json, attempting to create new file`, 'W');
+		logger.debug('File error:', error);
 		const fileData = [];
 		switch (file) {
 		case 'Devices':
@@ -664,6 +672,14 @@ function loadData(file) {
 				'Port': 'Ethernet1/1/1',
 			};
 			break;
+		case 'Pings':
+			fileData[0] = {
+				'Name':'Placeholder',
+				'IP':'0.0.0.0',
+				'SSH': false,
+				'HTTP': false,
+				'HTTPS': false
+			};
 		default:
 			fileData[0] = {
 				'Name':'Placeholder',
@@ -682,7 +698,7 @@ function writeData(file, data) {
 	try {
 		fs.writeFileSync(`${app.getPath('documents')}/ArgosData/data/${file}.json`, JSON.stringify(data, undefined, 2));
 	} catch (error) {
-		logObj(`Cloud not write the file ${file}.json, do we have permission to access the file?`, error, 'E');
+		logger.object(`Cloud not write the file ${file}.json, do we have permission to access the file?`, error, 'E');
 	}
 }
 
@@ -729,7 +745,7 @@ function expressRoutes(expressApp) {
 	expressApp.use(express.static(__static));
 
 	expressApp.get('/',  (req, res) =>  {
-		log('New client connected', 'A');
+		logger.log('New client connected', 'A');
 		res.header('Content-type', 'text/html');
 		res.render('web', {
 			switches:switches('Media'),
@@ -748,32 +764,32 @@ function expressRoutes(expressApp) {
 	});
 
 	expressApp.get('/fibre', (req, res) => {
-		log('Request for fibre data', 'D');
+		logger.log('Request for fibre data', 'D');
 		res.send(JSON.stringify(data.fibre));
 	});
 
 	expressApp.get('/ups', (req, res) => {
-		log('Request for UPS data', 'D');
+		logger.log('Request for UPS data', 'D');
 		res.send(JSON.stringify(data.ups));
 	});
 
 	expressApp.get('/phy', (req, res) => {
-		log('Request for PHY/FEC data', 'D');
+		logger.log('Request for PHY/FEC data', 'D');
 		res.send(JSON.stringify(data.phy));
 	});
 
 	expressApp.get('/mac', (req, res) => {
-		log('Request for mac/flap data', 'D');
+		logger.log('Request for mac/flap data', 'D');
 		res.send(JSON.stringify(data.mac));
 	});
 
 	expressApp.get('/devices', (req, res) => {
-		log('Request for devices data', 'D');
+		logger.log('Request for devices data', 'D');
 		res.send(JSON.stringify(data.devices.Media));
 	});
 
 	expressApp.get('/getConfig', (req, res) => {
-		log('Request for devices config', 'D');
+		logger.log('Request for devices config', 'D');
 		let catagory = req.query.catagory;
 		let data;
 		switch (catagory) {
@@ -802,32 +818,32 @@ function expressRoutes(expressApp) {
 	});
 
 	expressApp.post('/setswitches', (req, res) => {
-		log('Request to set switches config data', 'D');
+		logger.log('Request to set switches config data', 'D');
 		writeData('Switches', req.body);
 		res.send('Done');
 	});
 	expressApp.post('/setports', (req, res) => {
-		log('Request to set ports config data', 'D');
+		logger.log('Request to set ports config data', 'D');
 		writeData('Ports', req.body);
 		res.send('Done');
 	});
 	expressApp.post('/setdevices', (req, res) => {
-		log('Request to set devices config data', 'D');
+		logger.log('Request to set devices config data', 'D');
 		writeData('Devices', req.body);
 		res.send('Done');
 	});
 	expressApp.post('/setups', (req, res) => {
-		log('Request to set ups config data', 'D');
+		logger.log('Request to set ups config data', 'D');
 		writeData('Ups', req.body);
 		res.send('Done');
 	});
 	expressApp.post('/setframes', (req, res) => {
-		log('Request to set frames config data', 'D');
+		logger.log('Request to set frames config data', 'D');
 		writeData('Frames', req.body);
 		res.send('Done');
 	});
 	expressApp.post('/setpings', (req, res) => {
-		log('Request to set pings config data', 'D');
+		logger.log('Request to set pings config data', 'D');
 		writeData('Pings', req.body);
 		res.send('Done');
 	});
@@ -842,7 +858,7 @@ async function doMessage(msgObj, socket) {
 	}
 	switch (payload.command) {
 	case 'meta':
-		logObj('Received', msgObj, 'D');
+		logger.object('Received', msgObj, 'D');
 		socket.send('Received meta');
 		break;
 	case 'register':
@@ -864,7 +880,7 @@ async function doMessage(msgObj, socket) {
 		}
 		break;
 	default:
-		logObj('Unknown message', msgObj, 'W');
+		logger.object('Unknown message', msgObj, 'W');
 	}
 }
 
@@ -891,7 +907,7 @@ async function doSysLogMessage(msg, info) {
 }
 
 async function getTemperature(header, payload) {
-	log(`Getting temps for ${header.system}`, 'D');
+	logger.log(`Getting temps for ${header.system}`, 'D');
 	const from = payload.from;
 	const to = payload.to;
 	const dateQuery = `SELECT ROW_NUMBER() OVER (ORDER BY PK) AS Number, \`PK\`, \`time\` FROM \`temperature\` WHERE time BETWEEN FROM_UNIXTIME(${from}) AND FROM_UNIXTIME(${to}) AND \`system\` = '${header.system}' GROUP BY \`time\`; `;
@@ -961,7 +977,7 @@ async function getTemperature(header, payload) {
 }
 
 async function getSyslog(header, payload) {
-	log(`Getting syslogs for ${header.system}, ips: ${payload.ips.join(',')}`, 'D');
+	logger.log(`Getting syslogs for ${header.system}, ips: ${payload.ips.join(',')}`, 'D');
 	const from = payload.from;
 	const to = payload.to;
 	let whereIP = '';
@@ -1016,12 +1032,12 @@ function coreDoRegister(socket, msgObj) {
 	}
 	if (header.version !== version) {
 		if (header.version.substr(0, header.version.indexOf('.')) != version.substr(0, version.indexOf('.'))) {
-			log('Connected client has different major version, it will not work with this server!', 'E');
+			logger.log('Connected client has different major version, it will not work with this server!', 'E');
 		} else {
-			log('Connected client has differnet version, support not guaranteed', 'W');
+			logger.log('Connected client has differnet version, support not guaranteed', 'W');
 		}
 	}
-	log(`${logs.g}${header.fromID}${logs.reset} Registered as new client`, 'D');
+	logger.log(`${logger.g}${header.fromID}${logger.reset} Registered as new client`, 'D');
 	socket.connected = true;
 }
 
@@ -1049,7 +1065,7 @@ function distributeData(type, data) {
 
 async function lldpLoop(switchType) {
 	const Switches = switches(switchType);
-	log(`Getting LLDP neighbors for ${switchType} switches`, 'A');
+	logger.log(`Getting LLDP neighbors for ${switchType} switches`, 'A');
 	const promisses = [];
 	for (let i = 0; i < Switches.length; i++) {
 		promisses.push(doApi('neighborRequest', Switches[i]));
@@ -1057,7 +1073,7 @@ async function lldpLoop(switchType) {
 	const values = await Promise.all(promisses);
 	for (let i = 0; i < values.length; i++) {
 		if (values[i] === undefined) {
-			log(`(LLDP) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
+			logger.log(`(LLDP) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
 			continue;
 		}
 		switch (Switches[i].OS) {
@@ -1078,7 +1094,7 @@ async function lldpLoop(switchType) {
 
 async function switchFlap(switchType) {
 	const Switches = switches(switchType);
-	log('Checking for recent interface dropouts', 'A');
+	logger.log('Checking for recent interface dropouts', 'A');
 	const promisses = [];
 	for (let i = 0; i < Switches.length; i++) {
 		promisses.push(doApi('flapRequest', Switches[i]));
@@ -1087,7 +1103,7 @@ async function switchFlap(switchType) {
 	const filteredDevices = [];
 	for (let i = 0; i < values.length; i++) {
 		if (values[i] === undefined) {
-			log(`(FLAP) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
+			logger.log(`(FLAP) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
 			continue;
 		}
 		switch (Switches[i].OS) {
@@ -1111,7 +1127,7 @@ async function switchFlap(switchType) {
 function switchPhy(switchType) {
 	if (config.get('devMode')) return;
 	const Switches = switches('Media');
-	log('Looking for high numbers of PHY/FEC errors', 'A');
+	logger.log('Looking for high numbers of PHY/FEC errors', 'A');
 	function processSwitchPhy(response, devices) {
 		const statuses = response.result[1].interfacePhyStatuses;
 		const keys = Object.keys(devices);
@@ -1162,7 +1178,7 @@ function switchPhy(switchType) {
 					}
 				}
 			} else {
-				log(`(PHY) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
+				logger.log(`(PHY) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
 			}
 		}
 		data.phy = filteredDevices;
@@ -1172,7 +1188,7 @@ function switchPhy(switchType) {
 
 async function switchFibre(switchType) {
 	const Switches = switches(switchType);
-	log('Looking for low fibre levels in trancievers', 'A');
+	logger.log('Looking for low fibre levels in trancievers', 'A');
 	const promisses = [];
 	for (let i = 0; i < Switches.length; i++) {
 		promisses.push(doApi('transRequest', Switches[i]));
@@ -1181,7 +1197,7 @@ async function switchFibre(switchType) {
 	const filteredDevices = [];
 	for (let i = 0; i < values.length; i++) {
 		if (values[i] === undefined) {
-			log(`(TRANS) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
+			logger.log(`(TRANS) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
 			continue;
 		}
 		switch (Switches[i].OS) {
@@ -1204,7 +1220,7 @@ async function switchFibre(switchType) {
 
 async function switchEnv(switchType) {
 	const Switches = switches(switchType);
-	log('Checking switch environment paramaters', 'A');
+	logger.log('Checking switch environment paramaters', 'A');
 	const promissesP = [];
 	const promissesT = [];
 	const promissesF = [];
@@ -1220,7 +1236,7 @@ async function switchEnv(switchType) {
 		if (valuesP[i] === undefined
 		|| valuesT[i] === undefined
 		|| valuesF[i] === undefined) {
-			log(`(ENV) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
+			logger.log(`(ENV) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
 			continue;
 		}
 		switch (Switches[i].OS) {
@@ -1250,7 +1266,7 @@ async function switchEnv(switchType) {
 
 async function switchInterfaces(switchType) {
 	const Switches = switches(switchType);
-	log('Checking switch interfaces', 'A');
+	logger.log('Checking switch interfaces', 'A');
 	const promisses = [];
 	for (let i = 0; i < Switches.length; i++) {
 		promisses.push(doApi('interfaces', Switches[i]));
@@ -1259,7 +1275,7 @@ async function switchInterfaces(switchType) {
 	const filteredPorts = {};
 	for (let i = 0; i < Switches.length; i++) {
 		if (values[i] === undefined) {
-			log(`(INT) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
+			logger.log(`(INT) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
 			continue;
 		}
 		switch (Switches[i].OS) {
@@ -1290,11 +1306,11 @@ async function switchInterfaces(switchType) {
 function checkUps() {
 	if (config.get('devMode')) return;
 	let Ups = ups();
-	log('Getting UPS status', 'A');
+	logger.log('Getting UPS status', 'A');
 	function getUpsStatus(ip) {
 		return fetch('http://' + ip + '/json/live_data.json?_=' + Math.floor(Math.random() * 10000000), {
 			method: 'GET'
-		}).then((response) => {
+		}).then(response => {
 			if (response.status === 200) {
 				return response.json().then((jsonRpcResponse) => {
 					return {
@@ -1310,6 +1326,8 @@ function checkUps() {
 					};
 				});
 			}
+		}).catch(error => {
+			logger.warn(`Cannot reach UPS on: ${ip}`, error);
 		});
 	}
 
@@ -1340,7 +1358,7 @@ function checkUps() {
 }
 
 function checkDevices(switchType, fromList) {
-	log('Checking device lists for missing devices', 'A');
+	logger.log('Checking device lists for missing devices', 'A');
 	const Devices = devices();
 	const missingDevices = {};
 	let expectedDevices = [];
@@ -1409,15 +1427,15 @@ function doApi(request, Switch) {
 		default:
 			break;
 	}
-	log(`Polling switch API endpoint ${protocol}://${ip}/${endPoint} for data`, 'D');
+	logger.log(`Polling switch API endpoint ${protocol}://${ip}/${endPoint} for data`, 'D');
 
 	return fetch(`${protocol}://${ip}/${endPoint}`, options).then((response) => {
 		if (response.status === 200) {
 			return response.json().then((jsonRpcResponse) => { return jsonRpcResponse; });
 		}
 	}).catch((error)=>{
-		log(`Failed to connect to switch ${ip}`, 'E');
-		logObj(error, 'D');
+		logger.log(`Failed to connect to switch on: ${ip}`, 'E');
+		logger.object(error, 'D');
 	});
 }
 
@@ -1431,8 +1449,15 @@ function localPings() {
 		ping.promise.probe(host.IP, {
 			timeout: 10
 		}).then(function(res) {
-			log(`IP: ${host.IP}, Online: ${res.alive}`, 'A');
-			distributeData('localPing', {'status':res.alive, 'IP':host.IP, 'Name':host.Name});
+			logger.log(`IP: ${host.IP}, Online: ${res.alive}`, 'A');
+			distributeData('localPing', {
+				'status':res.alive,
+				'IP':host.IP,
+				'Name':host.Name,
+				'SSH':host.SSH,
+				'HTTP':host.HTTP,
+				'HTTPS':host.HTTPS
+			});
 		});
 	});
 }
@@ -1444,24 +1469,29 @@ function localPings() {
 async function logTemp() {
 	if (config.get('devMode')) return;
 	let Frames = frames();
-	log('Getting temperatures', 'A');
+	logger.log('Getting temperatures', 'A');
 
 	let promises = [];
 
 	for (let index = 0; index < Frames.length; index++) {
 		const frame = Frames[index];
-		const response = await fetch('http://'+frame.IP);
-		promises.push(response.text());
+		try {
+			const response = await fetch('http://'+frame.IP);
+			promises.push(response.text());
+		} catch (error) {
+			logger.warn(`Cannot reach frame on: ${frame.IP}`, error);
+		}
 	}
 
+	if (promises.length < 1) return;
 	const results = await Promise.allSettled(promises);
-	log('Got temperature data, processing', 'D');
+	logger.log('Got temperature data, processing', 'D');
 	let tempSum = 0;
 	let tempValid = 0;
 	const socketSend = {};
 
 	for (let index = 0; index < Frames.length; index++) {
-		const frameData = results[index];
+		const frameData = await results[index];
 
 		if (frameData.status == 'fulfilled') {
 			try {				
@@ -1473,12 +1503,12 @@ async function logTemp() {
 					let unfilteredTemp = frameData.value.split('<p><b>Temperature In:</b></p>')[1].slice(29,33);
 					temp = parseInt(unfilteredTemp.substring(0, unfilteredTemp.indexOf(')')));
 				} else {
-					log(`${Frames[index].Name} frame temperature is not OK`, 'W');
+					logger.log(`${Frames[index].Name} frame temperature is not OK`, 'W');
 				}
 				Frames[index].Temp = temp;
 				tempSum += temp;
 				tempValid++;
-				log(`${Frames[index].Name} temperature = ${temp} deg C`, 'D');
+				logger.log(`${Frames[index].Name} temperature = ${temp} deg C`, 'D');
 				if (config.get('localDataBase')) SQL.insert({
 					'frame': Frames[index].Name,
 					'temperature': Frames[index].Temp,
@@ -1486,25 +1516,25 @@ async function logTemp() {
 				}, 'temperature');
 				socketSend[Frames[index].Name] = Frames[index].Temp;
 			} catch (error) {
-				logObj(`Error processing data for from: '${Frames[index].Name}'`, error, 'W');
+				logger.object(`Error processing data for from: '${Frames[index].Name}'`, error, 'W');
 			}
 		} else {
-			log(`Can't connect to frame: '${Frames[index].Name}'`, 'W');
+			logger.log(`Can't connect to frame: '${Frames[index].Name}'`, 'W');
 		}
 	}
 
 	let tempAvg;
 
 	if (tempValid == 0) {
-		log('Invalid temperature measured connections must have failed', 'E');
+		logger.log('Invalid temperature measured connections must have failed', 'E');
 		sendSms('CANNOT CONNECT TO MCR, MAYBE IT HAS MELTED?');
 	} else {
 		tempAvg = tempSum / tempValid;
-		log(`Average temperature = ${tempAvg} deg C`, 'D');
-		log(`Warning temperature = ${config.get('warningTemperature')} deg C`, 'D');
+		logger.log(`Average temperature = ${tempAvg} deg C`, 'D');
+		logger.log(`Warning temperature = ${config.get('warningTemperature')} deg C`, 'D');
 
 		if (tempAvg > config.get('warningTemperature')) {
-			log('Warning: Temperature over warning limit, sending SMS', 'W');
+			logger.log('Warning: Temperature over warning limit, sending SMS', 'W');
 			sendSms(`Commitment to environment sustainability failed, MCR IS MELTING: ${tempAvg} deg C`);
 		}
 		sendCloudData({'command':'log', 'type':'temperature', 'data':Frames});
@@ -1527,13 +1557,13 @@ async function logTemp() {
 
 function webLogPing() {
 	if (!config.get('webEnabled')) return;
-	log('Pinging webserver', 'A');
+	logger.log('Pinging webserver', 'A');
 	sendCloudData({'command':'log', 'type':'ping'});
 }
 
 function webLogBoot() {
 	if (!config.get('webEnabled')) return;
-	log('Sending boot');
+	logger.log('Sending boot');
 	sendCloudData({'command':'log', 'type':'boot'});
 }
 
@@ -1547,9 +1577,9 @@ function sendSms(msg) {
 
 	let promise = new AWS.SNS({ apiVersion: '2010-03-31' }).publish(params).promise();
 	promise.then(function (data) {
-		log(`Text message sent - messageId: ${data.MessageId}`);
+		logger.log(`Text message sent - messageId: ${data.MessageId}`);
 	}).catch(function (err) {
-		logs.error(err, err.stack);
+		logger.error(err, err.stack);
 	});
 }
 
@@ -1568,7 +1598,7 @@ async function connectToWebServer(retry = false) {
 	if ((!cloudServer.connected && cloudServer.active && cloudServer.attempts < 3) || (retry && !cloudServer.connected)) {
 		const protocol = config.get('secureWebSocketEndpoint') ? 'wss' : 'ws';
 		if (retry) {
-			log(`Retrying connection to dead server: ${logs.r}${protocol}://${cloudServer.address}${logs.reset}`, 'W');
+			logger.log(`Retrying connection to dead server: ${logger.r}${protocol}://${cloudServer.address}${logger.reset}`, 'W');
 		}
 		cloudServer.socket = new WebSocket(`${protocol}://${cloudServer.address}`);
 
@@ -1579,7 +1609,7 @@ async function connectToWebServer(retry = false) {
 				payload.name = config.get('systemName');
 				sendCloudData(payload);
 				resolve();
-				log(`${logs.g}${cloudServer.address}${logs.reset} Established a connection to webserver`, 'S');
+				logger.log(`${logger.g}${cloudServer.address}${logger.reset} Established a connection to webserver`, 'S');
 				cloudServer.connected = true;
 				cloudServer.active = true;
 				cloudServer.attempts = 0;
@@ -1590,9 +1620,9 @@ async function connectToWebServer(retry = false) {
 			try {
 				const msgObj = JSON.parse(msgJSON);
 				if (msgObj.payload.command !== 'ping' && msgObj.payload.command !== 'pong') {
-					logObj('Received from other server', msgObj, 'A');
+					logger.object('Received from other server', msgObj, 'A');
 				} else if (config.get('printPings') == true) {
-					logObj('Received from other server', msgObj, 'A');
+					logger.object('Received from other server', msgObj, 'A');
 				}
 				switch (msgObj.payload.command) {
 				case 'ping':
@@ -1601,29 +1631,29 @@ async function connectToWebServer(retry = false) {
 					});
 					break;
 				case 'data':
-					log('Recieved temp/ping data from server', 'D');
+					logger.log('Recieved temp/ping data from server', 'D');
 					break;
 				default:
-					logObj('Received unknown from other server', msgObj, 'W');
+					logger.object('Received unknown from other server', msgObj, 'W');
 				}
 			} catch (e) {
 				try {
 					const msgObj = JSON.parse(msgJSON);
 					if (msgObj.payload.command !== 'ping' && msgObj.payload.command !== 'pong') {
-						logObj('Received from other server', msgObj, 'A');
+						logger.object('Received from other server', msgObj, 'A');
 					} else if (config.get('printPings') == true) {
-						logObj('Received from other server', msgObj, 'A');
+						logger.object('Received from other server', msgObj, 'A');
 					}
 					if (typeof msgObj.type == 'undefined') {
 						let stack = e.stack.toString().split(/\r\n|\n/);
 						stack = JSON.stringify(stack, null, 4);
-						log(`Server error, stack trace: ${stack}`, 'E');
+						logger.log(`Server error, stack trace: ${stack}`, 'E');
 					} else {
-						log('A device is using old \'chiltv\' data format, upgrade it to v4.0 or above', 'E');
+						logger.log('A device is using old \'chiltv\' data format, upgrade it to v4.0 or above', 'E');
 					}
 				} catch (e2) {
-					log('Invalid JSON from other server- '+e, 'E');
-					logObj('Received from other server', JSON.parse(msgJSON), 'A');
+					logger.log('Invalid JSON from other server- '+e, 'E');
+					logger.object('Received from other server', JSON.parse(msgJSON), 'A');
 				}
 			}
 		});
@@ -1633,18 +1663,18 @@ async function connectToWebServer(retry = false) {
 			delete cloudServer.socket;
 			cloudServer.attempts++;
 			if (!inError) {
-				log(`${logs.r}${cloudServer.address}${logs.reset} Outbound webserver connection closed`, 'W');
+				logger.log(`${logger.r}${cloudServer.address}${logger.reset} Outbound webserver connection closed`, 'W');
 			}
 		});
 
 		cloudServer.socket.on('error', function error() {
 			inError = true;
-			log(`Could not connect to server: ${logs.r}${cloudServer.address}${logs.reset}`, 'E');
+			logger.log(`Could not connect to server: ${logger.r}${cloudServer.address}${logger.reset}`, 'E');
 		});
 		
 	} else if (!cloudServer.connected && cloudServer.active) {
 		cloudServer.active = false;
-		log(`Server not responding, changing status to dead: ${logs.r}${cloudServer.address}${logs.reset}`, 'E');
+		logger.log(`Server not responding, changing status to dead: ${logger.r}${cloudServer.address}${logger.reset}`, 'E');
 	}
 	return promise;
 }
@@ -1683,7 +1713,7 @@ async function configQuestion(question, current, options) {
 
 async function configDone() {
 	mainWindow.webContents.send('configDone', true);
-	logs.setConf({
+	logger.setConf({
 		'createLogFile': config.get('createLogFile'),
 		'logsFileName': 'ArgosLogging',
 		'configLocation': path.join(app.getPath('documents'), 'ArgosData'),
@@ -1773,7 +1803,7 @@ function clearEmpties(object) {
 async function startLoopAfterDelay(callback, seconds, ...arguments) {
 	setInterval(callback, seconds * 1000, ...arguments);
 	callback(...arguments);
-	log('Starting '+callback.name, 'A');
+	logger.log('Starting '+callback.name, 'A');
 	await sleep(1);
 }
 
@@ -1846,7 +1876,7 @@ const EOS = {
 		for (let deviceNumber in devices) {
 			const device = devices[deviceNumber]
 			if (device.mac === undefined) continue;
-			if(!('lastChange' in device.mac)) log(device+' seems to have an issue','W');
+			if(!('lastChange' in device.mac)) logger.log(device+' seems to have an issue','W');
 			const time = device.mac.lastChange.split(':');
 			const timeTotal = parseInt(time[0]) * 3600 + parseInt(time[1]) * 60 + parseInt(time[2]);
 			if (timeTotal > 300) continue;
@@ -2010,7 +2040,7 @@ const NXOS = {
 		for (let deviceNumber in devices) {
 			const device = devices[deviceNumber]
 			if (device.mac === undefined) continue;
-			if(!('lastChange' in device.mac)) log(device+' seems to have an issue','W');
+			if(!('lastChange' in device.mac)) logger.log(device+' seems to have an issue','W');
 			const time = device.mac.lastChange.split(':');
 			const timeTotal = parseInt(time[0]) * 3600 + parseInt(time[1]) * 60 + parseInt(time[2]);
 			if (timeTotal > 300) continue;
@@ -2019,13 +2049,13 @@ const NXOS = {
 		}
 	},
 	handlePower: (result, switchType, switchName) => {
-		logs.object(result);
+		logger.object(result);
 	},
 	handleTemperature: (result, switchType, switchName) => {
-		logs.object(result);
+		logger.object(result);
 	},
 	handleFans: (result, switchType, switchName) => {
-		logs.object(result);
+		logger.object(result);
 	},
 	handleInterfaces: (result, switchType, switchName) => {
 		const interfaces = result.result.body.TABLE_interface.ROW_interface;

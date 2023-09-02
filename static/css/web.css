@@ -176,3 +176,56 @@ nav.drag {
   -webkit-mask: radial-gradient(farthest-side,#0000 calc(99% - var(--b)),#000 calc(100% - var(--b)));
           mask: radial-gradient(farthest-side,#0000 calc(99% - var(--b)),#000 calc(100% - var(--b)));
 }
+
+[data-editor] [data-type="check"][data-value="true"]:empty::before {
+  content:"✓";
+  background: green;
+  border-radius: 50%;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: block;
+  text-align: center;
+  border: 1px solid;
+  font-size: 88%;
+  font-weight: bold;
+}
+
+
+.s_sort_cont {
+  width: 10px;
+  position: absolute;
+  left: 0.5rem;
+  top: 0;
+  height: 100%;
+}
+
+.sortable .\.s_sort_b {
+  display: block;
+}
+
+.sortedDesc .\.s_sort_u {
+  display: block;
+}
+
+.sortedAsc .\.s_sort_d {
+  display: block;
+}
+
+.\.s_sort_u,
+.\.s_sort_d,
+.\.s_sort_b,
+.sortedAsc .\.s_sort_b,
+.sortedDesc .\.s_sort_b {
+	display: none;
+}
+
+.sortable {
+  position: relative;
+  padding-left: 1.5rem !important;
+  fill: #fff;
+  cursor: pointer;
+}
+
+.sorted {
+  box-shadow: 0 0 0 100px #ffffff36 inset !important;
+}

@@ -1,0 +1,94 @@
+<section class="tab-pane fade masonry" id="nav-control" data-editor="control" role="tabpanel" aria-labelledby="nav-control-tab">
+    <div class="text-light text-muted brick" data-type="Control" data-catagory="alive">
+        <h4>Missing devices</h4>
+        <span class="text-muted">Last updated <span id="lastAlive"></span></span>
+        <table data-catagory="alive" class="table table-dark text-muted table-sm">
+            <thead>
+                <th scope="col">Name</th>
+                <% Object.keys(controlSwitches).forEach(function(prop) { %>
+                    <th scope="col"><%- controlSwitches[prop].Name%></th>
+                <% }); %>
+            </thead>
+            <tbody data-template="devices">
+            </tbody>
+        </table>
+    </div>
+    <div class="text-light text-muted brick" data-type="Control" data-catagory="fibre">
+        <h4>Low SFP/QSFP fibre RX levels</h4>
+        <span class="text-muted">Last updated <span id="lastTra"></span></span>
+        <table data-catagory="fibre" class="table table-dark text-muted table-sm">
+            <thead>
+                <th scope="col">Switch</th>
+                <th scope="col">Port</th>
+                <th scope="col">Name</th>
+                <th scope="col">Description</th>
+                <th scope="col">RX power</th>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+    <div class="text-light text-muted brick" data-type="Control" data-catagory="interfaces">
+        <h4>Port Monitoring</h4>
+        <span class="text-muted">Last updated <span id="lastInterfaces"></span></span>
+        <table data-catagory="interfaces" class="table table-dark text-muted">
+            <thead>
+                <th scope="col">Port Info</th>
+                <th scope="col">Errors</th>
+                <th scope="col">Usage</th>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+    <% if (webEnabled) { %>
+        <div class="text-light" id="col-ping">
+            <h4>Argos to internet pings</h4>
+            <span class="text-muted">Last updated <span id="lastPing">never</span></span>
+            <canvas id="pingChart"></canvas>
+            <div class="buttonBox">
+                <div>
+                    Select from
+                    <button id="pingFromPick" class="btn btn-secondary btn-sm"></button>
+                    <input type="hidden" id="pingFrom" value="">
+                    until
+                    <button id="pingToPick" class="btn btn-secondary btn-sm"></button>
+                    <input type="hidden" id="pingTo" value="">
+                </div>
+                <div class="pt-1">
+                    Or the last
+                    <button class="pingBut btn btn-secondary btn-sm" data-time="2419200">Month</button>
+                    <button class="pingBut btn btn-secondary btn-sm" data-time="604800">Week</button>
+                    <button class="pingBut btn btn-secondary btn-sm" data-time="86400">Day</button>
+                    <button class="pingBut btn btn-secondary btn-sm" data-time="43200">12 Hours</button>
+                    <button class="pingBut btn btn-secondary btn-sm" data-time="21600">6 Hours</button>
+                    <button class="pingBut btn btn-secondary btn-sm" data-time="7200">2 Hours</button>
+                </div>
+            </div>
+        </div>
+        <div class="text-light" id="col-online">
+            <h4>Argos boots</h4>
+            <span class="text-muted">Last updated <span id="lastBoot">never</span></span>
+            <canvas id="bootChart"></canvas>
+            <div class="buttonBox">
+                <div>
+                    Select from
+                    <button id="bootFromPick" class="btn btn-secondary btn-sm"></button>
+                    <input type="hidden" id="bootFrom" value="">
+                    until
+                    <button id="bootToPick" class="btn btn-secondary btn-sm"></button>
+                    <input type="hidden" id="bootTo" value="">
+                </div>
+                <div class="pt-1">
+                    Or the last
+                    <button class="bootBut btn btn-secondary btn-sm" data-time="2419200">Month</button>
+                    <button class="bootBut btn btn-secondary btn-sm" data-time="604800">Week</button>
+                    <button class="bootBut btn btn-secondary btn-sm" data-time="86400">Day</button>
+                    <button class="bootBut btn btn-secondary btn-sm" data-time="43200">12 Hours</button>
+                    <button class="bootBut btn btn-secondary btn-sm" data-time="21600">6 Hours</button>
+                    <button class="bootBut btn btn-secondary btn-sm" data-time="7200">2 Hours</button>
+                </div>
+            </div>
+        </div>
+    <% } %>
+</section>

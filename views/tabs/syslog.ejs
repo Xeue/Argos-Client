@@ -1,0 +1,55 @@
+<section class="tab-pane fade masonry masonry-1" id="nav-syslog" data-editor="syslog" role="tabpanel" aria-labelledby="nav-syslog-tab">
+    <div class="text-light brick" data-type="Control" data-catagory="syslog">
+        <div class="d-flex justify-content-between flex-wrap">
+            <h4>Syslogs</h4>
+            <div class="buttonBox d-flex gap-2 flex-wrap">
+                <div class="d-flex align-self-center">
+                    <button id="syslogHistogramToggle" class="btn btn-sm btn-secondary me-2"></button>
+                    <label for="syslogSelect" class="pe-2 pt-1">Devices</label>
+                    <select id="syslogSelect" multiple>
+                        <option value="all" selected="selected">All</option>
+                        <% Object.keys(pings).forEach(IP => { %>
+                            <option value="<%- IP %>"><%- pings[IP] %></option>
+                        <% }); %>
+                    </select>
+                </div>
+                <div class="d-flex align-self-center">
+                    <span class="pe-2 pt-1">During the last</span>
+                    <select id="syslogDurationPreset" class="btn bg-secondary text-light d-inline active">
+                        <option value="live" selected>Live updates</option>
+                        <option value="3600">1 Hour</button>
+                        <option value="7200">2 Hours</button>
+                        <option value="21600">6 Hours</button>
+                        <option value="43200">12 Hours</button>
+                        <option value="86400">1 Day</button>
+                        <option value="259200">3 Days</button>
+                        <option value="604800">Week</button>
+                        <option value="2419200">Month</button>
+                        <option value="290304000">All</button>
+                    </select>
+                </div>
+                <div class="d-flex align-self-center">
+                    <span class="pe-2">Or select from</span>
+                    <button id="syslogFromPick" class="btn btn-secondary btn-sm"></button>
+                    <input type="hidden" id="syslogFrom" value="">
+                    <span class="px-2">until</span>
+                    <button id="syslogToPick" class="btn btn-secondary btn-sm"></button>
+                    <input type="hidden" id="syslogTo" value="">
+                </div>
+            </div>
+        </div>
+        <span class="text-muted">Last updated <span id="lastSyslog"></span></span>
+        <table data-catagory="syslog" class="table table-dark table-sm" data-mode="live">
+            <thead>
+                <tr>
+                    <th>Message</th>
+                    <th>From</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody data-template="syslog">
+            </tbody>
+        </table>
+        <canvas id="syslogHistogram"></canvas>
+    </div>
+</section>

@@ -1,0 +1,28 @@
+<section class="tab-pane fade masonry masonry-2" id="nav-pings" data-editor="pings" role="tabpanel" aria-labelledby="nav-pings-tab">
+    <div class="text-light" id="col-pings-up">
+        <h4>Alive Devices</h4>
+        <span class="text-muted">Last updated <span id="lastLocalPingUp">never</span></span>
+        <table id="pingLocalUp" class="table table-dark table-sm">
+            <thead>
+                <th scope="col" class="bg-success sortable"><%- include('../icons/sortarrow.ejs'); %>Name</th>
+                <th scope="col" class="bg-success sortable"><%- include('../icons/sortarrow.ejs'); %>IP</th>
+                <th scope="col" class="bg-success sortable w-25"><%- include('../icons/sortarrow.ejs'); %>Actions</th>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+    <div class="text-light" id="col-pings-down">
+        <h4>Down Devices</h4>
+        <span class="text-muted">Last updated <span id="lastLocalPingDown">never</span></span>
+        <table id="pingLocalDown" class="table table-dark table-sm">
+            <thead>
+                <th scope="col" class="bg-danger sortable"><%- include('../icons/sortarrow.ejs'); %>Name</th>
+                <th scope="col" class="bg-danger sortable"><%- include('../icons/sortarrow.ejs'); %>IP</th>
+                <th scope="col" class="bg-danger sortable w-25"><%- include('../icons/sortarrow.ejs'); %>Actions</th>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+</section>

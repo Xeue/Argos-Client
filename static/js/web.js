@@ -34,6 +34,20 @@ templates.nameIP = `<% for(i = 0; i < devices.length; i++) { %>
   </tr>
 <% } %>`;
 
+templates.pings = `<% for(i = 0; i < devices.length; i++) { %>
+	<tr data-index="<%=i%>" data-template="pings">
+	  <td data-type="text" data-key="Name" data-value="<%-devices[i].Name%>"><%-devices[i].Name%></td>
+	  <td data-type="text" data-key="IP" data-value="<%-devices[i].IP%>"><%-devices[i].IP%></td>
+	  <td data-type="check" data-key="SSH" data-value="<%-devices[i].SSH%>" readonly></td>
+	  <td data-type="check" data-key="HTTP" data-value="<%-devices[i].HTTP%>" readonly></td>
+	  <td data-type="check" data-key="HTTPS" data-value="<%-devices[i].HTTPS%>" readonly></td>
+	  <td>
+		<button type="button" class="btn btn-danger editConfig w-50">Edit</button>
+		<button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
+	  </td>
+	</tr>
+  <% } %>`;
+
 templates.switch = `<% for(i = 0; i < devices.length; i++) { %>
   <tr data-index="<%=i%>" data-template="switch">
     <td data-type="text" data-key="Name" data-value="<%-devices[i].Name%>"><%-devices[i].Name%></td>
@@ -656,10 +670,15 @@ function handleLocalPing(data) {
 	const $upTab = $('#pingLocalUp');
 	const $downTab = $('#pingLocalDown');
 	const $search = $(`.pingStatus[data-ip="${IP}"]`);
+	let actions = '';
+	if (data.SSH) actions += `<a type="button" class="btn me-1 btn-secondary btn-sm" href="ssh://${IP}" target="_blank">SSH</a>`;
+	if (data.HTTP) actions += `<a type="button" class="btn me-1 btn-secondary btn-sm" href="http://${IP}" target="_blank">HTTP</a>`;
+	if (data.HTTPS) actions += `<a type="button" class="btn me-1 btn-secondary btn-sm" href="https://${IP}" target="_blank">HTTPS</a>`;
 	if ($search.length < 1) {
 		const $row = $(`<tr class="pingStatus" data-ip="${IP}">
 			<td>${Name}</td>
 			<td>${IP}</td>
+			<td>${actions}</td>
 		</tr>`);
 		if (status) {
 			$upTab.append($row);
@@ -674,6 +693,8 @@ function handleLocalPing(data) {
 			$downTab.append($search);
 		}
 	}
+	doTableSort($upTab.find('.sorted'), false);
+	doTableSort($downTab.find('.sorted'), false);
 
 	if (status) {
 		lastLocalPingUp = Date.now();
@@ -1040,7 +1061,7 @@ $(document).ready(function() {
 					editors['devices'] = renderEditorTab(devices.value, editors['devices'], templates.devices, 'configDevices');
 					editors['ups'] = renderEditorTab(ups.value, editors['ups'], templates.nameIP, 'configUps');
 					editors['frames'] = renderEditorTab(frames.value, editors['frames'], templates.nameIP, 'configFrames');
-					editors['pings'] = renderEditorTab(pings.value, editors['pings'], templates.nameIP, 'configPings');
+					editors['pings'] = renderEditorTab(pings.value, editors['pings'], templates.pings, 'configPings');
 				}).catch(error => {
 					console.error(error);
 				});
@@ -1086,96 +1107,9 @@ $(document).ready(function() {
 			$active.find('.dataTable').collapse('toggle');
 			$active.find('.dataRaw').collapse('toggle');
 		} else if ($trg.hasClass('editConfig')) {
-			let $row = $trg.closest('tr');
-			$row.children().each(function() {
-				let $td = $(this);
-				switch ($td.data('type')) {
-				case 'text': {
-					let $txt = $(`<input type="text" class="form-control" value="${$td.data('value')}" name="${$td.data('key')}"></input>`);
-					$txt.change(function() {
-						$td.data('value', $txt.val());
-					});
-					$td.html('');
-					$td.append($txt);
-					break;
-				}
-				case 'range': {
-					let $from = $(`<input type="text" class="editRange form-control text-end" value="${$td.data('from')}" name="${$td.data('key-from')}"></input>`);
-					let $to = $(`<input type="text" class="editRange form-control" value="${$td.data('to')}" name="${$td.data('key-to')}"></input>`);
-					$from.change(function() {
-						$td.data('from', $from.val());
-					});
-					$to.change(function() {
-						$td.data('to', $to.val());
-					});
-					$td.html('');
-					$td.addClass('input-group');
-					$td.append($from);
-					$td.append('<span class="input-group-text">to</span>');
-					$td.append($to);
-					break;
-				}
-				case 'select': {
-					let txt = `<select class="btn btn-outline-light" name="${$td.data('key')}">`;
-					const options = $td.data('options').split(',');
-					options.forEach(option => {
-						const selected = option == $td.data('value') ? 'selected' : '';
-						txt += `<option value="${option}" ${selected}>${option}</option>`;
-					});
-					txt += '</select>';
-					const $txt = $(txt);
-					$txt.change(function() {
-						$td.data('value', $txt.val());
-					});
-					$td.html('');
-					$td.append($txt);
-					break;
-				}
-				default:
-					break;
-				}
-				$trg.html('Done');
-				$trg.removeClass('editConfig');
-				$trg.removeClass('btn-danger');
-				$trg.addClass('doneConfig');
-				$trg.addClass('btn-success');
-			});
+			configRowEdit($trg);
 		} else if ($trg.hasClass('doneConfig')) {
-			let $row = $trg.closest('tr');
-			let data = {};
-			$row.children().each(function() {
-				let $td = $(this);
-				let value = $td.data('value');
-				switch ($td.data('type')) {
-				case 'text':
-					$td.html(value);
-					data[$td.data('key')] = value;
-					break;
-				case 'range':
-					$td.html(`${$td.data('from')} to ${$td.data('to')}`);
-					data[$td.data('key-from')] = parseInt($td.data('from'));
-					data[$td.data('key-to')] = parseInt($td.data('to'));
-					$td.removeClass('input-group');
-					break;
-				case 'select':
-					if (value == "") value = $td.children()[0].value
-					$td.html(value);
-					data[$td.data('key')] = value;
-					break;
-				default:
-					break;
-				}
-				$trg.html('Edit');
-				$trg.addClass('editConfig');
-				$trg.addClass('btn-danger');
-				$trg.removeClass('doneConfig');
-				$trg.removeClass('btn-success');
-			});
-			let editor = $row.closest('table').data('editor');
-			let current = editors[editor].get();
-			current[$row.data('index')] = data;
-			editors[editor].set(current);
-			editors[editor].expandAll();
+			configRowDone($trg);
 		} else if ($trg.hasClass('tableNew')) {
 			const $tbody = $trg.closest('.alert.container').find('.tab-pane.active').find('.dataTable').find('tbody');
 			const $rows = $tbody.children();
@@ -1239,6 +1173,8 @@ $(document).ready(function() {
 		} else if ($trg.is('#syslogHistogramToggle')) {
 			const $cont = $('div[data-catagory="syslog"]');
 			$cont.toggleClass('showHistogram');
+		} else if ($trg.hasClass('sortable')) {
+			doTableSort($trg);
 		}
 	});
 
@@ -1339,6 +1275,116 @@ $(document).ready(function() {
 
 });
 
+function configRowEdit($trg) {
+	let $row = $trg.closest('tr');
+	$row.children().each(function() {
+		let $td = $(this);
+		switch ($td.data('type')) {
+		case 'text': {
+			let $txt = $(`<input type="text" class="form-control" value="${$td.data('value')}" name="${$td.data('key')}"></input>`);
+			$txt.change(function() {
+				$td.data('value', $txt.val());
+			});
+			$td.html('');
+			$td.append($txt);
+			break;
+		}
+		case 'check': {
+			const checked = $td.data('value') ? 'checked' : '';
+			let $txt = $(`<input type="checkbox" class="form-check-input" ${checked} name="${$td.data('key')}"></input>`);
+			$txt.click(function() {
+				$td.data('value', $txt.prop('checked'));
+				$td.attr('data-value', $txt.prop('checked'));
+			});
+			$td.html('');
+			$td.append($txt);
+			break;
+		}
+		case 'range': {
+			let $from = $(`<input type="text" class="editRange form-control text-end" value="${$td.data('from')}" name="${$td.data('key-from')}"></input>`);
+			let $to = $(`<input type="text" class="editRange form-control" value="${$td.data('to')}" name="${$td.data('key-to')}"></input>`);
+			$from.change(function() {
+				$td.data('from', $from.val());
+			});
+			$to.change(function() {
+				$td.data('to', $to.val());
+			});
+			$td.html('');
+			$td.addClass('input-group');
+			$td.append($from);
+			$td.append('<span class="input-group-text">to</span>');
+			$td.append($to);
+			break;
+		}
+		case 'select': {
+			let txt = `<select class="btn btn-outline-light" name="${$td.data('key')}">`;
+			const options = $td.data('options').split(',');
+			options.forEach(option => {
+				const selected = option == $td.data('value') ? 'selected' : '';
+				txt += `<option value="${option}" ${selected}>${option}</option>`;
+			});
+			txt += '</select>';
+			const $txt = $(txt);
+			$txt.change(function() {
+				$td.data('value', $txt.val());
+			});
+			$td.html('');
+			$td.append($txt);
+			break;
+		}
+		default:
+			break;
+		}
+		$trg.html('Done');
+		$trg.removeClass('editConfig');
+		$trg.removeClass('btn-danger');
+		$trg.addClass('doneConfig');
+		$trg.addClass('btn-success');
+	});
+}
+
+function configRowDone($trg) {
+	let $row = $trg.closest('tr');
+	let data = {};
+	$row.children().each(function() {
+		let $td = $(this);
+		let value = $td.data('value');
+		switch ($td.data('type')) {
+		case 'text':
+			$td.html(value);
+			data[$td.data('key')] = value;
+			break;
+		case 'check':
+			$td.html('');
+			data[$td.data('key')] = value;
+			break;
+		case 'range':
+			$td.html(`${$td.data('from')} to ${$td.data('to')}`);
+			data[$td.data('key-from')] = parseInt($td.data('from'));
+			data[$td.data('key-to')] = parseInt($td.data('to'));
+			$td.removeClass('input-group');
+			break;
+		case 'select':
+			if (value == "") value = $td.children()[0].value
+			$td.html(value);
+			data[$td.data('key')] = value;
+			break;
+		default:
+			break;
+		}
+		$trg.html('Edit');
+		$trg.addClass('editConfig');
+		$trg.addClass('btn-danger');
+		$trg.removeClass('doneConfig');
+		$trg.removeClass('btn-success');
+	});
+	let editor = $row.closest('table').data('editor');
+	let current = editors[editor].get();
+	current[$row.data('index')] = data;
+	editors[editor].set(current);
+	editors[editor].expandAll();
+}
+
 function getConfig(catagory) {
 	return $.getJSON(`${server}getConfig?catagory=${catagory}`);
 }
@@ -1372,13 +1418,38 @@ function download(filename, text) {
 	document.body.removeChild(element)
 }
 
-
-
-function forObject(object, callback) {
-	for (const key in object) {
-		if (Object.hasOwnProperty.call(object, key)) {
-			const value = object[key];
-			callback(key, value);
+function doTableSort($trg, toggleDir = true) {
+	const $th = $trg.closest('th');
+	const $table = $th.closest('table');
+	const $tbody = $table.find('tbody');
+	const $rows = $tbody.children('tr');
+	const index = $th.index();
+	let dir = $th.hasClass('sortedDesc') ? -1 : 1;
+	if (toggleDir) {
+		if (!$th.hasClass('sorted')) dir = -1;
+		$table.find('.sortedAsc').removeClass('sortedAsc');
+		$table.find('.sortedDesc').removeClass('sortedDesc');
+		$table.find('.sorted').removeClass('sorted');
+		if (dir < 0) {
+			dir = 1;
+			$th.addClass('sortedAsc');
+		} else {
+			dir = -1;
+			$th.addClass('sortedDesc');
 		}
+		$th.addClass('sorted');
 	}
+	$rows.sort((a, b) => {
+		const aVal = $(a).children().eq(index).html();
+		const bVal = $(b).children().eq(index).html();
+		const compare = aVal.localeCompare(bVal, undefined, { numeric: true })*dir > 0;
+		if (compare) {
+			return true;
+		} else {
+			return false;
+		}
+	});
+	$rows.each(function(i, $row) {
+		$tbody.append($row);
+	})
 }

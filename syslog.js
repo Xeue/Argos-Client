@@ -1,18 +1,15 @@
 const udp = require('dgram');
-const {logs} = require('xeue-logs');
 
 class SysLogServer {
     constructor(
-        port = 514,
-        logger = logs,
+        logger,
 		doSysLogMessage = () => {}
     ) {
-        this.port = port;
         this.logger = logger;
 		this.doSysLogMessage = doSysLogMessage;
     }
 
-    start() {
+    start(port) {
         const server = udp.createSocket('udp4');
         server.on('error', error => {
             this.logger.error('Syslog Error', error);
@@ -34,7 +31,7 @@ class SysLogServer {
             console.log('Socket is closed !');
         });
         
-        server.bind(this.port);
+        server.bind(port);
         return server;
     }
 }

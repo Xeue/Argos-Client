@@ -1,0 +1,115 @@
+<section class="tab-pane fade show active mainCont masonry" id="nav-media" data-editor="media" role="tabpanel" aria-labelledby="nav-media-tab">
+    <div class="text-light text-muted brick" data-type="Media" data-catagory="alive">
+        <h4>Missing devices</h4>
+        <span class="text-muted">Last updated <span id="lastAlive"></span></span>
+        <table data-catagory="alive" class="table table-dark text-muted table-sm">
+            <thead>
+                <th scope="col">Name</th>
+                <% Object.keys(switches).forEach(function(prop) { %>
+                    <th scope="col"><%- switches[prop].Name%></th>
+                <% }); %>
+            </thead>
+            <tbody data-template="devices">
+            </tbody>
+        </table>
+    </div>
+    <div class="text-light text-muted" id="col-mac">
+        <h4>Connection Dropouts</h4>
+        <span class="text-muted">Last updated <span id="lastMac"></span></span>
+        <table id="mac" class="table table-dark text-muted table-sm">
+            <thead>
+                <th scope="col">Switch</th>
+                <th scope="col">Port</th>
+                <th scope="col">Name</th>
+                <th scope="col">Description</th>
+                <th scope="col">Phy State</th>
+                <th scope="col">Last Change</th>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+    <div class="text-light text-muted d-none" id="col-phy">
+        <h4>Uncorrectable data (PHY FEC)</h4>
+        <span class="text-muted">Last updated <span id="lastPhy"></span></span>
+        <table id="phy" class="table table-dark text-muted table-sm">
+            <thead>
+                <th scope="col">Switch</th>
+                <th scope="col">Port</th>
+                <th scope="col">Name</th>
+                <th scope="col">Description</th>
+                <th scope="col">Changes</th>
+                <th scope="col">Last Change</th>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+    <div class="text-light text-muted" id="col-ups">
+        <h4>UPS status</h4>
+        <span class="text-muted">Last updated <span id="lastUps"></span></span>
+        <table id="ups" class="table table-dark text-muted table-sm">
+            <thead>
+                <th scope="col">Name</th>
+                <th scope="col">Input</th>
+                <th scope="col">Output</th>
+                <th scope="col">Autonomy</th>
+                <th scope="col">Load</th>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+    <div class="text-light text-muted brick" data-type="Media" data-catagory="fibre">
+        <h4>Low SFP/QSFP fibre RX levels</h4>
+        <span class="text-muted">Last updated <span id="lastTra"></span></span>
+        <table data-catagory="fibre" class="table table-dark text-muted table-sm">
+            <thead>
+                <th scope="col">Switch</th>
+                <th scope="col">Port</th>
+                <th scope="col">Name</th>
+                <th scope="col">Description</th>
+                <th scope="col">RX power</th>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+    <div class="text-light" id="col-hot">
+        <h4>IQ Frame Temperatures</h4>
+        <span class="text-muted">Last updated <span id="lastHot">never</span></span>
+        <canvas id="tempChart"></canvas>
+        <div class="buttonBox">
+            <div>
+                Select from
+                <button id="tempFromPick" class="btn btn-secondary btn-sm"></button>
+                <input type="hidden" id="tempFrom" value="">
+                until
+                <button id="tempToPick" class="btn btn-secondary btn-sm"></button>
+                <input type="hidden" id="tempTo" value="">
+            </div>
+            <div class="pt-1">
+                Or the last
+                <button class="tempBut btn btn-secondary btn-sm" data-time="2419200">Month</button>
+                <button class="tempBut btn btn-secondary btn-sm" data-time="604800">Week</button>
+                <button class="tempBut btn btn-secondary btn-sm" data-time="86400">Day</button>
+                <button class="tempBut btn btn-secondary btn-sm" data-time="43200">12 Hours</button>
+                <button class="tempBut btn btn-secondary btn-sm" data-time="21600">6 Hours</button>
+                <button class="tempBut btn btn-secondary btn-sm" data-time="7200">2 Hours</button>
+            </div>
+        </div>
+    </div>
+    <div class="text-light text-muted brick" data-type="Media" data-catagory="interfaces">
+        <h4>Port Monitoring</h4>
+        <span class="text-muted">Last updated <span id="lastInterfaces"></span></span>
+        <table data-catagory="interfaces" class="table table-dark text-muted">
+            <thead>
+                <th scope="col">Port Info</th>
+                <th scope="col">Errors</th>
+                <th scope="col">Usage</th>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+</section>
