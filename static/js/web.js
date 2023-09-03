@@ -1442,12 +1442,7 @@ function doTableSort($trg, toggleDir = true) {
 	$rows.sort((a, b) => {
 		const aVal = $(a).children().eq(index).html();
 		const bVal = $(b).children().eq(index).html();
-		const compare = aVal.localeCompare(bVal, undefined, { numeric: true })*dir > 0;
-		if (compare) {
-			return true;
-		} else {
-			return false;
-		}
+		return aVal.localeCompare(bVal, undefined, { numeric: true })*dir;
 	});
 	$rows.each(function(i, $row) {
 		$tbody.append($row);
