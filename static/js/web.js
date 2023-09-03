@@ -1175,6 +1175,9 @@ $(document).ready(function() {
 			$cont.toggleClass('showHistogram');
 		} else if ($trg.hasClass('sortable')) {
 			doTableSort($trg);
+		} else if ($trg.hasClass('navTab')) {
+			const tab = $trg.attr('id').replace('nav-','').replace('-tab','');
+			history.pushState({}, "", `#${tab}`);
 		}
 	});
 
@@ -1268,6 +1271,9 @@ $(document).ready(function() {
 			break;
 		case "#syslog":
 			$('#nav-syslog-tab').click();
+			break;
+		case "#debug":
+			$('#nav-debug-tab').click();
 			break;
 		default:
 			break;

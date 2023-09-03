@@ -18,6 +18,7 @@ const electronEjs = require('electron-ejs');
 const AutoLaunch = require('auto-launch');
 const ping = require('ping');
 const https = require('https');
+//const snmp = require ('net-snmp');
 
 const httpsAgent = new https.Agent({
 	rejectUnauthorized: false,
@@ -758,6 +759,25 @@ function expressRoutes(expressApp) {
 			pings:syslogSourceList()
 		});
 	});
+
+	expressApp.get('/about', (req, res) => {
+		logger.log('Collecting about information', 'A');
+		res.header('Content-type', 'text/html');
+		const aboutInfo = {
+			'aboutInfo': {
+				'Version': version,
+				'Config': config.all(),
+				'Switches':switches(),
+				'IQ Frames':frames(),
+				'UPS':ups(),
+				'Devices':devices(),
+				'Pings':pings(),
+				'Port Monitoring':ports()
+			},
+			'systemName': config.get('systemName')
+		}
+		res.render('about', aboutInfo);
+	})
 
 	expressApp.get('/broken', (req, res) => {
 		res.send('no');
@@ -2078,3 +2098,26 @@ const NXOS = {
 		})
 	}
 }
+
+
+
+/* 
+const session = snmp.createSession("10.10.21.1", "private");
+
+const oids = ["1.3.6.1.2.1.1.5.0", "1.3.6.1.2.1.1.6.0"];
+
+session.get(oids, function (error, varbinds) {
+    if (error) {
+        logger.error(error);
+    } else {
+        for (var i = 0; i < varbinds.length; i++) {
+            if (snmp.isVarbindError(varbinds[i])) {
+                logger.error(snmp.varbindError(varbinds[i]));
+            } else {
+                logger.log(varbinds[i].oid + " = " + varbinds[i].value);
+            }
+        }
+    }
+    session.close();
+});
+*/
