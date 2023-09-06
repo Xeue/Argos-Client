@@ -9,17 +9,6 @@ let bootChart;
 let syslogHistogram;
 let pings = {};
 let boots = {};
-let lastTra = -1;
-let lastAlive = -1;
-let lastMac = -1;
-let lastPhy = -1;
-let lastUps = -1;
-let lastUpsHash = '';
-let lastPing = -1;
-let lastHot = -1;
-let lastBoot = -1;
-let lastLocalPingUp = -1;
-let lastLocalPingDown = -1;
 
 const templates = {};
 
@@ -121,7 +110,7 @@ function socketDoMessage(header, payload) {
 					pingChart.data.datasets[0].backgroundColor[0] = `rgba(${colour}, 0.2)`;
 					pingChart.data.datasets[0].borderColor[0] = `rgba(${colour}, 1)`;
 				}
-				lastPing = Date.now();
+				$('#lastPing').attr('data-last-update', Date.now());
 				pingChart.update();
 				break;
 			case 'boot':
@@ -131,7 +120,7 @@ function socketDoMessage(header, payload) {
 					const dateBoot = new Date(parseInt(payload.time));
 					bootChart.data.datasets[0].data[dateBoot] = 1;
 				}
-				lastBoot = Date.now();
+				$('#lastBoot').attr('data-last-update', Date.now());
 				bootChart.update();
 				break;
 			case 'temps':
@@ -140,7 +129,7 @@ function socketDoMessage(header, payload) {
 				} else {
 					addTemps(payload.points);
 				}
-				lastHot = Date.now();
+				$('#lastHot').attr('data-last-update', Date.now());
 				break;
 			case 'syslog':
 				handleSyslogMessage(payload);
@@ -155,15 +144,19 @@ function socketDoMessage(header, payload) {
 			break;
 		case 'fibre':
 			handleFibreData(payload.data, 'Media');
+			$('#lastTra').attr('data-last-update', Date.now());
 			break;
 		case 'fibre_control':
 			handleFibreData(payload.data, 'Control');
+			$('#lastTraCont').attr('data-last-update', Date.now());
 			break;
 		case 'devices':
 			handleDevicesData(payload.data, 'Media');
+			$('#lastAlive').attr('data-last-update', Date.now());
 			break;
 		case 'devices_control':
 			handleDevicesData(payload.data, 'Control');
+			$('#lastAliveCont').attr('data-last-update', Date.now());
 			break;
 		case 'mac':
 			handleMacData(payload.data);
@@ -176,27 +169,35 @@ function socketDoMessage(header, payload) {
 			break;
 		case 'power':
 			handleSwitchPower(payload.data, 'Media');
+			$('#lastPower').attr('data-last-update', Date.now());
 			break;
 		case 'power_control':
 			handleSwitchPower(payload.data, 'Control');
+			$('#lastPowerCont').attr('data-last-update', Date.now());
 			break;
 		case 'temperature':
 			handleSwitchTemperature(payload.data, 'Media');
+			$('#lastTemperature').attr('data-last-update', Date.now());
 			break;
 		case 'temperature_control':
 			handleSwitchTemperature(payload.data, 'Control');
+			$('#lastTemperatureCont').attr('data-last-update', Date.now());
 			break;
 		case 'fans':
 			handleDevicesFans(payload.data, 'Media');
+			$('#lastFans').attr('data-last-update', Date.now());
 			break;
 		case 'fans_control':
 			handleDevicesFans(payload.data, 'Control');
+			$('#lastFansCont').attr('data-last-update', Date.now());
 			break;
 		case 'interfaces':
 			handleInterfaces(payload.data, 'Media');
+			$('#lastInterfaces').attr('data-last-update', Date.now());
 			break;
 		case 'interfaces_control':
 			handleInterfaces(payload.data, 'Control');
+			$('#lastInterfacesCont').attr('data-last-update', Date.now());
 			break;
 		default:
 			break;
@@ -223,6 +224,7 @@ function syslogFormat(message) {
 }
 
 function handleSyslogMessage(payload) {
+	$('#lastSyslog').attr('data-last-update', Date.now());
 	const $tbody = $('table[data-catagory="syslog"] tbody');
 	const type = $('table[data-catagory="syslog"]').attr('data-mode');
 	const ips = $('#syslogSelect').val();
@@ -540,7 +542,6 @@ function handleFibreData(data, type) {
 			$(`${table} tbody`).append(row);
 		});
 	}
-	lastTra = Date.now();
 }
 
 function handleDevicesData(data, type) {
@@ -579,7 +580,6 @@ function handleDevicesData(data, type) {
 			$(`${table} tbody`).append(row);
 		});
 	}
-	lastAlive = Date.now();
 }
 
 function handleMacData(data) {
@@ -603,7 +603,7 @@ function handleMacData(data) {
 			$('table#mac tbody').append(s);
 		});
 	}
-	lastMac = Date.now();
+	$('#lastMac').attr('data-last-update', Date.now());
 }
 
 function handlePhyData(data) {
@@ -628,11 +628,11 @@ function handlePhyData(data) {
 			$('table#phy tbody').append(s);
 		});
 	}
-	lastPhy = Date.now();
+	$('#lastPhy').attr('data-last-update', Date.now());
 }
 
 function handleUPSData(data) {
-	let hash = CryptoJS.MD5(JSON.stringify(data)).toString();
+	/*let hash = CryptoJS.MD5(JSON.stringify(data)).toString();
 	if (lastUpsHash !== '' && hash !== lastUpsHash) {
 		if (Object.keys(data).length > 0) {
 			//saySomething("you pee ess broken")
@@ -640,7 +640,7 @@ function handleUPSData(data) {
 	} else if (lastUpsHash === '' && data.length > 0) {
 		//saySomething("you pee ess broken")
 	}
-	lastUpsHash = hash;
+	lastUpsHash = hash;*/
 
 	$('table#ups tbody').empty();
 	if (Object.keys(data).length == 0) {
@@ -660,7 +660,7 @@ function handleUPSData(data) {
 			$('table#ups tbody').append(s);
 		});
 	}
-	lastUps = Date.now();
+	$('#lastUps').attr('data-last-update', Date.now());
 }
 
 function handleLocalPing(data) {
@@ -674,10 +674,12 @@ function handleLocalPing(data) {
 	if (data.SSH) actions += `<a type="button" class="btn me-1 btn-secondary btn-sm" href="ssh://${IP}" target="_blank">SSH</a>`;
 	if (data.HTTP) actions += `<a type="button" class="btn me-1 btn-secondary btn-sm" href="http://${IP}" target="_blank">HTTP</a>`;
 	if (data.HTTPS) actions += `<a type="button" class="btn me-1 btn-secondary btn-sm" href="https://${IP}" target="_blank">HTTPS</a>`;
+	actions += '<button type="button" class="btn btn-close btn-close-white btn-sm float-end m-1 clearPing"></button>';
 	if ($search.length < 1) {
-		const $row = $(`<tr class="pingStatus" data-ip="${IP}">
+		const $row = $(`<tr class="pingStatus" data-ip="${IP}" data-updated-time="${Date.now()}">
 			<td>${Name}</td>
 			<td>${IP}</td>
+			<td data-last-update="${Date.now()}"></td>
 			<td>${actions}</td>
 		</tr>`);
 		if (status) {
@@ -697,9 +699,9 @@ function handleLocalPing(data) {
 	doTableSort($downTab.find('.sorted'), false);
 
 	if (status) {
-		lastLocalPingUp = Date.now();
+		$('#lastLocalPingUp').attr('data-last-update', Date.now());
 	} else {
-		lastLocalPingDown = Date.now();
+		$('#lastLocalPingDown').attr('data-last-update', Date.now());
 	}
 }
 
@@ -743,7 +745,6 @@ function handleSwitchPower(data, type) {
 			}
 		});
 	}
-	lastSwitchPower = Date.now();
 }
 
 function handleSwitchTemperature(data, type) {
@@ -867,16 +868,10 @@ function handleInterfaces(data, type) {
 }
 
 function updateLast() {
-	$('#lastAlive').text(prettifyTime(lastAlive));
-	$('#lastMac').text(prettifyTime(lastMac));
-	$('#lastPhy').text(prettifyTime(lastPhy));
-	$('#lastUps').text(prettifyTime(lastUps));
-	$('#lastTra').text(prettifyTime(lastTra));
-	$('#lastPing').text(prettifyTime(lastPing));
-	$('#lastBoot').text(prettifyTime(lastBoot));
-	$('#lastHot').text(prettifyTime(lastHot));
-	$('#lastLocalPingUp').text(prettifyTime(lastLocalPingUp));
-	$('#lastLocalPingDown').text(prettifyTime(lastLocalPingDown));
+	$('[data-last-update]').each(function(i, element) {
+		const $element = $(element);
+		$element.text(prettifyTime($element.attr('data-last-update')));
+	})
 }
 
 function prettifyTime(time) {
@@ -1174,10 +1169,12 @@ $(document).ready(function() {
 			const $cont = $('div[data-catagory="syslog"]');
 			$cont.toggleClass('showHistogram');
 		} else if ($trg.hasClass('sortable')) {
-			doTableSort($trg);
+			doTableSort($trg, true);
 		} else if ($trg.hasClass('navTab')) {
 			const tab = $trg.attr('id').replace('nav-','').replace('-tab','');
 			history.pushState({}, "", `#${tab}`);
+		} else if ($trg.hasClass('clearPing')) {
+			$trg.closest('tr').remove();
 		}
 	});
 
@@ -1425,6 +1422,8 @@ function download(filename, text) {
 }
 
 function doTableSort($trg, toggleDir = true) {
+	const sortTag = $trg.attr('data-sort-tag');
+	const tag = sortTag === undefined ? undefined : sortTag;
 	const $th = $trg.closest('th');
 	const $table = $th.closest('table');
 	const $tbody = $table.find('tbody');
@@ -1446,9 +1445,13 @@ function doTableSort($trg, toggleDir = true) {
 		$th.addClass('sorted');
 	}
 	$rows.sort((a, b) => {
-		const aVal = $(a).children().eq(index).html();
-		const bVal = $(b).children().eq(index).html();
-		return aVal.localeCompare(bVal, undefined, { numeric: true })*dir;
+		if (tag) {
+			return (Number($(a).attr(`data-${tag}`)) - Number($(b).attr(`data-${tag}`)))*dir;
+		} else {
+			const aVal = $(a).children().eq(index).html();
+			const bVal = $(b).children().eq(index).html();
+			return aVal.localeCompare(bVal, undefined, { numeric: true })*dir;
+		}
 	});
 	$rows.each(function(i, $row) {
 		$tbody.append($row);
