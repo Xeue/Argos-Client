@@ -196,6 +196,7 @@ body.micaActive {
 
 .bg-title {
    background-color: #313d48;
+   app-region: drag;
 }
 
 @font-face {
