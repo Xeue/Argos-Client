@@ -9,6 +9,7 @@
     "ejs": "^3.1.9",
     "electron-ejs": "^1.2.1",
     "express": "^4.18.2",
+    "mica-electron": "^1.5.0",
     "net-snmp": "^3.9.7",
     "node-fetch": "^2.6.7",
     "ping": "^0.4.4",

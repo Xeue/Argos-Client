@@ -18,7 +18,10 @@ const electronEjs = require('electron-ejs');
 const AutoLaunch = require('auto-launch');
 const ping = require('ping');
 const https = require('https');
+const {MicaBrowserWindow, IS_WINDOWS_11} = require('mica-electron');
 //const snmp = require ('net-snmp');
+
+const background = IS_WINDOWS_11 ? 'micaActive' : 'bg-dark';
 
 const httpsAgent = new https.Agent({
 	rejectUnauthorized: false,
@@ -26,7 +29,7 @@ const httpsAgent = new https.Agent({
 
 const __static = __dirname+'/static';
 
-const ejs = new electronEjs({'static': __static}, {});
+const ejs = new electronEjs({'static': __static, 'background': background}, {});
 
 Array.prototype.symDiff = function(x) {
 	return this.filter(y => !x.includes(y)).concat(x => !y.includes(x));
@@ -480,7 +483,7 @@ const syslogServer = new SysLogServer(
 	syslogServer.start(config.get('syslogPort'));
 
 	logger.log(`Argos can be accessed at http://localhost:${config.get('port')}`, 'C');
-	mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}`);
+	mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}/inApp`);
 
 	connectToWebServer(true).then(()=>{
 		webLogBoot();
@@ -583,7 +586,7 @@ async function setUpApp() {
 }
 
 async function createWindow() {
-	mainWindow = new BrowserWindow({
+	const windowOptions = {
 		width: 1440,
 		height: 720,
 		autoHideMenuBar: true,
@@ -600,7 +603,15 @@ async function createWindow() {
 			symbolColor: '#ffffff',
 			height: 56
 		}
-	});
+	}
+	
+	if (IS_WINDOWS_11) {
+		mainWindow = new MicaBrowserWindow(windowOptions);
+		mainWindow.setDarkTheme();
+		mainWindow.setMicaEffect();
+	} else {
+		mainWindow = new BrowserWindow(windowOptions);
+	}
 
 	if (!app.commandLine.hasSwitch('hidden')) {
 		mainWindow.show();
@@ -626,7 +637,7 @@ async function createWindow() {
 	await new Promise(resolve => {
 		ipcMain.on('ready', (event, ready) => {
 			if (configLoaded) {
-				mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}`);
+				mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}/inApp`);
 			}
 			resolve();
 		});
@@ -756,7 +767,24 @@ function expressRoutes(expressApp) {
 			secureWebSocketEndpoint:config.get('secureWebSocketEndpoint'),
 			webEnabled:config.get('webEnabled'),
 			version: version,
-			pings:syslogSourceList()
+			pings:syslogSourceList(),
+			background:'bg-dark'
+		});
+	});
+
+	expressApp.get('/inApp',  (req, res) =>  {
+		logger.log('New client connected', 'A');
+		res.header('Content-type', 'text/html');
+		res.render('web', {
+			switches:switches('Media'),
+			controlSwitches:switches('Control'),
+			systemName:config.get('systemName'),
+			webSocketEndpoint:config.get('webSocketEndpoint'),
+			secureWebSocketEndpoint:config.get('secureWebSocketEndpoint'),
+			webEnabled:config.get('webEnabled'),
+			version: version,
+			pings:syslogSourceList(),
+			background:'micaActive'
 		});
 	});
 
@@ -835,6 +863,11 @@ function expressRoutes(expressApp) {
 			break;
 		}
 		res.send(JSON.stringify(data));
+	});
+
+	expressApp.get('/config', (req, res) => {
+		logger.log('Requesting app config', 'A');
+		res.send(JSON.stringify(config.all()));
 	});
 
 	expressApp.post('/setswitches', (req, res) => {

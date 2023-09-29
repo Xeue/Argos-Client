@@ -17,6 +17,14 @@ body.loaded #cancel {
    display: none;
 }
 
+body.showLogs #logsCont {
+   display: block;
+}
+
+body #logsCont {
+   display: none;
+}
+
 nav {
    position: absolute;
    bottom: 0;
@@ -182,7 +190,15 @@ button.hidden {
    line-height: normal;
 }
 
+body.micaActive {
+   background: transparent !important;
+}
+
+.bg-title {
+   background-color: #313d48;
+}
+
 @font-face {
    font-family: Ubuntu Mono;
    src: url(../fonts/UbuntuMono-R.ttf);
- }
+}

@@ -46,7 +46,7 @@
     <link id="favicon_48" rel="icon" href="img/icon/icon.svg" sizes="256x256">
 </head>
 
-<body class="bg-dark h-100 d-flex flex-column">
+<body class="h-100 d-flex flex-column <%-background%>">
     <div id="loading" class="hidden"></div>
 
     <nav class="drag navbar navbar-expand-lg navbar-dark bg-title px-2">
@@ -67,7 +67,7 @@
             <button class="btn btn-secondary" id="toggleConfig">Edit Devices</button>
         </div>
     </nav>
-    <main class="tab-content container-fluid bg-dark py-3 overflow-auto">
+    <main class="tab-content container-fluid py-3 overflow-auto">
         <%- include('tabs/media.ejs'); %>
         <%- include('tabs/control.ejs'); %>
         <%- include('tabs/pings.ejs'); %>
