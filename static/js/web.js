@@ -23,6 +23,18 @@ templates.nameIP = `<% for(i = 0; i < devices.length; i++) { %>
   </tr>
 <% } %>`;
 
+templates.sensors = `<% for(i = 0; i < devices.length; i++) { %>
+	<tr data-index="<%=i%>" data-template="sensors">
+	  <td data-type="text" data-key="Name" data-value="<%-devices[i].Name%>"><%-devices[i].Name%></td>
+	  <td data-type="text" data-key="IP" data-value="<%-devices[i].IP%>"><%-devices[i].IP%></td>
+	  <td data-type="select" data-key="Type" data-value="<%-devices[i].Type%>" data-options="IQ Frame,Will N Sensor"><%-devices[i].Type%></td>
+	  <td>
+		<button type="button" class="btn btn-danger editConfig w-50">Edit</button>
+		<button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
+	  </td>
+	</tr>
+  <% } %>`;
+
 templates.pings = `<% for(i = 0; i < devices.length; i++) { %>
 	<tr data-index="<%=i%>" data-template="pings">
 	  <td data-type="text" data-key="Name" data-value="<%-devices[i].Name%>"><%-devices[i].Name%></td>
@@ -42,7 +54,7 @@ templates.switch = `<% for(i = 0; i < devices.length; i++) { %>
     <td data-type="text" data-key="Name" data-value="<%-devices[i].Name%>"><%-devices[i].Name%></td>
     <td data-type="text" data-key="IP" data-value="<%-devices[i].IP%>"><%-devices[i].IP%></td>
     <td data-type="text" data-key="User" data-value="<%-devices[i].User%>"><%-devices[i].User%></td>
-    <td data-type="text" data-key="Pass" data-value="<%-devices[i].Pass%>"><%-devices[i].Pass%></td>
+    <td data-type="password" data-key="Pass" data-value="<%-devices[i].Pass%>"><%-devices[i].Pass%></td>
 	<td data-type="select" data-key="Type" data-value="<%-devices[i].Type%>" data-options="Control,Media"><%-devices[i].Type%></td>
 	<td data-type="select" data-key="OS" data-value="<%-devices[i].OS%>" data-options="EOS,NXOS,IOS"><%-devices[i].OS%></td>
     <td>
@@ -124,12 +136,18 @@ function socketDoMessage(header, payload) {
 				bootChart.update();
 				break;
 			case 'temps':
-				if (payload.replace) {
-					replaceTemps(payload.points);
-				} else {
-					addTemps(payload.points);
+				switch (payload.type) {
+					case 'IQ Frame':
+						if (payload.replace) {
+							replaceTemps(payload.points);
+						} else {
+							addTemps(payload.points);
+						}
+						$('#lastHot').attr('data-last-update', Date.now());
+						break;
+					default:
+						break;
 				}
-				$('#lastHot').attr('data-last-update', Date.now());
 				break;
 			case 'syslog':
 				handleSyslogMessage(payload);
@@ -653,9 +671,9 @@ function handleUPSData(data) {
 		$.each(data, (k, v) => {
 			let s;
 			if (v.Status === 'Offline') {
-				s = `<tr><td>${v.Name}</td><td colspan="4" class="text-center">Offline</td></tr>`;
+				s = `<tr><td>${v.Name}</td><td colspan="4" class="text-center">Offline</td><td></td></tr>`;
 			} else {
-				s = `<tr><td>${v.Name}</td><td>${v.voltageIn}V ${v.freqIn}Hz</td><td>${v.voltageOut}V ${v.freqOut}Hz</td><td>${v.autonomy} min</td><td>${v.load}%</td></tr>`;
+				s = `<tr><td>${v.Name}</td><td>${v.voltageIn}V ${v.freqIn}Hz</td><td>${v.voltageOut}V ${v.freqOut}Hz</td><td>${v.autonomy} min</td><td>${v.temp}°C</td><td>${v.load}%</td></tr>`;
 			}
 			$('table#ups tbody').append(s);
 		});
@@ -1045,17 +1063,17 @@ $(document).ready(function() {
 					getConfig('ports'),
 					getConfig('devices'),
 					getConfig('ups'),
-					getConfig('frames'),
+					getConfig('temps'),
 					getConfig('pings')
 				]).then(values => {
-					const [switches, ports, devices, ups, frames, pings] = values;
+					const [switches, ports, devices, ups, temps, pings] = values;
 					loading(false);
 					$('#config').removeClass('hidden');
 					editors['switches'] = renderEditorTab(switches.value, editors['switches'], templates.switch, 'configSwitches');
 					editors['ports'] = renderEditorTab(ports.value, editors['ports'], templates.ports, 'configPorts');
 					editors['devices'] = renderEditorTab(devices.value, editors['devices'], templates.devices, 'configDevices');
 					editors['ups'] = renderEditorTab(ups.value, editors['ups'], templates.nameIP, 'configUps');
-					editors['frames'] = renderEditorTab(frames.value, editors['frames'], templates.nameIP, 'configFrames');
+					editors['temps'] = renderEditorTab(temps.value, editors['temps'], templates.sensors, 'configTemps');
 					editors['pings'] = renderEditorTab(pings.value, editors['pings'], templates.pings, 'configPings');
 				}).catch(error => {
 					console.error(error);
@@ -1120,6 +1138,10 @@ $(document).ready(function() {
 				dummyData[0].Pass = 'Password';
 				break;
 			case 'nameIP':
+				dummyData[0].Name = 'New Device';
+				dummyData[0].IP = 'IP Address';
+				break;
+			case 'sensors':
 				dummyData[0].Name = 'New Device';
 				dummyData[0].IP = 'IP Address';
 				break;
@@ -1263,6 +1285,9 @@ $(document).ready(function() {
 		case "#control":
 			$('#nav-control-tab').click();
 			break;
+		case "#temp":
+			$('#nav-temp-tab').click();
+			break;
 		case "#pings":
 			$('#nav-pings-tab').click();
 			break;
@@ -1280,11 +1305,21 @@ $(document).ready(function() {
 
 function configRowEdit($trg) {
 	let $row = $trg.closest('tr');
+	$row.addClass('editing');
 	$row.children().each(function() {
 		let $td = $(this);
 		switch ($td.data('type')) {
 		case 'text': {
 			let $txt = $(`<input type="text" class="form-control" value="${$td.data('value')}" name="${$td.data('key')}"></input>`);
+			$txt.change(function() {
+				$td.data('value', $txt.val());
+			});
+			$td.html('');
+			$td.append($txt);
+			break;
+		}
+		case 'password': {
+			let $txt = $(`<input type="password" class="form-control" value="${$td.data('value')}" name="${$td.data('key')}"></input>`);
 			$txt.change(function() {
 				$td.data('value', $txt.val());
 			});
@@ -1348,12 +1383,14 @@ function configRowEdit($trg) {
 
 function configRowDone($trg) {
 	let $row = $trg.closest('tr');
+	$row.removeClass('editing');
 	let data = {};
 	$row.children().each(function() {
 		let $td = $(this);
 		let value = $td.data('value');
 		switch ($td.data('type')) {
 		case 'text':
+		case 'password':
 			$td.html(value);
 			data[$td.data('key')] = value;
 			break;

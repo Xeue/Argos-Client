@@ -86,7 +86,7 @@ const tables = [{
 	name: 'temperature',
 	definition: `CREATE TABLE \`temperature\` (
 		\`PK\` int(11) NOT NULL,
-		\`frame\` text NOT NULL,
+		\`sensor\` text NOT NULL,
 		\`temperature\` float NOT NULL,
 		\`system\` text NOT NULL,
 		\`time\` timestamp NOT NULL DEFAULT current_timestamp(),
@@ -596,7 +596,7 @@ async function createWindow() {
 		},
 		icon: path.join(__static, 'img/icon/icon.png'),
 		show: false,
-		frame: false,
+		sensor: false,
 		titleBarStyle: 'hidden',
 		titleBarOverlay: {
 			color: '#313d48',
@@ -719,8 +719,8 @@ function switches(type) {
 	if (type !== undefined) return Switches.filter(Switch => Switch.Type == type);
 	return Switches;
 }
-function frames() {
-	return loadData('Frames');
+function temps() {
+	return loadData('Temps');
 }
 function ups() {
 	return loadData('Ups');
@@ -796,7 +796,7 @@ function expressRoutes(expressApp) {
 				'Version': version,
 				'Config': config.all(),
 				'Switches':switches(),
-				'IQ Frames':frames(),
+				'Temp Sensors':temps(),
 				'UPS':ups(),
 				'Devices':devices(),
 				'Pings':pings(),
@@ -847,8 +847,8 @@ function expressRoutes(expressApp) {
 		case 'ports':
 			data = ports();
 			break;
-		case 'frames':
-			data = frames();
+		case 'temps':
+			data = temps();
 			break;
 		case 'ups':
 			data = ups();
@@ -890,9 +890,9 @@ function expressRoutes(expressApp) {
 		writeData('Ups', req.body);
 		res.send('Done');
 	});
-	expressApp.post('/setframes', (req, res) => {
-		logger.log('Request to set frames config data', 'D');
-		writeData('Frames', req.body);
+	expressApp.post('/settemps', (req, res) => {
+		logger.log('Request to set temps config data', 'D');
+		writeData('Temps', req.body);
 		res.send('Done');
 	});
 	expressApp.post('/setpings', (req, res) => {
@@ -1015,7 +1015,7 @@ async function getTemperature(header, payload) {
 			dataObj.points[timestamp] = {};
 		}
 		let point = dataObj.points[timestamp];
-		point[row.frame] = row.temperature;
+		point[row.sensor] = row.temperature;
 
 		delete point.average;
 		const n = Object.keys(point).length;
@@ -1375,7 +1375,8 @@ function checkUps() {
 						freqIn: Math.round(jsonRpcResponse.fin / 10),
 						freqOut: Math.round(jsonRpcResponse.fout / 10),
 						load: jsonRpcResponse.load1,
-						autonomy: jsonRpcResponse.authonomy
+						autonomy: jsonRpcResponse.authonomy,
+						temp: jsonRpcResponse.tsys
 					};
 				});
 			}
@@ -1391,12 +1392,11 @@ function checkUps() {
 
 	return Promise.allSettled(promises).then((values) => {
 		let filteredUps = [];
-
 		for (let i = 0; i < Ups.length; i++) {
 			if (values[i].status === 'rejected' || typeof values[i].value == 'undefined') {
 				Ups[i].Status = 'Offline';
 				if (!Ups[i].linePresent || !Ups[i].outputPowered || Ups[i].load > 80) {
-					filteredUps.push(Ups[i]);
+					//filteredUps.push(Ups[i]);
 				}
 			} else {
 				values[i].value.name = Ups[i].Name;
@@ -1404,6 +1404,7 @@ function checkUps() {
 				Ups[i] = values[i].value;
 				Ups[i].Status = 'Online';
 			}
+			filteredUps.push(Ups[i]);
 		}
 		data.ups = filteredUps;
 		distributeData('ups', data.ups);
@@ -1521,18 +1522,23 @@ function localPings() {
 
 async function logTemp() {
 	if (config.get('devMode')) return;
-	let Frames = frames();
+	let Temps = temps();
 	logger.log('Getting temperatures', 'A');
 
+	doIQTemps(Temps.filter(sensor => sensor.Type == 'IQ Frame'));
+	doGenericTemps(Temps.filter(sensor => sensor.Type == 'Will N Sensor'));
+}
+
+async function doIQTemps(Temps) {
 	let promises = [];
 
-	for (let index = 0; index < Frames.length; index++) {
-		const frame = Frames[index];
+	for (let index = 0; index < Temps.length; index++) {
+		const sensor = Temps[index];
 		try {
-			const response = await fetch('http://'+frame.IP);
+			const response = await fetch('http://'+sensor.IP);
 			promises.push(response.text());
 		} catch (error) {
-			logger.warn(`Cannot reach frame on: ${frame.IP}`, error);
+			logger.warn(`Cannot reach sensor on: ${sensor.IP}`, error);
 		}
 	}
 
@@ -1543,36 +1549,36 @@ async function logTemp() {
 	let tempValid = 0;
 	const socketSend = {};
 
-	for (let index = 0; index < Frames.length; index++) {
-		const frameData = await results[index];
+	for (let index = 0; index < Temps.length; index++) {
+		const sensorData = results[index];
 
-		if (frameData.status == 'fulfilled') {
+		if (sensorData.status == 'fulfilled') {
 			try {				
 				let temp = 0;
-				const frameStatData = frameData.value.split('<p><b>Temperature In:</b></p>');
-				if (typeof frameStatData[1] == 'undefined') return;
-				const frameStat = frameStatData[1].slice(25,27);
-				if (frameStat == 'OK') {
-					let unfilteredTemp = frameData.value.split('<p><b>Temperature In:</b></p>')[1].slice(29,33);
+				const sensorStatData = sensorData.value.split('<p><b>Temperature In:</b></p>');
+				if (typeof sensorStatData[1] == 'undefined') return;
+				const sensorStat = sensorStatData[1].slice(25,27);
+				if (sensorStat == 'OK') {
+					let unfilteredTemp = sensorData.value.split('<p><b>Temperature In:</b></p>')[1].slice(29,33);
 					temp = parseInt(unfilteredTemp.substring(0, unfilteredTemp.indexOf(')')));
 				} else {
-					logger.log(`${Frames[index].Name} frame temperature is not OK`, 'W');
+					logger.log(`${Temps[index].Name} sensor temperature is not OK`, 'W');
 				}
-				Frames[index].Temp = temp;
+				Temps[index].Temp = temp;
 				tempSum += temp;
 				tempValid++;
-				logger.log(`${Frames[index].Name} temperature = ${temp} deg C`, 'D');
+				logger.log(`${Temps[index].Name} temperature = ${temp} deg C`, 'D');
 				if (config.get('localDataBase')) SQL.insert({
-					'frame': Frames[index].Name,
-					'temperature': Frames[index].Temp,
+					'sensor': Temps[index].Name,
+					'temperature': Temps[index].Temp,
 					'system': config.get('systemName')
 				}, 'temperature');
-				socketSend[Frames[index].Name] = Frames[index].Temp;
+				socketSend[Temps[index].Name] = Temps[index].Temp;
 			} catch (error) {
-				logger.object(`Error processing data for from: '${Frames[index].Name}'`, error, 'W');
+				logger.object(`Error processing data for from: '${Temps[index].Name}'`, error, 'W');
 			}
 		} else {
-			logger.log(`Can't connect to frame: '${Frames[index].Name}'`, 'W');
+			logger.log(`Can't connect to sensor: '${Temps[index].Name}'`, 'W');
 		}
 	}
 
@@ -1590,7 +1596,7 @@ async function logTemp() {
 			logger.log('Warning: Temperature over warning limit, sending SMS', 'W');
 			sendSms(`Commitment to environment sustainability failed, MCR IS MELTING: ${tempAvg} deg C`);
 		}
-		sendCloudData({'command':'log', 'type':'temperature', 'data':Frames});
+		sendCloudData({'command':'log', 'type':'temperature', 'data':Temps});
 
 		socketSend.average = tempAvg;
 		const time = new Date().getTime();
@@ -1599,12 +1605,15 @@ async function logTemp() {
 		webServer.sendToAll({
 			'command': 'data',
 			'data': 'temps',
+			'type': 'IQ Frame',
 			'system': config.get('systemName'),
 			'replace': false,
 			'points': points
 		});
-
 	}
+}
+
+async function doGenericTemps(Temps) {
 
 }
 

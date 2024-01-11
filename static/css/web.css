@@ -233,3 +233,26 @@ nav.drag {
 body.micaActive {
   background: transparent !important;
 }
+
+td[data-value=Password] {
+  visibility: hidden;
+  line-height: 0;
+  font-size: 0;
+}
+
+td[data-value=Password]:after {
+  content: "********";
+  visibility: visible;
+  font-size: initial;
+  line-height: initial;
+}
+
+.editing td[data-value=Password] {
+  visibility: visible;
+  line-height: initial;
+  font-size: initial;
+}
+
+.editing td[data-value=Password]:after {
+  display: none;
+}

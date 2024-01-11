@@ -61,6 +61,7 @@
         <div class="d-flex gap-2 justify-content-center w-100 flex-wrap" role="tablist">
             <button class="btn btn-secondary navTab active" id="nav-media-tab" data-bs-toggle="tab" data-bs-target="#nav-media" type="button" role="tab" aria-controls="nav-media" aria-selected="true">Media</button>
             <button class="btn btn-secondary navTab" id="nav-control-tab" data-bs-toggle="tab" data-bs-target="#nav-control" type="button" role="tab" aria-controls="nav-control" aria-selected="true">Control</button>
+            <button class="btn btn-secondary navTab" id="nav-temps-tab" data-bs-toggle="tab" data-bs-target="#nav-temps" type="button" role="tab" aria-controls="nav-temps" aria-selected="true">Temps/UPS</button>
             <button class="btn btn-secondary navTab" id="nav-pings-tab" data-bs-toggle="tab" data-bs-target="#nav-pings" type="button" role="tab" aria-controls="nav-pings" aria-selected="true">Pings</button>
             <button class="btn btn-secondary navTab" id="nav-debug-tab" data-bs-toggle="tab" data-bs-target="#nav-debug" type="button" role="tab" aria-controls="nav-debug" aria-selected="true">Debug</button>
             <button class="btn btn-secondary navTab" id="nav-syslog-tab" data-bs-toggle="tab" data-bs-target="#nav-syslog" type="button" role="tab" aria-controls="nav-syslog" aria-selected="true">Syslog</button>
@@ -70,6 +71,7 @@
     <main class="tab-content container-fluid py-3 overflow-auto">
         <%- include('tabs/media.ejs'); %>
         <%- include('tabs/control.ejs'); %>
+        <%- include('tabs/temps.ejs'); %>
         <%- include('tabs/pings.ejs'); %>
         <%- include('tabs/debug.ejs'); %>
         <%- include('tabs/syslog.ejs'); %>

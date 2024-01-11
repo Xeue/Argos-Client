@@ -1,0 +1,42 @@
+<section class="tab-pane fade masonry" id="nav-temps" data-editor="temps" role="tabpanel" aria-labelledby="nav-temps-tab">
+    <div class="text-light" id="col-hot">
+        <h4>IQ Frame Temperatures</h4>
+        <span class="text-muted">Last updated <span id="lastHot">never</span></span>
+        <canvas id="tempChart"></canvas>
+        <div class="buttonBox">
+            <div>
+                Select from
+                <button id="tempFromPick" class="btn btn-secondary btn-sm"></button>
+                <input type="hidden" id="tempFrom" value="">
+                until
+                <button id="tempToPick" class="btn btn-secondary btn-sm"></button>
+                <input type="hidden" id="tempTo" value="">
+            </div>
+            <div class="pt-1">
+                Or the last
+                <button class="tempBut btn btn-secondary btn-sm" data-time="2419200">Month</button>
+                <button class="tempBut btn btn-secondary btn-sm" data-time="604800">Week</button>
+                <button class="tempBut btn btn-secondary btn-sm" data-time="86400">Day</button>
+                <button class="tempBut btn btn-secondary btn-sm" data-time="43200">12 Hours</button>
+                <button class="tempBut btn btn-secondary btn-sm" data-time="21600">6 Hours</button>
+                <button class="tempBut btn btn-secondary btn-sm" data-time="7200">2 Hours</button>
+            </div>
+        </div>
+    </div>
+    <div class="text-light text-muted" id="col-ups">
+        <h4>UPS status</h4>
+        <span class="text-muted">Last updated <span id="lastUps">never</span></span>
+        <table id="ups" class="table table-dark text-muted table-sm">
+            <thead>
+                <th scope="col">Name</th>
+                <th scope="col">Input</th>
+                <th scope="col">Output</th>
+                <th scope="col">Autonomy</th>
+                <th scope="col">Temp</th>
+                <th scope="col">Load</th>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+</section>
