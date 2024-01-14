@@ -1345,10 +1345,14 @@ async function switchInterfaces(switchType) {
 		}
 	}
 	ports(switchType).forEach(port => {
-		if (filteredPorts[switchType] === undefined) filteredPorts[switchType] = {};
-		if (filteredPorts[switchType][port.Switch] === undefined) filteredPorts[switchType][port.Switch] = {};
-		if (Object.keys(data.interfaces[switchType][port.Switch]).includes(port.Port)) {
-			filteredPorts[switchType][port.Switch][port.Port] = data.interfaces[switchType][port.Switch][port.Port];
+		try {
+			if (filteredPorts[switchType] === undefined) filteredPorts[switchType] = {};
+			if (filteredPorts[switchType][port.Switch] === undefined) filteredPorts[switchType][port.Switch] = {};
+			if (Object.keys(data.interfaces[switchType][port.Switch]).includes(port.Port)) {
+				filteredPorts[switchType][port.Switch][port.Port] = data.interfaces[switchType][port.Switch][port.Port];
+			}
+		} catch (error) {
+			logger.warn("Couldn't parse interfaces data");
 		}
 
 	})
@@ -1458,6 +1462,7 @@ function doApi(request, Switch) {
 	const OS = Switch.OS;
 	let endPoint = '';
 	let protocol = 'http';
+	if (!SwitchRequests[OS][request]) return;
 
 	const options = {
 		method: 'POST',

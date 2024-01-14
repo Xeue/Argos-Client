@@ -1,5 +1,5 @@
 /* eslint-disable no-undef */
-let server = window.location.origin + "/";
+let server = window.location.origin + '/';
 
 let editors = {};
 
@@ -137,16 +137,16 @@ function socketDoMessage(header, payload) {
 				break;
 			case 'temps':
 				switch (payload.type) {
-					case 'IQ Frame':
-						if (payload.replace) {
-							replaceTemps(payload.points);
-						} else {
-							addTemps(payload.points);
-						}
-						$('#lastHot').attr('data-last-update', Date.now());
-						break;
-					default:
-						break;
+				case 'IQ Frame':
+					if (payload.replace) {
+						replaceTemps(payload.points);
+					} else {
+						addTemps(payload.points);
+					}
+					$('#lastHot').attr('data-last-update', Date.now());
+					break;
+				default:
+					break;
 				}
 				break;
 			case 'syslog':
@@ -238,7 +238,7 @@ function syslogFormat(message) {
 	formatted = formatted.replace(/Ethernet(.*?)\/([0-9]{1,3})/g, '<span class="text-info">Ethernet$1/$2</span>');
 	formatted = formatted.replace(/vPC ([0-9]{1,3})/g, '<span class="text-info">vPC $1</span>');
 	formatted = formatted.replace(/port-channel([0-9]{1,3})/g, '<span class="text-info">port-channel$1</span>');
-	return formatted
+	return formatted;
 }
 
 function handleSyslogMessage(payload) {
@@ -266,7 +266,7 @@ function handleSyslogMessage(payload) {
 		payload.logs.forEach(log => {
 			if (!(ips.includes(log.ip) || ips.includes('all'))) return;
 			const maxLogs = 499;
-			const dateTime = new Date(log.time)
+			const dateTime = new Date(log.time);
 			const message = syslogFormat(log.message);
 			const name = syslogSourceList[log.ip] || log.ip;
 			const $liveLogs = $('.logType_live');
@@ -574,26 +574,26 @@ function handleDevicesData(data, type) {
 		$.each(data, (port, lldp) => {
 			let row = '<tr><td>' + port + '</td>';
 			switch (type) {
-				case 'Control':
-					for (let index = 0; index < ControlSwitches.length; index++) {
-						if (lldp.includes(ControlSwitches[index])) {
-							row += '<td class=\'bg-danger\'>Down</td>';
-						} else {
-							row += '<td class=\'bg-success\'>Up</td>';
-						}
+			case 'Control':
+				for (let index = 0; index < ControlSwitches.length; index++) {
+					if (lldp.includes(ControlSwitches[index])) {
+						row += '<td class=\'bg-danger\'>Down</td>';
+					} else {
+						row += '<td class=\'bg-success\'>Up</td>';
 					}
-					break;
-				case 'Media':
-					for (let index = 0; index < Switches.length; index++) {
-						if (lldp.includes(Switches[index])) {
-							row += '<td class=\'bg-danger\'>Down</td>';
-						} else {
-							row += '<td class=\'bg-success\'>Up</td>';
-						}
+				}
+				break;
+			case 'Media':
+				for (let index = 0; index < Switches.length; index++) {
+					if (lldp.includes(Switches[index])) {
+						row += '<td class=\'bg-danger\'>Down</td>';
+					} else {
+						row += '<td class=\'bg-success\'>Up</td>';
 					}
-					break;
-				default:
-					break;
+				}
+				break;
+			default:
+				break;
 			}
 			$(`${table} tbody`).append(row);
 		});
@@ -746,18 +746,18 @@ function handleSwitchPower(data, type) {
 					minutes = minutes-(days*24*60)-(hours*60);
 					seconds = seconds-(days*24*60*60)-(hours*60*60)-(minutes*60);
 
-					let time = "";
+					let time = '';
 
-					if (days > 0) time += ` ${days} days`
-					if (hours > 0) time += ` ${hours}h`
-					if (minutes > 0) time += ` ${minutes}m`
-					if (seconds > 0) time += ` ${seconds}s`
+					if (days > 0) time += ` ${days} days`;
+					if (hours > 0) time += ` ${hours}h`;
+					if (minutes > 0) time += ` ${minutes}m`;
+					if (seconds > 0) time += ` ${seconds}s`;
 
 					$(`${table} tbody`).append(`<tr>
 						<td>${switchName}</td>
 						<td>${PSU.outputPower} Watts</td>
 						<td>${time}</td>
-						<td class="text-center ${PSU.inAlert ? "bg-success" : "bg-danger"}">${PSU.inAlert ? "Good" : "Error"}</td>
+						<td class="text-center ${PSU.inAlert ? 'bg-success' : 'bg-danger'}">${PSU.inAlert ? 'Good' : 'Error'}</td>
 					</tr>`);
 				}
 			}
@@ -781,7 +781,7 @@ function handleSwitchTemperature(data, type) {
 					<td>${switchName}</td>
 					<td>${moduleName}</td>
 					<td>${Math.floor(temperature.temp)} °C</td>
-					<td class="text-center ${temperature.inAlert ? "bg-success" : "bg-danger"}">${temperature.inAlert ? "Good" : "Error"}</td>
+					<td class="text-center ${temperature.inAlert ? 'bg-success' : 'bg-danger'}">${temperature.inAlert ? 'Good' : 'Error'}</td>
 				</tr>`);
 			}
 		});
@@ -805,7 +805,7 @@ function handleDevicesFans(data, type) {
 					<td>${switchName}</td>
 					<td>${moduleName}</td>
 					<td>${Math.floor(fan.speed)}%</td>
-					<td class="text-center ${fan.inAlert ? "bg-success" : "bg-danger"}">${fan.inAlert ? "Good" : "Error"}</td>
+					<td class="text-center ${fan.inAlert ? 'bg-success' : 'bg-danger'}">${fan.inAlert ? 'Good' : 'Error'}</td>
 				</tr>`);
 			}
 		});
@@ -827,7 +827,7 @@ function handleInterfaces(data, type) {
 			for (const Port in data[Switch]) {
 				const portInfo = data[Switch][Port];
 
-				let time = "";
+				let time = '';
 
 				if (Number(portInfo.lastFlap)) {
 					const timeOffset = new Date();
@@ -856,8 +856,8 @@ function handleInterfaces(data, type) {
 				const inColour = `hsl(${120 - inPercent*1.3}deg 100% 30.36%)`;
 
 				$(`${table} tbody`).append(`<tr>
-					<td class="text-center ${portInfo.connected ? "bg-success" : "bg-danger"}">
-						<div>${Switch} - ${portInfo.connected ? "UP" : "Down"}</div>
+					<td class="text-center ${portInfo.connected ? 'bg-success' : 'bg-danger'}">
+						<div>${Switch} - ${portInfo.connected ? 'UP' : 'Down'}</div>
 						<div>${Port}</div>
 						<div>${portInfo.description}</div>
 					</td>
@@ -889,7 +889,7 @@ function updateLast() {
 	$('[data-last-update]').each(function(i, element) {
 		const $element = $(element);
 		$element.text(prettifyTime($element.attr('data-last-update')));
-	})
+	});
 }
 
 function prettifyTime(time) {
@@ -1015,10 +1015,10 @@ $(document).ready(function() {
 		title: 'To'
 	});
 
-	const syslogChoices = new Choices('#syslogSelect', {
+	new Choices('#syslogSelect', {
 		removeItems: true,
 		removeItemButton: true,
-		searchPlaceholderValue: "Select Devices",
+		searchPlaceholderValue: 'Select Devices',
 	});
 
 	$(document).click(function(e) {
@@ -1101,7 +1101,7 @@ $(document).ready(function() {
 			reader.onload = event => {
 				const rows = event.target.result.split('\n');
 				const headers = rows[0].split(',');
-				const newEditor = []
+				const newEditor = [];
 				for (let index = 1; index < rows.length - 1; index++) {
 					const row = rows[index].split(',');
 					const item = {};
@@ -1194,7 +1194,7 @@ $(document).ready(function() {
 			doTableSort($trg, true);
 		} else if ($trg.hasClass('navTab')) {
 			const tab = $trg.attr('id').replace('nav-','').replace('-tab','');
-			history.pushState({}, "", `#${tab}`);
+			history.pushState({}, '', `#${tab}`);
 		} else if ($trg.hasClass('clearPing')) {
 			$trg.closest('tr').remove();
 		}
@@ -1231,7 +1231,7 @@ $(document).ready(function() {
 				'from': parseInt($('#syslogFrom').val()),
 				'to': parseInt($('#syslogTo').val()),
 				'ips': $('#syslogSelect').val()
-			})
+			});
 		} else if ($trg.is('#syslogSelect')) {
 			const $btn = $('#syslogDurationPreset.active');
 			let to = parseInt($('#syslogTo').val());
@@ -1239,11 +1239,11 @@ $(document).ready(function() {
 			if ($btn) {
 				const value = $btn.val();
 				to = new Date().getTime()/1000;
-				if (value == "live") {
+				if (value == 'live') {
 					from = to;
 					$('table[data-catagory="syslog"]').attr('data-mode', 'live');
 				} else {
-					from = to - parseInt(value);;
+					from = to - parseInt(value);
 					$('table[data-catagory="syslog"]').attr('data-mode', 'duration');
 				}
 			}
@@ -1253,12 +1253,12 @@ $(document).ready(function() {
 				'from': from,
 				'to': to,
 				'ips': $('#syslogSelect').val()
-			})
+			});
 		} else if ($trg.is('#syslogDurationPreset')) {
 			const value = $trg.val();
 			let to = new Date().getTime()/1000;
 			let from = to;
-			if (value == "live") {
+			if (value == 'live') {
 				$('table[data-catagory="syslog"]').attr('data-mode', 'live');
 			} else {
 				from = to - parseInt(value);
@@ -1279,26 +1279,26 @@ $(document).ready(function() {
 	});
 
 	switch (location.hash) {
-		case "#media":
-			$('#nav-media-tab').click();
-			break;
-		case "#control":
-			$('#nav-control-tab').click();
-			break;
-		case "#temp":
-			$('#nav-temp-tab').click();
-			break;
-		case "#pings":
-			$('#nav-pings-tab').click();
-			break;
-		case "#syslog":
-			$('#nav-syslog-tab').click();
-			break;
-		case "#debug":
-			$('#nav-debug-tab').click();
-			break;
-		default:
-			break;
+	case '#media':
+		$('#nav-media-tab').click();
+		break;
+	case '#control':
+		$('#nav-control-tab').click();
+		break;
+	case '#temp':
+		$('#nav-temp-tab').click();
+		break;
+	case '#pings':
+		$('#nav-pings-tab').click();
+		break;
+	case '#syslog':
+		$('#nav-syslog-tab').click();
+		break;
+	case '#debug':
+		$('#nav-debug-tab').click();
+		break;
+	default:
+		break;
 	}
 
 });
@@ -1405,7 +1405,7 @@ function configRowDone($trg) {
 			$td.removeClass('input-group');
 			break;
 		case 'select':
-			if (value == "") value = $td.children()[0].value
+			value = $td.children()[0].value;
 			$td.html(value);
 			data[$td.data('key')] = value;
 			break;
@@ -1449,13 +1449,13 @@ function renderEditorTab(devicesData, editor, template, element) {
 }
 
 function download(filename, text) {
-	var element = document.createElement('a')
-	element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text))
-	element.setAttribute('download', filename)
-	element.style.display = 'none'
-	document.body.appendChild(element)
-	element.click()
-	document.body.removeChild(element)
+	var element = document.createElement('a');
+	element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+	element.setAttribute('download', filename);
+	element.style.display = 'none';
+	document.body.appendChild(element);
+	element.click();
+	document.body.removeChild(element);
 }
 
 function doTableSort($trg, toggleDir = true) {
@@ -1492,5 +1492,5 @@ function doTableSort($trg, toggleDir = true) {
 	});
 	$rows.each(function(i, $row) {
 		$tbody.append($row);
-	})
+	});
 }
