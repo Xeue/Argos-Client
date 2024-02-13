@@ -479,6 +479,15 @@ const syslogServer = new SysLogServer(
 			logger
 		);
 		await SQL.init(tables);
+		const sensor = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'test';");
+		if (sensor.length == 0) {
+			await SQL.query("ALTER TABLE `temperature` RENAME COLUMN frame TO sensor;");
+		}
+		const sensorType = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'sensorType';");
+		if (sensorType.length == 0) {
+			await SQL.query("ALTER TABLE `temperature` ADD COLUMN sensorType text NOT NULL;");
+			await SQL.query("UPDATE `temperature` SET sensorType = 'IQ Frame' WHERE 1=1;");
+		}
 	}
 
 	webServer.start(config.get('port'));
