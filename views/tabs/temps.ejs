@@ -23,6 +23,30 @@
             </div>
         </div>
     </div>
+    <div class="text-light" id="col-hot-generic">
+        <h4>Temperature Sensors</h4>
+        <span class="text-muted">Last updated <span id="lastHotGeneric">never</span></span>
+        <canvas id="tempChartGeneric"></canvas>
+        <div class="buttonBox">
+            <div>
+                Select from
+                <button id="tempFromPickGeneric" class="btn btn-secondary btn-sm"></button>
+                <input type="hidden" id="tempFromGeneric" value="">
+                until
+                <button id="tempToPickGeneric" class="btn btn-secondary btn-sm"></button>
+                <input type="hidden" id="tempToGeneric" value="">
+            </div>
+            <div class="pt-1">
+                Or the last
+                <button class="tempButGeneric btn btn-secondary btn-sm" data-time="2419200">Month</button>
+                <button class="tempButGeneric btn btn-secondary btn-sm" data-time="604800">Week</button>
+                <button class="tempButGeneric btn btn-secondary btn-sm" data-time="86400">Day</button>
+                <button class="tempButGeneric btn btn-secondary btn-sm" data-time="43200">12 Hours</button>
+                <button class="tempButGeneric btn btn-secondary btn-sm" data-time="21600">6 Hours</button>
+                <button class="tempButGeneric btn btn-secondary btn-sm" data-time="7200">2 Hours</button>
+            </div>
+        </div>
+    </div>
     <div class="text-light text-muted" id="col-ups">
         <h4>UPS status</h4>
         <span class="text-muted">Last updated <span id="lastUps">never</span></span>

@@ -87,6 +87,7 @@ const tables = [{
 	definition: `CREATE TABLE \`temperature\` (
 		\`PK\` int(11) NOT NULL,
 		\`sensor\` text NOT NULL,
+		\`sensorType\` text NOT NULL,
 		\`temperature\` float NOT NULL,
 		\`system\` text NOT NULL,
 		\`time\` timestamp NOT NULL DEFAULT current_timestamp(),
@@ -326,7 +327,8 @@ const lldpFrequency = 30;
 const switchStatsFrequency = 30;
 const upsFrequency = 30;
 const devicesFrequency = 30;
-const tempFrequency = minutes(5);
+//const tempFrequency = minutes(5);
+const tempFrequency = 5;
 const localPingFrequency = 10;
 const envFrequency = 30;
 const interfaceFrequency = 30;
@@ -494,6 +496,7 @@ const syslogServer = new SysLogServer(
 		connectToWebServer(true);
 	}, 60*1000);
 	
+	await startLoopAfterDelay(logTemp, tempFrequency);
 	await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Media');
 	await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Control');
 	await startLoopAfterDelay(localPings, localPingFrequency);
@@ -510,7 +513,6 @@ const syslogServer = new SysLogServer(
 	await startLoopAfterDelay(checkDevices, devicesFrequency, 'Control', false);
 	await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Control');
 	await startLoopAfterDelay(checkUps, upsFrequency);
-	await startLoopAfterDelay(logTemp, tempFrequency);
 })().catch(error => {
 	console.log(error);
 });
@@ -920,7 +922,12 @@ async function doMessage(msgObj, socket) {
 	case 'get':
 		switch (payload.data) {
 			case 'temperature':
-				getTemperature(header, payload).then(data => {
+				getTemperature(header, payload, 'IQ Frame').then(data => {
+					webServer.sendTo(socket, data);
+				});
+				break;
+			case 'temperatureGeneric':
+				getTemperature(header, payload, 'Will N Sensor').then(data => {
 					webServer.sendTo(socket, data);
 				});
 				break;
@@ -959,15 +966,16 @@ async function doSysLogMessage(msg, info) {
 
 }
 
-async function getTemperature(header, payload) {
+async function getTemperature(header, payload, type) {
 	logger.log(`Getting temps for ${header.system}`, 'D');
 	const from = payload.from;
 	const to = payload.to;
-	const dateQuery = `SELECT ROW_NUMBER() OVER (ORDER BY PK) AS Number, \`PK\`, \`time\` FROM \`temperature\` WHERE time BETWEEN FROM_UNIXTIME(${from}) AND FROM_UNIXTIME(${to}) AND \`system\` = '${header.system}' GROUP BY \`time\`; `;
+	const dateQuery = `SELECT ROW_NUMBER() OVER (ORDER BY PK) AS Number, \`PK\`, \`time\` FROM \`temperature\` WHERE time BETWEEN FROM_UNIXTIME(${from}) AND FROM_UNIXTIME(${to}) AND \`system\` = '${header.system}' AND \`sensorType\` = '${type}' GROUP BY \`time\`; `;
 
 	if (!config.get('localDataBase')) return {
 		'command':'data',
 		'data':'temps',
+		'type': type,
 		'system':header.system,
 		'replace': true,
 		'points':{}
@@ -978,6 +986,7 @@ async function getTemperature(header, payload) {
 		return {
 			'command':'data',
 			'data':'temps',
+			'type': type,
 			'system':header.system,
 			'replace': true,
 			'points':{}
@@ -994,9 +1003,9 @@ async function getTemperature(header, payload) {
 	const whereString = whereArr.join(',');
 	let query;
 	if (whereString == '') {
-		query = `SELECT * FROM \`temperature\` WHERE \`system\` = '${header.system}' ORDER BY \`PK\` ASC LIMIT 1; `;
+		query = `SELECT * FROM \`temperature\` WHERE \`system\` = '${header.system}' AND \`sensorType\` = '${type}' ORDER BY \`PK\` ASC LIMIT 1; `;
 	} else {
-		query = `SELECT * FROM \`temperature\` WHERE time IN (${whereString}) AND \`system\` = '${header.system}' ORDER BY \`PK\` ASC; `;
+		query = `SELECT * FROM \`temperature\` WHERE time IN (${whereString}) AND \`system\` = '${header.system}' AND \`sensorType\` = '${type}' ORDER BY \`PK\` ASC; `;
 	}
 
 	const rows = await SQL.query(query);
@@ -1004,6 +1013,7 @@ async function getTemperature(header, payload) {
 	const dataObj = {
 		'command':'data',
 		'data':'temps',
+		'type': type,
 		'system':header.system,
 		'replace': true,
 		'points':{}
@@ -1575,6 +1585,7 @@ async function doIQTemps(Temps) {
 				logger.log(`${Temps[index].Name} temperature = ${temp} deg C`, 'D');
 				if (config.get('localDataBase')) SQL.insert({
 					'sensor': Temps[index].Name,
+					'sensorType': 'IQ Frame',
 					'temperature': Temps[index].Temp,
 					'system': config.get('systemName')
 				}, 'temperature');
@@ -1591,7 +1602,7 @@ async function doIQTemps(Temps) {
 
 	if (tempValid == 0) {
 		logger.log('Invalid temperature measured connections must have failed', 'E');
-		sendSms('CANNOT CONNECT TO MCR, MAYBE IT HAS MELTED?');
+		sendSms('Cannot connect to sensor, it haseither failed or the network is broken');
 	} else {
 		tempAvg = tempSum / tempValid;
 		logger.log(`Average temperature = ${tempAvg} deg C`, 'D');
@@ -1619,7 +1630,89 @@ async function doIQTemps(Temps) {
 }
 
 async function doGenericTemps(Temps) {
+	let promises = [];
 
+	for (let index = 0; index < Temps.length; index++) {
+		const sensor = Temps[index];
+		try {
+			const response = await fetch('http://'+sensor.IP+'/temps');
+			promises.push(response.text());
+		} catch (error) {
+			logger.warn(`Cannot reach sensor on: ${sensor.IP}`, error);
+		}
+	}
+
+	if (promises.length < 1) return;
+
+	const results = await Promise.allSettled(promises);
+	logger.log('Got temperature data, processing', 'D');
+	let tempSum = 0;
+	let tempValid = 0;
+	const webTemps = [];
+	const socketSend = {};
+
+	for (let index = 0; index < Temps.length; index++) {
+		const sensorData = results[index];
+
+		if (sensorData.status == 'fulfilled') {
+			const sensors = JSON.parse(sensorData.value);
+			for (let sensorNum = 0; sensorNum < sensors.Sensors; sensorNum++) {
+				const sensor = sensors[`Sensor${sensorNum+1}`];
+				try {				
+					webTemps.push({
+						'Temp': Number(sensor.Temperature),
+						'Name': sensor.Location,
+						'IP': Temps[index].IP,
+						'Type': 'Will N Sensor'
+					})
+					tempSum += Number(sensor.Temperature);
+					tempValid++;
+					logger.log(`${sensor.Location} temperature = ${Number(sensor.Temperature)} deg C`, 'D');
+					if (config.get('localDataBase')) SQL.insert({
+						'sensor': sensor.Location,
+						'sensorType': 'Will N Sensor',
+						'temperature': Number(sensor.Temperature),
+						'system': config.get('systemName')
+					}, 'temperature');
+					socketSend[sensor.Location] = Number(sensor.Temperature);
+				} catch (error) {
+					logger.object(`Error processing data for from: '${sensor.Location}'`, error, 'W');
+				}
+			}
+		} else {
+			logger.log(`Can't connect to sensor: '${Temps[index].Name}'`, 'W');
+		}
+	}
+
+	let tempAvg;
+
+	if (tempValid == 0) {
+		logger.log('Invalid temperature measured connections must have failed', 'E');
+		sendSms('Cannot connect to sensor, it haseither failed or the network is broken');
+	} else {
+		tempAvg = tempSum / tempValid;
+		logger.log(`Average temperature = ${tempAvg} deg C`, 'D');
+		logger.log(`Warning temperature = ${config.get('warningTemperature')} deg C`, 'D');
+
+		if (tempAvg > config.get('warningTemperature')) {
+			logger.log('Warning: Temperature over warning limit, sending SMS', 'W');
+			sendSms(`Commitment to environment sustainability failed, MCR IS MELTING: ${tempAvg} deg C`);
+		}
+		sendCloudData({'command':'log', 'type':'temperature', 'data':webTemps});
+
+		socketSend.average = tempAvg;
+		const time = new Date().getTime();
+		const points = {};
+		points[time] = socketSend;
+		webServer.sendToAll({
+			'command': 'data',
+			'data': 'temps',
+			'type': 'Will N Sensor',
+			'system': config.get('systemName'),
+			'replace': false,
+			'points': points
+		});
+	}
 }
 
 function webLogPing() {

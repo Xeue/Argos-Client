@@ -5,6 +5,7 @@ let editors = {};
 
 let pingChart;
 let tempChart;
+let tempChartGeneric;
 let bootChart;
 let syslogHistogram;
 let pings = {};
@@ -144,6 +145,14 @@ function socketDoMessage(header, payload) {
 						addTemps(payload.points);
 					}
 					$('#lastHot').attr('data-last-update', Date.now());
+					break;
+				case 'Will N Sensor':
+					if (payload.replace) {
+						replaceTempsGeneric(payload.points);
+					} else {
+						addTempsGeneric(payload.points);
+					}
+					$('#lastHotGeneric').attr('data-last-update', Date.now());
 					break;
 				default:
 					break;
@@ -311,13 +320,31 @@ function addTemps(points) {
 			if (!sets.includes(frame)) {
 				let data = {};
 				data[dateStamp] = point[frame];
-				newTempDataSet(frame, data);
+				newTempDataSet(frame, data, tempChart);
 			} else {
 				tempChart.data.datasets[sets.indexOf(frame)].data[dateStamp] = point[frame];
 			}
 		}
 	}
 	tempChart.update();
+}
+
+function addTempsGeneric(points) {
+	for (var timeStamp in points) {
+		let sets = tempChartGeneric.data.datasets.map((set)=>{return set.label;});
+		let dateStamp = new Date(parseInt(timeStamp));
+		let point = points[timeStamp];
+		for (var frame in point) {
+			if (!sets.includes(frame)) {
+				let data = {};
+				data[dateStamp] = point[frame];
+				newTempDataSet(frame, data, tempChartGeneric);
+			} else {
+				tempChartGeneric.data.datasets[sets.indexOf(frame)].data[dateStamp] = point[frame];
+			}
+		}
+	}
+	tempChartGeneric.update();
 }
 
 function replaceTemps(points) {
@@ -330,7 +357,7 @@ function replaceTemps(points) {
 			if (!sets.includes(frame)) {
 				let data = {};
 				data[dateStamp] = point[frame];
-				newTempDataSet(frame, data);
+				newTempDataSet(frame, data, tempChart);
 			} else {
 				tempChart.data.datasets[sets.indexOf(frame)].data[dateStamp] = point[frame];
 			}
@@ -339,11 +366,30 @@ function replaceTemps(points) {
 	tempChart.update();
 }
 
+function replaceTempsGeneric(points) {
+	tempChartGeneric.data.datasets = [];
+	for (var timeStamp in points) {
+		let sets = tempChartGeneric.data.datasets.map((set)=>{return set.label;});
+		let dateStamp = new Date(parseInt(timeStamp));
+		let point = points[timeStamp];
+		for (var frame in point) {
+			if (!sets.includes(frame)) {
+				let data = {};
+				data[dateStamp] = point[frame];
+				newTempDataSet(frame, data, tempChartGeneric);
+			} else {
+				tempChartGeneric.data.datasets[sets.indexOf(frame)].data[dateStamp] = point[frame];
+			}
+		}
+	}
+	tempChartGeneric.update();
+}
+
 function rand() {
 	return Math.floor((Math.random() * 155)+100);
 }
 
-function newTempDataSet(name, data) {
+function newTempDataSet(name, data, chart) {
 	let r = rand();
 	let g = rand();
 	let b = rand();
@@ -359,8 +405,8 @@ function newTempDataSet(name, data) {
 		cubicInterpolationMode: 'monotone',
 		tension: 0.4
 	};
-	tempChart.data.datasets.push(dataset);
-	tempChart.update();
+	chart.data.datasets.push(dataset);
+	chart.update();
 }
 
 function renderTempChart() {
@@ -393,6 +439,38 @@ function renderTempChart() {
 		},
 	};
 	tempChart = new Chart(ctx, config);
+}
+
+function renderTempChartGeneric() {
+	const ctx = $('#tempChartGeneric');
+	const data = {
+		datasets: []
+	};
+	const config = {
+		type: 'line',
+		data: data,
+		options: {
+			responsive: true,
+			interaction: {
+				mode: 'index',
+				intersect: false,
+			},
+			stacked: false,
+			scales: {
+				x: {
+					type: 'time',
+					time: {
+						displayFormats: {
+							second: 'YY/MM/DD H:mm:ss',
+							minute: 'YY/MM/DD H:mm',
+							hour: 'YY/MM/DD H:mm'
+						}
+					}
+				}
+			}
+		},
+	};
+	tempChartGeneric = new Chart(ctx, config);
 }
 
 function renderPingChart() {
@@ -964,6 +1042,7 @@ function setupWebConnection() {
 
 $(document).ready(function() {
 	renderTempChart();
+	renderTempChartGeneric();
 	setInterval(updateLast, 1000);
 
 	const webConnection = setupWebConnection();
@@ -986,7 +1065,15 @@ $(document).ready(function() {
 		dateFormat: 'YYYY-MM-DD HH:mm',
 		title: 'From'
 	});
+	$('#tempFromPickGeneric').dateTimePicker({
+		dateFormat: 'YYYY-MM-DD HH:mm',
+		title: 'From'
+	});
 	$('#tempToPick').dateTimePicker({
+		dateFormat: 'YYYY-MM-DD HH:mm',
+		title: 'To'
+	});
+	$('#tempToPickGeneric').dateTimePicker({
 		dateFormat: 'YYYY-MM-DD HH:mm',
 		title: 'To'
 	});
@@ -1030,6 +1117,16 @@ $(document).ready(function() {
 			localConnection.send({
 				'command':'get',
 				'data':'temperature',
+				'from': from,
+				'to': to
+			});
+		} else if ($trg.hasClass('tempButGeneric')) {
+			let time = parseInt($trg.data('time'));
+			let to = new Date().getTime()/1000;
+			let from = to - time;
+			localConnection.send({
+				'command':'get',
+				'data':'temperatureGeneric',
 				'from': from,
 				'to': to
 			});
@@ -1208,6 +1305,13 @@ $(document).ready(function() {
 				'data':'temperature',
 				'from': parseInt($('#tempFrom').val()),
 				'to': parseInt($('#tempTo').val())
+			});
+		} else if ($trg.is('#tempFromGeneric') || $trg.is('#tempToGeneric')) {
+			localConnection.send({
+				'command':'get',
+				'data':'temperatureGeneric',
+				'from': parseInt($('#tempFromGeneric').val()),
+				'to': parseInt($('#tempToGeneric').val())
 			});
 		} else if ($trg.is('#pingFrom') || $trg.is('#pingTo')) {
 			webConnection.send({
