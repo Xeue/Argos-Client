@@ -515,7 +515,7 @@ const syslogServer = new SysLogServer(
 	await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Media');
 	await startLoopAfterDelay(checkDevices, devicesFrequency, 'Media', true);
 	await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Media');
-	await startLoopAfterDelay(switchPhy, switchStatsFrequency, 'Media');
+	//await startLoopAfterDelay(switchPhy, switchStatsFrequency, 'Media');
 	await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Media');
 	await startLoopAfterDelay(switchEnv, envFrequency, 'Control');
 	await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Control');
