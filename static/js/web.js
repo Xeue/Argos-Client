@@ -749,9 +749,9 @@ function handleUPSData(data) {
 		$.each(data, (k, v) => {
 			let s;
 			if (v.Status === 'Offline') {
-				s = `<tr><td>${v.Name}</td><td colspan="4" class="text-center">Offline</td><td></td></tr>`;
+				s = `<tr><td>${v.name}</td><td colspan="4" class="text-center">Offline</td><td></td></tr>`;
 			} else {
-				s = `<tr><td>${v.Name}</td><td>${v.voltageIn}V ${v.freqIn}Hz</td><td>${v.voltageOut}V ${v.freqOut}Hz</td><td>${v.autonomy} min</td><td>${v.temp}°C</td><td>${v.load}%</td></tr>`;
+				s = `<tr><td>${v.name}</td><td>${v.voltageIn}V ${v.freqIn}Hz</td><td>${v.voltageOut}V ${v.freqOut}Hz</td><td>${v.autonomy} min</td><td>${v.temp}°C</td><td>${v.load}%</td></tr>`;
 			}
 			$('table#ups tbody').append(s);
 		});

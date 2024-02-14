@@ -339,6 +339,7 @@ let isQuiting = false;
 let mainWindow = null;
 let SQL;
 let configLoaded = false;
+let cachedUpsTemps = {};
 const devEnv = app.isPackaged ? './' : './';
 const __main = path.resolve(__dirname, devEnv);
 
@@ -1415,6 +1416,7 @@ function checkUps() {
 
 	return Promise.allSettled(promises).then((values) => {
 		let filteredUps = [];
+		cachedUpsTemps = {};
 		for (let i = 0; i < Ups.length; i++) {
 			if (values[i].status === 'rejected' || typeof values[i].value == 'undefined') {
 				Ups[i].Status = 'Offline';
@@ -1422,6 +1424,7 @@ function checkUps() {
 					//filteredUps.push(Ups[i]);
 				}
 			} else {
+				cachedUpsTemps[Ups[i].Name] = Ups[i].temp;
 				values[i].value.name = Ups[i].Name;
 				delete values[i].value.ip;
 				Ups[i] = values[i].value;
@@ -1692,6 +1695,24 @@ async function doGenericTemps(Temps) {
 			logger.log(`Can't connect to sensor: '${Temps[index].Name}'`, 'W');
 		}
 	}
+
+	Object.keys(cachedUpsTemps).forEach(upsName => {
+		tempValid++;
+		logger.log(`${upsName} temperature = ${Number(cachedUpsTemps[upsName])} deg C`, 'D');
+		if (config.get('localDataBase')) SQL.insert({
+			'sensor': upsName,
+			'sensorType': 'Will N Sensor',
+			'temperature': Number(cachedUpsTemps[upsName]),
+			'system': config.get('systemName')
+		}, 'temperature');
+		socketSend[upsName] = Number(cachedUpsTemps[upsName]);
+		webTemps.push({
+			'Temp': Number(cachedUpsTemps[upsName]),
+			'Name': upsName,
+			'IP': Temps[index].IP,
+			'Type': 'Will N Sensor'
+		})
+	})
 
 	let tempAvg;
 
