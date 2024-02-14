@@ -480,7 +480,7 @@ const syslogServer = new SysLogServer(
 			logger
 		);
 		await SQL.init(tables);
-		const sensor = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'test';");
+		const sensor = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'frame';");
 		if (sensor.length == 0) {
 			await SQL.query("ALTER TABLE `temperature` RENAME COLUMN frame TO sensor;");
 		}
@@ -1424,7 +1424,7 @@ function checkUps() {
 					//filteredUps.push(Ups[i]);
 				}
 			} else {
-				cachedUpsTemps[Ups[i].Name] = Ups[i].temp;
+				cachedUpsTemps[Ups[i].Name] = values[i].value.temp;
 				values[i].value.name = Ups[i].Name;
 				delete values[i].value.ip;
 				Ups[i] = values[i].value;
@@ -1654,7 +1654,8 @@ async function doGenericTemps(Temps) {
 		}
 	}
 
-	if (promises.length < 1) return;
+	const cachedTemps = Object.keys(cachedUpsTemps)
+	if (promises.length < 1 && cachedTemps.length < 1) return;
 
 	const results = await Promise.allSettled(promises);
 	logger.log('Got temperature data, processing', 'D');
@@ -1696,7 +1697,7 @@ async function doGenericTemps(Temps) {
 		}
 	}
 
-	Object.keys(cachedUpsTemps).forEach(upsName => {
+	cachedTemps.forEach(upsName => {
 		tempValid++;
 		logger.log(`${upsName} temperature = ${Number(cachedUpsTemps[upsName])} deg C`, 'D');
 		if (config.get('localDataBase')) SQL.insert({
@@ -1709,7 +1710,7 @@ async function doGenericTemps(Temps) {
 		webTemps.push({
 			'Temp': Number(cachedUpsTemps[upsName]),
 			'Name': upsName,
-			'IP': Temps[index].IP,
+			'IP': '0.0.0.0',
 			'Type': 'Will N Sensor'
 		})
 	})
