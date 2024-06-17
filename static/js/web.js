@@ -775,7 +775,7 @@ function handleLocalPing(data) {
 		const $row = $(`<tr class="pingStatus" data-ip="${IP}" data-updated-time="${Date.now()}">
 			<td>${Name}</td>
 			<td>${IP}</td>
-			<td data-last-update="${Date.now()}"></td>
+			<td data-last-update="${Date.now()}" data-compact="true"></td>
 			<td>${actions}</td>
 		</tr>`);
 		if (status) {
@@ -966,43 +966,47 @@ function handleInterfaces(data, type) {
 function updateLast() {
 	$('[data-last-update]').each(function(i, element) {
 		const $element = $(element);
-		$element.text(prettifyTime($element.attr('data-last-update')));
+		$element.text(prettifyTime($element.attr('data-last-update'), $element.attr('data-compact') || false));
 	});
 }
 
-function prettifyTime(time) {
+function prettifyTime(time, compact = false) {
 	if (time == -1) {
 		return 'never';
 	}
-	let t = Math.floor((Date.now() - time) / 1000);
-	let minutes = Math.floor(t / 60);
-	let seconds = t % 60;
-	if (minutes == 0 && seconds == 0) {
+	const t = Math.floor((Date.now() - time) / 1000);
+	const hours = Math.floor(t / (60 * 60));
+	const minutes = Math.floor(t / 60);
+	const seconds = t % 60;
+	if (compact) return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+	if (hours == 0, minutes == 0 && seconds == 0) {
 		return 'just now';
-	} else if (minutes == 0) {
+	} else if (hours == 0 && minutes == 0) {
 		if (seconds == 1) {
 			return '1 second ago';
 		} else {
-			return seconds + ' seconds ago';
+			return `${seconds} seconds ago`;
 		}
-	} else if (minutes == 1) {
+	} else if (hours == 0, minutes == 1) {
 		if (seconds == 0) {
 			return '1 minute ago';
 		}
 		else if (seconds == 1) {
-			return '1 minute, 1 second ago';
+			return  '1 minute, 1 second ago';
 		} else {
-			return '1 minute, ' + seconds + ' seconds ago';
+			return `1 minute, ${seconds} seconds ago`;
 		}
-	} else {
+	} else if (hours == 0) {
 		if (seconds == 0) {
 			return minutes + ' minutes ago';
 		}
 		else if (seconds == 1) {
-			return minutes + ' minutes, 1 second ago';
+			return `${minutes} minutes, 1 second ago`;
 		} else {
-			return minutes + ' minutes, ' + seconds + ' seconds ago';
+			return `${minutes} minutes, ${seconds} seconds ago`;
 		}
+	} else {
+		return `${hours} hour${hours == 0 ? '' : 's'}, ${minutes} minute${minutes == 0 ? '' : 's'}, ${seconds} second${seconds == 0 ? '' : 's'} ago`;
 	}
 }
 
@@ -1294,6 +1298,8 @@ $(document).ready(function() {
 			history.pushState({}, '', `#${tab}`);
 		} else if ($trg.hasClass('clearPing')) {
 			$trg.closest('tr').remove();
+		} else if ($trg.is('#fullscreen')) {
+			document.getElementById('mainCont').parentElement.requestFullscreen();
 		}
 	});
 

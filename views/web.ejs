@@ -46,11 +46,11 @@
     <link id="favicon_48" rel="icon" href="img/icon/icon.svg" sizes="256x256">
 </head>
 
-<body class="h-100 d-flex flex-column <%-background%>">
+<body id="mainCont" class="h-100 d-flex flex-column <%-background%>">
     <div id="loading" class="hidden"></div>
 
     <nav class="drag navbar navbar-expand-lg navbar-dark bg-title px-2">
-        <a class="navbar-brand" href="#">
+        <a class="navbar-brand" href="/">
             <img src="img/icon/icon.svg" class="d-inline-block align-top" alt="" width="30" height="30">
             Argos
         </a>
@@ -66,6 +66,9 @@
             <button class="btn btn-secondary navTab" id="nav-debug-tab" data-bs-toggle="tab" data-bs-target="#nav-debug" type="button" role="tab" aria-controls="nav-debug" aria-selected="true">Debug</button>
             <button class="btn btn-secondary navTab" id="nav-syslog-tab" data-bs-toggle="tab" data-bs-target="#nav-syslog" type="button" role="tab" aria-controls="nav-syslog" aria-selected="true">Syslog</button>
             <button class="btn btn-secondary" id="toggleConfig">Edit Devices</button>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-secondary" id="fullscreen">Fullscreen</button>
         </div>
     </nav>
     <main class="tab-content container-fluid py-3 overflow-auto">

@@ -256,3 +256,13 @@ td[data-value=Password]:after {
 .editing td[data-value=Password]:after {
   display: none;
 }
+
+@media screen and (orientation: portrait) {
+  main {
+    order: 0;
+  }
+  nav {
+    order: 1;
+    margin-top: auto;
+  }
+}
