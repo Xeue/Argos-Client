@@ -8,6 +8,9 @@
                     <label for="syslogSelect" class="pe-2 pt-1">Devices</label>
                     <select id="syslogSelect" multiple>
                         <option value="all" selected="selected">All</option>
+                        <% pingGroups.forEach(group => { %>
+                            <option value="<%- group %>"><%- group %></option>
+                        <% }); %>
                         <% Object.keys(pings).forEach(IP => { %>
                             <option value="<%- IP %>"><%- pings[IP] %></option>
                         <% }); %>

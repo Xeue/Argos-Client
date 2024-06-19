@@ -122,11 +122,13 @@ nav.drag {
 
 .masonry table {
   margin-bottom: 0 !important;
+  position: relative;
 }
 
 #syslogHistogram {
   visibility: hidden;
-  height: 0vh !important;
+  height: 60vh !important;
+  margin-top: -60vh;
 }
 
 #syslogHistogramToggle::after {
@@ -141,6 +143,8 @@ nav.drag {
 .showHistogram #syslogHistogram {
   visibility: visible;
   height: 60vh !important;
+  position: relative;
+  margin-top: 0;
 }
 
 .showHistogram #syslogHistogramToggle::after {
@@ -177,7 +181,8 @@ nav.drag {
           mask: radial-gradient(farthest-side,#0000 calc(99% - var(--b)),#000 calc(100% - var(--b)));
 }
 
-[data-editor] [data-type="check"][data-value="true"]:empty::before {
+[data-editor] [data-type="check"][data-value="true"]:empty::before,
+[data-editor] [data-type="check"][data-value="TRUE"]:empty::before {
   content:"✓";
   background: green;
   border-radius: 50%;
@@ -228,6 +233,26 @@ nav.drag {
 
 .sorted {
   box-shadow: 0 0 0 100px #ffffff36 inset !important;
+}
+
+.pingGroup::before {
+  content: attr(data-group);
+  background: #1987545e;
+  display: block;
+  color: white;
+  width: 100%;
+  padding: 0.5rem;
+  text-align: center;
+  font-weight: bold;
+}
+
+.pingGroup[data-group="NONE"]::before {
+  display: none;
+}
+
+
+#pingLocalDown .pingGroup::before {
+  background: #dc35455e;
 }
 
 body.micaActive {

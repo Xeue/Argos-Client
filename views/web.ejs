@@ -26,6 +26,7 @@
             <% }); %>
         ]
         let syslogSourceList = <%- JSON.stringify(pings) %>;
+        let syslogSourceListGroups = <%- JSON.stringify(pingGroups) %>;
         const webEnabled = <%=webEnabled%>;
         const webSocketEndpoint = '<%=webSocketEndpoint%>';
         const secureWebsockets = <%=secureWebSocketEndpoint%>;

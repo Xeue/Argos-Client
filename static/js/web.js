@@ -18,7 +18,7 @@ templates.nameIP = `<% for(i = 0; i < devices.length; i++) { %>
     <td data-type="text" data-key="Name" data-value="<%-devices[i].Name%>"><%-devices[i].Name%></td>
     <td data-type="text" data-key="IP" data-value="<%-devices[i].IP%>"><%-devices[i].IP%></td>
     <td>
-      <button type="button" class="btn btn-danger editConfig w-50">Edit</button>
+      <button type="button" class="btn btn-primary editConfig w-50">Edit</button>
       <button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
     </td>
   </tr>
@@ -30,7 +30,7 @@ templates.sensors = `<% for(i = 0; i < devices.length; i++) { %>
 	  <td data-type="text" data-key="IP" data-value="<%-devices[i].IP%>"><%-devices[i].IP%></td>
 	  <td data-type="select" data-key="Type" data-value="<%-devices[i].Type%>" data-options="IQ Frame,Will N Sensor"><%-devices[i].Type%></td>
 	  <td>
-		<button type="button" class="btn btn-danger editConfig w-50">Edit</button>
+		<button type="button" class="btn btn-primary editConfig w-50">Edit</button>
 		<button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
 	  </td>
 	</tr>
@@ -40,11 +40,12 @@ templates.pings = `<% for(i = 0; i < devices.length; i++) { %>
 	<tr data-index="<%=i%>" data-template="pings">
 	  <td data-type="text" data-key="Name" data-value="<%-devices[i].Name%>"><%-devices[i].Name%></td>
 	  <td data-type="text" data-key="IP" data-value="<%-devices[i].IP%>"><%-devices[i].IP%></td>
+	  <td data-type="text" data-key="Group" data-value="<%-devices[i].Group%>"><%-devices[i].Group%></td>
 	  <td data-type="check" data-key="SSH" data-value="<%-devices[i].SSH%>" readonly></td>
 	  <td data-type="check" data-key="HTTP" data-value="<%-devices[i].HTTP%>" readonly></td>
 	  <td data-type="check" data-key="HTTPS" data-value="<%-devices[i].HTTPS%>" readonly></td>
 	  <td>
-		<button type="button" class="btn btn-danger editConfig w-50">Edit</button>
+		<button type="button" class="btn btn-primary editConfig w-50">Edit</button>
 		<button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
 	  </td>
 	</tr>
@@ -59,7 +60,7 @@ templates.switch = `<% for(i = 0; i < devices.length; i++) { %>
 	<td data-type="select" data-key="Type" data-value="<%-devices[i].Type%>" data-options="Control,Media"><%-devices[i].Type%></td>
 	<td data-type="select" data-key="OS" data-value="<%-devices[i].OS%>" data-options="EOS,NXOS,IOS"><%-devices[i].OS%></td>
     <td>
-      <button type="button" class="btn btn-danger editConfig w-50">Edit</button>
+      <button type="button" class="btn btn-primary editConfig w-50">Edit</button>
       <button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
     </td>
   </tr>
@@ -70,7 +71,7 @@ templates.devices = `<% for(i = 0; i < devices.length; i++) { %>
     <td data-type="text" data-key="name" data-value="<%-devices[i].name%>"><%-devices[i].name%></td>
     <td data-type="text" data-key="description" data-value="<%-devices[i].description%>"><%-devices[i].description%></td>
     <td>
-      <button type="button" class="btn btn-danger editConfig w-50">Edit</button>
+      <button type="button" class="btn btn-primary editConfig w-50">Edit</button>
       <button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
     </td>
   </tr>
@@ -81,7 +82,7 @@ templates.ports = `<% for(i = 0; i < devices.length; i++) { %>
 		<td data-type="select" data-key="Switch" data-value="<%-devices[i].Switch%>" data-options="<%-switches.join(',')%>"><%-devices[i].Switch%></td>
 		<td data-type="text" data-key="Port" data-value="<%-devices[i].Port%>"><%-devices[i].Port%></td>
 	  	<td>
-			<button type="button" class="btn btn-danger editConfig w-50">Edit</button>
+			<button type="button" class="btn btn-primary editConfig w-50">Edit</button>
 			<button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
 	  	</td>
 	</tr>
@@ -649,8 +650,14 @@ function handleDevicesData(data, type) {
 	} else {
 		$(`[data-type="${type}"][data-type="alive"]`).removeClass('text-muted');
 		$(table).removeClass('text-muted');
+
+		data = Object.keys(data).sort().reduce((obj, key) => {
+			obj[key] = data[key]; 
+			return obj;
+		},{});
+
 		$.each(data, (port, lldp) => {
-			let row = '<tr><td>' + port + '</td>';
+			let row = `<tr data-port="${port}"><td>${port}</td>`;
 			switch (type) {
 			case 'Control':
 				for (let index = 0; index < ControlSwitches.length; index++) {
@@ -749,7 +756,7 @@ function handleUPSData(data) {
 		$.each(data, (k, v) => {
 			let s;
 			if (v.Status === 'Offline') {
-				s = `<tr><td>${v.name}</td><td colspan="4" class="text-center">Offline</td><td></td></tr>`;
+				s = `<tr><td>${v.Name}</td><td colspan="5" class="text-center bg-danger">Offline</td></tr>`;
 			} else {
 				s = `<tr><td>${v.name}</td><td>${v.voltageIn}V ${v.freqIn}Hz</td><td>${v.voltageOut}V ${v.freqOut}Hz</td><td>${v.autonomy} min</td><td>${v.temp}°C</td><td>${v.load}%</td></tr>`;
 			}
@@ -763,36 +770,64 @@ function handleLocalPing(data) {
 	const IP = data.IP;
 	const Name = data.Name;
 	const status = data.status;
-	const $upTab = $('#pingLocalUp');
-	const $downTab = $('#pingLocalDown');
-	const $search = $(`.pingStatus[data-ip="${IP}"]`);
-	let actions = '';
-	if (data.SSH) actions += `<a type="button" class="btn me-1 btn-secondary btn-sm" href="ssh://${IP}" target="_blank">SSH</a>`;
-	if (data.HTTP) actions += `<a type="button" class="btn me-1 btn-secondary btn-sm" href="http://${IP}" target="_blank">HTTP</a>`;
-	if (data.HTTPS) actions += `<a type="button" class="btn me-1 btn-secondary btn-sm" href="https://${IP}" target="_blank">HTTPS</a>`;
-	actions += '<button type="button" class="btn btn-close btn-close-white btn-sm float-end m-1 clearPing"></button>';
-	if ($search.length < 1) {
-		const $row = $(`<tr class="pingStatus" data-ip="${IP}" data-updated-time="${Date.now()}">
+	const group = data.Group || 'NONE';
+	const _upTable = document.getElementById('pingLocalUp');
+	const _downTable = document.getElementById('pingLocalDown');
+	const _search = document.querySelector(`.pingStatus[data-ip="${IP}"]`);
+
+	if (!_search) {
+
+		let actions = '';
+		if (data.SSH) actions += `<a type="button" class="btn me-1 btn-secondary btn-sm" href="ssh://${IP}" target="_blank">SSH</a>`;
+		if (data.HTTP) actions += `<a type="button" class="btn me-1 btn-secondary btn-sm" href="http://${IP}" target="_blank">HTTP</a>`;
+		if (data.HTTPS) actions += `<a type="button" class="btn me-1 btn-secondary btn-sm" href="https://${IP}" target="_blank">HTTPS</a>`;
+		actions += '<button type="button" class="btn btn-close btn-close-white btn-sm float-end m-1 clearPing"></button>';
+
+		const row = `<tr class="pingStatus" data-ip="${IP}" data-updated-time="${Date.now()}">
 			<td>${Name}</td>
 			<td>${IP}</td>
 			<td data-last-update="${Date.now()}" data-compact="true"></td>
 			<td>${actions}</td>
-		</tr>`);
-		if (status) {
-			$upTab.append($row);
-		} else {
-			$downTab.append($row);
+		</tr>`;
+
+		const _thisTable = status ? _upTable : _downTable;
+
+		const _group = _thisTable.querySelector(`.pingGroup[data-group="${group}"]`);
+		if (!_group) {
+			const _tbodyGroup = document.createElement('tbody');
+			_tbodyGroup.classList.add('pingGroup');
+			_tbodyGroup.setAttribute('data-group', group)
+			_thisTable.append(_tbodyGroup);
+			_tbodyGroup.insertAdjacentHTML('beforeend', row);
+		}
+		else {
+			_group.insertAdjacentHTML('beforeend', row);
 		}
 	} else {
-		const $table = $search.closest('.table');
-		if (($table.is('#pingLocalDown') && status) && true) {
-			$upTab.append($search);
-		} else if (($table.is('#pingLocalUp') && !status) && true) {
-			$downTab.append($search);
+		const _table = _search.closest('.table');
+		let _thisTable;
+		if ((_table.id == 'pingLocalDown' && status)) {
+			_thisTable = _upTable;
+		} else if ((_table.id == 'pingLocalUp' && !status)) {
+			_thisTable = _downTable;
+		}
+		if (_thisTable) {
+			const _group = _thisTable.querySelector(`.pingGroup[data-group="${group}"]`);
+			if (!_group) {
+				const _tbodyGroup = document.createElement('tbody');
+				_tbodyGroup.classList.add('pingGroup');
+				_tbodyGroup.setAttribute('data-group', group)
+				_thisTable.append(_tbodyGroup);
+				_tbodyGroup.append(_search);
+			}
+			else {
+				_group.append(_search);
+			}
+			_search.setAttribute('data-updated-time', Date.now());
 		}
 	}
-	doTableSort($upTab.find('.sorted'), false);
-	doTableSort($downTab.find('.sorted'), false);
+	doTableSort(_upTable.querySelector('.sorted'), false);
+	doTableSort(_downTable.querySelector('.sorted'), false);
 
 	if (status) {
 		$('#lastLocalPingUp').attr('data-last-update', Date.now());
@@ -976,7 +1011,7 @@ function prettifyTime(time, compact = false) {
 	}
 	const t = Math.floor((Date.now() - time) / 1000);
 	const hours = Math.floor(t / (60 * 60));
-	const minutes = Math.floor(t / 60);
+	const minutes = Math.floor(t / 60) % 60;
 	const seconds = t % 60;
 	if (compact) return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 	if (hours == 0, minutes == 0 && seconds == 0) {
@@ -1292,7 +1327,7 @@ $(document).ready(function() {
 			const $cont = $('div[data-catagory="syslog"]');
 			$cont.toggleClass('showHistogram');
 		} else if ($trg.hasClass('sortable')) {
-			doTableSort($trg, true);
+			doTableSort($trg[0], true);
 		} else if ($trg.hasClass('navTab')) {
 			const tab = $trg.attr('id').replace('nav-','').replace('-tab','');
 			history.pushState({}, '', `#${tab}`);
@@ -1524,7 +1559,7 @@ function configRowDone($trg) {
 		}
 		$trg.html('Edit');
 		$trg.addClass('editConfig');
-		$trg.addClass('btn-danger');
+		$trg.addClass('btn-primary');
 		$trg.removeClass('doneConfig');
 		$trg.removeClass('btn-success');
 	});
@@ -1568,39 +1603,49 @@ function download(filename, text) {
 	document.body.removeChild(element);
 }
 
-function doTableSort($trg, toggleDir = true) {
-	const sortTag = $trg.attr('data-sort-tag');
+function doTableSort(_target, toggleDir = true) {
+	const sortTag = _target.getAttribute('data-sort-tag');
 	const tag = sortTag === undefined ? undefined : sortTag;
-	const $th = $trg.closest('th');
-	const $table = $th.closest('table');
-	const $tbody = $table.find('tbody');
-	const $rows = $tbody.children('tr');
-	const index = $th.index();
-	let dir = $th.hasClass('sortedDesc') ? -1 : 1;
+	const _th = _target.closest('th') ? _target.closest('th') : _target;
+	const _table = _th.closest('table');
+	const __tbodys = _table.getElementsByTagName('tbody');
+	const index = [..._th.parentNode.children].indexOf(_th);
+	let dir = _th.classList.contains('sortedDesc') ? -1 : 1;
+
 	if (toggleDir) {
-		if (!$th.hasClass('sorted')) dir = -1;
-		$table.find('.sortedAsc').removeClass('sortedAsc');
-		$table.find('.sortedDesc').removeClass('sortedDesc');
-		$table.find('.sorted').removeClass('sorted');
+		if (!_th.classList.contains('sorted')) dir = -1;
+
+		for (const _child of _th.parentElement.children) {
+			_child.classList.remove('sortedAsc');
+			_child.classList.remove('sortedDesc');
+			_child.classList.remove('sorted');
+		}
+
 		if (dir < 0) {
 			dir = 1;
-			$th.addClass('sortedAsc');
+			_th.classList.add('sortedAsc');
 		} else {
 			dir = -1;
-			$th.addClass('sortedDesc');
+			_th.classList.add('sortedDesc');
 		}
-		$th.addClass('sorted');
+
+		_th.classList.add('sorted');
 	}
-	$rows.sort((a, b) => {
-		if (tag) {
-			return (Number($(a).attr(`data-${tag}`)) - Number($(b).attr(`data-${tag}`)))*dir;
-		} else {
-			const aVal = $(a).children().eq(index).html();
-			const bVal = $(b).children().eq(index).html();
-			return aVal.localeCompare(bVal, undefined, { numeric: true })*dir;
+
+	for (const _tbody of __tbodys) {
+		const __trs = Array.from(_tbody.getElementsByTagName('tr'));
+		if (__trs.length < 2) continue;
+		__trs.sort((a, b) => {
+			if (tag) {
+				return (Number($(a).attr(`data-${tag}`)) - Number($(b).attr(`data-${tag}`)))*dir;
+			} else {
+				const aVal = $(a).children().eq(index).html();
+				const bVal = $(b).children().eq(index).html();
+				return aVal.localeCompare(bVal, undefined, { numeric: true })*dir;
+			}
+		});
+		for (const _tr of __trs) {
+			_tbody.append(_tr)
 		}
-	});
-	$rows.each(function(i, $row) {
-		$tbody.append($row);
-	});
+	}
 }

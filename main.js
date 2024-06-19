@@ -887,6 +887,17 @@ function syslogSourceList() {
 	})
 	return sourceList;
 }
+
+function syslogSourceGroups() {
+	const pingList = pings();
+	return [...new Set(Object.values(pingList).map(ping => ping.Group))];
+	// const sourceList = {};
+	// pingList.forEach(pair => {
+	// 	sourceList[pair.IP] = pair.Name;
+	// })
+	// return sourceList;
+}
+
 function ports(type) {
 	const Ports = loadData('Ports');
 	const Switches = switches(type).map(arr => arr.Name);
@@ -916,6 +927,7 @@ function expressRoutes(expressApp) {
 			webEnabled:config.get('webEnabled'),
 			version: version,
 			pings:syslogSourceList(),
+			pingGroups:syslogSourceGroups(),
 			background:'bg-dark'
 		});
 	});
@@ -1671,6 +1683,7 @@ function localPings() {
 				'status':res.alive,
 				'IP':host.IP,
 				'Name':host.Name,
+				'Group':host.Group,
 				'SSH':host.SSH,
 				'HTTP':host.HTTP,
 				'HTTPS':host.HTTPS
