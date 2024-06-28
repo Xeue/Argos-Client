@@ -956,7 +956,7 @@ function handleInterfaces(data, type) {
 
 			const _tbody = document.createElement('tbody');
 			_tbody.classList.add('portMonGroup');
-			if (groupName != 'DEFAULT') _tbody.insertAdjacentHTML('afterbegin', `<th colspan="3">${groupName}</th>`);
+			if (groupName != 'DEFAULT') _tbody.insertAdjacentHTML('afterbegin', `<th colspan="3" data-group="${groupName}">${groupName}</th>`);
 			_table.append(_tbody);
 
 			for (const switchName in Group) {

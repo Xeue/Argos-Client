@@ -266,7 +266,7 @@ nav.drag {
   border-top: none !important;
 }
 
-
+.portMonGroup th[data-group="WARNING"],
 #pingLocalDown .pingGroup th {
   background: #dc35455e;
 }

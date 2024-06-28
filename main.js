@@ -490,22 +490,21 @@ const EOS = {
 		const interfaces = result.result[1].interfaces;
 		data.interfaces[switchType][switchName] = {};
 		for (const interfaceName in interfaces) {
-			if (interfaces.hasOwnProperty.call(interfaces, interfaceName)) {
-				const iface = interfaces[interfaceName];
-				if (iface.hardware !== "ethernet") continue;
-				data.interfaces[switchType][switchName][interfaceName] = {
-					"connected": iface.interfaceStatus == "connected" ? true : false,
-					"description": iface.description,
-					"inRate": iface.interfaceStatistics.inBitsRate,
-					"outRate": iface.interfaceStatistics.outBitsRate,
-					"maxRate": iface.bandwidth,
-					"lastFlap": iface.lastStatusChangeTimestamp,
-					"flapCount": iface.interfaceCounters.linkStatusChanges,
-					"outErrors": iface.interfaceCounters.totalOutErrors,
-					"outDiscards": iface.interfaceCounters.outDiscards,
-					"inErrors": iface.interfaceCounters.totalInErrors,
-					"inDiscards": iface.interfaceCounters.inDiscards
-				}
+			if (!interfaces.hasOwnProperty.call(interfaces, interfaceName)) return;
+			const iface = interfaces[interfaceName];
+			if (iface.hardware !== "ethernet") continue;
+			data.interfaces[switchType][switchName][interfaceName] = {
+				"connected": iface.interfaceStatus == "connected" ? true : false,
+				"description": iface.description,
+				"inRate": iface.interfaceStatistics.inBitsRate,
+				"outRate": iface.interfaceStatistics.outBitsRate,
+				"maxRate": iface.bandwidth,
+				"lastFlap": iface.lastStatusChangeTimestamp,
+				"flapCount": iface.interfaceCounters.linkStatusChanges,
+				"outErrors": iface.interfaceCounters.totalOutErrors,
+				"outDiscards": iface.interfaceCounters.outDiscards,
+				"inErrors": iface.interfaceCounters.totalInErrors,
+				"inDiscards": iface.interfaceCounters.inDiscards
 			}
 		}
 	}
@@ -1560,6 +1559,36 @@ async function switchInterfaces(switchType) {
 		}
 
 	})
+
+	const allIfaces = data.interfaces[switchType];
+
+	for (const switchName in allIfaces) {
+		if (!Object.hasOwnProperty.call(allIfaces, switchName)) return;
+		const ifaces = allIfaces[switchName];
+		for (const ifaceName in ifaces) {
+			if (!Object.hasOwnProperty.call(ifaces, ifaceName)) return;
+			const iface = ifaces[ifaceName];
+			const bandwidthThreshold = 0.95;
+			if ((iface.inRate/iface.maxRate > bandwidthThreshold) || (iface.outRate/iface.maxRate > bandwidthThreshold)) {
+				if (filteredPorts[switchType]['WARNING'] === undefined) filteredPorts[switchType]['WARNING'] = {};
+				if (filteredPorts[switchType]['WARNING'][switchName] === undefined) filteredPorts[switchType]['WARNING'][switchName] = {};
+				filteredPorts[switchType]['WARNING'][switchName][ifaceName] = iface;
+			}
+			const discardThreshold = 1000;
+			if ((iface.outDiscards > discardThreshold) || (iface.inDiscards > discardThreshold)) {
+				if (filteredPorts[switchType]['WARNING'] === undefined) filteredPorts[switchType]['WARNING'] = {};
+				if (filteredPorts[switchType]['WARNING'][switchName] === undefined) filteredPorts[switchType]['WARNING'][switchName] = {};
+				filteredPorts[switchType]['WARNING'][switchName][ifaceName] = iface;
+			}
+			const errorsThreshold = 1000;
+			if ((iface.outErrors > discardThreshold) || (iface.inErrors > discardThreshold)) {
+				if (filteredPorts[switchType]['WARNING'] === undefined) filteredPorts[switchType]['WARNING'] = {};
+				if (filteredPorts[switchType]['WARNING'][switchName] === undefined) filteredPorts[switchType]['WARNING'][switchName] = {};
+				filteredPorts[switchType]['WARNING'][switchName][ifaceName] = iface;
+			}
+		}
+	}
+
 	const type = switchType == 'Media' ? 'interfaces' : 'interfaces_control';
 	distributeData(type, filteredPorts[switchType]);
 }
