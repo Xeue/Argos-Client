@@ -81,6 +81,7 @@ templates.ports = `<% for(i = 0; i < devices.length; i++) { %>
 	<tr data-index="<%=i%>" data-template="ports">
 		<td data-type="select" data-key="Switch" data-value="<%-devices[i].Switch%>" data-options="<%-switches.join(',')%>"><%-devices[i].Switch%></td>
 		<td data-type="text" data-key="Port" data-value="<%-devices[i].Port%>"><%-devices[i].Port%></td>
+		<td data-type="text" data-key="Group" data-value="<%-devices[i].Group%>"><%-devices[i].Group%></td>
 	  	<td>
 			<button type="button" class="btn btn-primary editConfig w-50">Edit</button>
 			<button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
@@ -282,7 +283,6 @@ function handleSyslogMessage(payload) {
 			const $liveLogs = $('.logType_live');
 			if ($liveLogs.length > maxLogs) {
 				for (let index = maxLogs; index < $liveLogs.length; index++) {
-					console.log(index);
 					const log = $liveLogs[index];
 					log.remove();
 				}
@@ -702,7 +702,7 @@ function handleMacData(data) {
 			} else {
 				feeding = '<em class="text-muted">n/a</em>';
 			}
-			let s = `<tr><td>${v.switch}</td><td>${v.port}</td><td>${lldp}</td><td>${feeding}</td><td>${v.mac.phyState}</td><td>${v.mac.lastChange}</td></tr>`;
+			let s = `<tr><td>${v.switch}</td><td>${v.port}</td><td>${lldp}</td><td>${feeding}</td><td>${v.mac.phyState == 'linkUp' ? 'Up' : 'Down'}</td><td><div data-last-update="${v.mac.lastChange*1000}" data-compact="true"></div></td></tr>`;
 			$('table#mac tbody').append(s);
 		});
 	}
@@ -796,7 +796,11 @@ function handleLocalPing(data) {
 		if (!_group) {
 			const _tbodyGroup = document.createElement('tbody');
 			_tbodyGroup.classList.add('pingGroup');
-			_tbodyGroup.setAttribute('data-group', group)
+			_tbodyGroup.setAttribute('data-group', group);
+			const _groupHeader = document.createElement('th');
+			_groupHeader.setAttribute('colspan', 5);
+			_groupHeader.innerHTML = group;
+			_tbodyGroup.append(_groupHeader);
 			_thisTable.append(_tbodyGroup);
 			_tbodyGroup.insertAdjacentHTML('beforeend', row);
 		}
@@ -816,13 +820,18 @@ function handleLocalPing(data) {
 			if (!_group) {
 				const _tbodyGroup = document.createElement('tbody');
 				_tbodyGroup.classList.add('pingGroup');
-				_tbodyGroup.setAttribute('data-group', group)
+				_tbodyGroup.setAttribute('data-group', group);
+				const _groupHeader = document.createElement('th');
+				_groupHeader.setAttribute('colspan', 5);
+				_groupHeader.innerHTML = group;
+				_tbodyGroup.append(_groupHeader);
 				_thisTable.append(_tbodyGroup);
 				_tbodyGroup.append(_search);
 			}
 			else {
 				_group.append(_search);
 			}
+			_search.querySelector('[data-last-update]').setAttribute('data-last-update', Date.now());
 			_search.setAttribute('data-updated-time', Date.now());
 		}
 	}
@@ -929,71 +938,88 @@ function handleDevicesFans(data, type) {
 function handleInterfaces(data, type) {
 	if (data == undefined) return;
 	const table = `[data-type="${type}"] table[data-catagory="interfaces"]`;
-	$(`${table} tbody`).empty();
+	const _table = document.querySelector(table);
+	console.log(_table);
+	_table.replaceChildren();
+	console.log(_table);
+	//$(`${table} tbody`).empty();
+
 	if (Object.keys(data).length == 0) {
 		$(`[data-type="${type}"][data-type="interfaces"]`).addClass('text-muted');
-		$(table).addClass('text-muted');
+		_table.classList.add('text-muted');
 	} else {
 		$(`[data-type="${type}"][data-type="interfaces"]`).removeClass('text-muted');
-		$(table).removeClass('text-muted');
-		for (const Switch in data) {
-			for (const Port in data[Switch]) {
-				const portInfo = data[Switch][Port];
+		_table.classList.remove('text-muted');
 
-				let time = '';
+		for (const groupName in data) {
+			const Group = data[groupName];
 
-				if (Number(portInfo.lastFlap)) {
-					const timeOffset = new Date();
-					let seconds = Math.floor(timeOffset/1000 - portInfo.lastFlap);
-					let minutes = Math.floor(seconds/60);
-					let hours = Math.floor(minutes/60);
-					const days = Math.floor(hours/24);
-					hours = hours-(days*24);
-					minutes = minutes-(days*24*60)-(hours*60);
-					seconds = seconds-(days*24*60*60)-(hours*60*60)-(minutes*60);
-					if (days > 0) time += ` ${days} days`;
-					if (hours > 0) time += ` ${hours}:${minutes}:${seconds}`;
-				} else {
-					time = portInfo.lastFlap;
-				}
+			const _tbody = document.createElement('tbody');
+			_tbody.classList.add('portMonGroup');
+			if (groupName != 'DEFAULT') _tbody.insertAdjacentHTML('afterbegin', `<th colspan="3">${groupName}</th>`);
+			_table.append(_tbody);
 
-				const inErrors = portInfo.inErrors > 0 ? `<div>Input Errors: ${portInfo.inErrors}</div>` : '';
-				const outErrors = portInfo.outErrors > 0 ? `<div>Output Errors: ${portInfo.outErrors}</div>` : '';
-				const inDiscards = portInfo.inDiscards > 0 ? `<div>Input Discards: ${portInfo.inDiscards}</div>` : '';
-				const outDiscards = portInfo.outDiscards > 0 ? `<div>Output Discards: ${portInfo.outDiscards}</div>` : '';
-				const outPercent = Math.round(100*portInfo.outRate/portInfo.maxRate);
-				const outGbps = Math.round(portInfo.outRate/1000000000);
-				const inPercent = Math.round(100*portInfo.inRate/portInfo.maxRate);
-				const inGbps = Math.round(portInfo.inRate/1000000000);
-				const outColour = `hsl(${130 - outPercent*1.3}deg 100% 30.36%)`;
-				const inColour = `hsl(${120 - inPercent*1.3}deg 100% 30.36%)`;
-
-				$(`${table} tbody`).append(`<tr>
-					<td class="text-center ${portInfo.connected ? 'bg-success' : 'bg-danger'}">
-						<div>${Switch} - ${portInfo.connected ? 'UP' : 'Down'}</div>
-						<div>${Port}</div>
-						<div>${portInfo.description}</div>
-					</td>
-					<td>
-						<div>Port Flaps: ${portInfo.flapCount}</div>
-						<div>Last Flap: ${time}</div>
-						${inErrors}
-						${outErrors}
-						${inDiscards}
-						${outDiscards}
-					</td>
-					<td>
-						<div class="d-flex">
-							<div>
-								<div>Out: ${outPercent}% - ${outGbps}Gbps</div>
-								<div>In: ${inPercent}% - ${inGbps}Gbps</div>
+			for (const switchName in Group) {
+				const Switch = Group[switchName];
+				for (const portName in Switch) {
+					const Port = Switch[portName];
+	
+					let time = '';
+	
+					if (Number(Port.lastFlap)) {
+						const timeOffset = new Date();
+						let seconds = Math.floor(timeOffset/1000 - Port.lastFlap);
+						let minutes = Math.floor(seconds/60);
+						let hours = Math.floor(minutes/60);
+						const days = Math.floor(hours/24);
+						hours = hours-(days*24);
+						minutes = minutes-(days*24*60)-(hours*60);
+						seconds = seconds-(days*24*60*60)-(hours*60*60)-(minutes*60);
+						if (days > 0) time += ` ${days} days`;
+						if (hours > 0) time += ` ${hours}:${minutes}:${seconds}`;
+					} else {
+						time = Port.lastFlap;
+					}
+	
+					const inErrors = Port.inErrors > 0 ? `<div>Input Errors: ${Port.inErrors}</div>` : '';
+					const outErrors = Port.outErrors > 0 ? `<div>Output Errors: ${Port.outErrors}</div>` : '';
+					const inDiscards = Port.inDiscards > 0 ? `<div>Input Discards: ${Port.inDiscards}</div>` : '';
+					const outDiscards = Port.outDiscards > 0 ? `<div>Output Discards: ${Port.outDiscards}</div>` : '';
+					const outPercent = Math.round(100*Port.outRate/Port.maxRate);
+					const outGbps = Math.round(Port.outRate/1000000000);
+					const inPercent = Math.round(100*Port.inRate/Port.maxRate);
+					const inGbps = Math.round(Port.inRate/1000000000);
+					const outColour = `hsl(${130 - outPercent*1.3}deg 100% 30.36%)`;
+					const inColour = `hsl(${120 - inPercent*1.3}deg 100% 30.36%)`;
+	
+					_tbody.insertAdjacentHTML('beforeend', `<tr>
+						<td class="text-center ${Port.connected ? 'bg-success' : 'bg-danger'}">
+							<div>${switchName} - ${Port.connected ? 'UP' : 'Down'}</div>
+							<div>${portName}</div>
+							<div>${Port.description}</div>
+						</td>
+						<td>
+							<div>Port Flaps: ${Port.flapCount}</div>
+							<div>Last Flap: ${time}</div>
+							${inErrors}
+							${outErrors}
+							${inDiscards}
+							${outDiscards}
+						</td>
+						<td>
+							<div class="d-flex justify-content-between">
+								<div>
+									<div>Out: ${outPercent}% - ${outGbps}Gbps</div>
+									<div>In: ${inPercent}% - ${inGbps}Gbps</div>
+								</div>
+								<div class="pie text-right" style="--p:${outPercent};--b:10px;--c:${outColour};--pi:${inPercent};--ci:${inColour}"></div>
 							</div>
-							<div class="pie text-right" style="--p:${outPercent};--b:10px;--c:${outColour};--pi:${inPercent};--ci:${inColour}"></div>
-						</div>
-					</td>
-				</tr>`);
+						</td>
+					</tr>`)
+				}
 			}
 		}
+
 	}
 	lastSwitchTemperature = Date.now();
 }
@@ -1647,5 +1673,14 @@ function doTableSort(_target, toggleDir = true) {
 		for (const _tr of __trs) {
 			_tbody.append(_tr)
 		}
+	}
+
+	const __tbodysArray = Array.from(__tbodys);
+	if (__tbodysArray.length < 2) return;
+	__tbodysArray.sort((_a, _b) => {
+		return _a.getAttribute('data-group').localeCompare(_b.getAttribute('data-group'));
+	});
+	for (const _tbody of __tbodysArray) {
+		_table.append(_tbody)
 	}
 }

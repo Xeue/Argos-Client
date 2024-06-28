@@ -230,7 +230,8 @@ const SwitchRequests = {
 			'jsonrpc': '2.0',
 			'method': 'runCmds',
 			'params': {
-				'format': 'text',
+				// 'format': 'text',
+				'format': 'json',
 				'timestamps': false,
 				'autoComplete': false,
 				'expandAliases': false,
@@ -360,39 +361,72 @@ const EOS = {
 			}
 		}
 	},
+	// handleFlap: (filteredDevices, result, switchType, switchName) => {
+	// 	let devices = data.neighbors[switchType][switchName];
+	// 	const keys = Object.keys(devices);
+	// 	const split = result.result[1].output.split('\n');
+	// 	for (let i = 8; i < split.length; i++) {
+	// 		const t = split[i];
+	// 		const mac = {
+	// 			int: t.substr(0, 19).trim(),
+	// 			config: t.substr(19, 7).trim(),
+	// 			oper: t.substr(26, 9).trim(),
+	// 			phy: t.substr(34, 16).trim(),
+	// 			mac: t.substr(50, 6).trim(),
+	// 			last: t.substr(54, t.length).trim()
+	// 		};
+	// 		logger.object(mac);
+	// 		if (mac.config !== 'Up') continue;
+	// 		if (!keys.includes(mac.int)) devices[mac.int] = {};
+	// 		devices[mac.int].mac = {};
+	// 		devices[mac.int].mac.operState = mac.oper;
+	// 		devices[mac.int].mac.phyState = mac.phy;
+	// 		devices[mac.int].mac.macFault = mac.mac;
+	// 		devices[mac.int].mac.lastChange = mac.last;
+	// 		devices[mac.int].description = getDescription(mac.int, switchType, switchName);
+	// 		devices[mac.int].port = mac.int;
+	// 	}
+	// 	devices = clearEmpties(devices);
+	// 	for (let deviceNumber in devices) {
+	// 		const device = devices[deviceNumber]
+	// 		if (device.mac === undefined) continue;
+	// 		if(!('lastChange' in device.mac)) logger.log(device+' seems to have an issue','W');
+	// 		const time = device.mac.lastChange.split(':');
+	// 		const timeTotal = parseInt(time[0]) * 3600 + parseInt(time[1]) * 60 + parseInt(time[2]);
+	// 		if (timeTotal > 300) continue;
+	// 		device.switch = switchName;
+	// 		filteredDevices.push(device);
+	// 	}
+	// },
 	handleFlap: (filteredDevices, result, switchType, switchName) => {
 		let devices = data.neighbors[switchType][switchName];
 		const keys = Object.keys(devices);
-		const split = result.result[1].output.split('\n');
-		for (let i = 8; i < split.length; i++) {
-			const t = split[i];
-			const mac = {
-				int: t.substr(0, 19).trim(),
-				config: t.substr(19, 7).trim(),
-				oper: t.substr(26, 9).trim(),
-				phy: t.substr(34, 16).trim(),
-				mac: t.substr(50, 6).trim(),
-				last: t.substr(54, t.length).trim()
+		//logger.object(result.result);
+		const interfaces = result.result[1].interfaces;
+		// logger.object(result.result[1]);
+		for (const ifaceName in interfaces) {
+			if (!Object.hasOwnProperty.call(interfaces, ifaceName)) return;
+			const iface = interfaces[ifaceName];
+			if (!devices[ifaceName]) devices[ifaceName] = {};
+			devices[ifaceName].mac = {
+				'operState': iface.intfState,
+				'phyState': iface.phyState,
+				'macFault': iface.macRxRemoteFault,
+				'lastChange': iface.intfStateLastChangeTime
 			};
+			devices[ifaceName].description = getDescription(ifaceName, switchType, switchName);
+			devices[ifaceName].port = ifaceName;
 
-			if (mac.config !== 'Up') continue;
-			if (!keys.includes(mac.int)) devices[mac.int] = {};
-			devices[mac.int].mac = {};
-			devices[mac.int].mac.operState = mac.oper;
-			devices[mac.int].mac.phyState = mac.phy;
-			devices[mac.int].mac.macFault = mac.mac;
-			devices[mac.int].mac.lastChange = mac.last;
-			devices[mac.int].description = getDescription(mac.int, switchType, switchName);
-			devices[mac.int].port = mac.int;
 		}
 		devices = clearEmpties(devices);
 		for (let deviceNumber in devices) {
 			const device = devices[deviceNumber]
 			if (device.mac === undefined) continue;
 			if(!('lastChange' in device.mac)) logger.log(device+' seems to have an issue','W');
-			const time = device.mac.lastChange.split(':');
-			const timeTotal = parseInt(time[0]) * 3600 + parseInt(time[1]) * 60 + parseInt(time[2]);
-			if (timeTotal > 300) continue;
+			const timeTotal = Date.now() - (device.mac.lastChange * 1000);
+			//logger.log(timeTotal);
+			if (timeTotal > 300000 || timeTotal == 0) continue;
+			//logger.log('flapper');
 			device.switch = switchName;
 			filteredDevices.push(device);
 		}
@@ -593,15 +627,15 @@ const NXOS = {
 }
 
 const pingFrequency = 30;
-const lldpFrequency = 30;
+const lldpFrequency = 15;
 const switchStatsFrequency = 30;
 const upsFrequency = 30;
-const devicesFrequency = 30;
+const devicesFrequency = 15;
 const tempFrequency = minutes(1);
 //const tempFrequency = 5;
-const localPingFrequency = 10;
+const localPingFrequency = 5;
 const envFrequency = 30;
-const interfaceFrequency = 30;
+const interfaceFrequency = 15;
 
 /* Globals */
 
@@ -1341,7 +1375,7 @@ async function switchFlap(switchType) {
 		}
 	}
 	data.mac[switchType] = filteredDevices;
-	const type = switchType == 'Media' ? 'flap' : 'flap_control';
+	const type = switchType == 'Media' ? 'mac' : 'mac_control';
 	distributeData(type, data.mac[switchType]);
 }
 
@@ -1514,13 +1548,15 @@ async function switchInterfaces(switchType) {
 	}
 	ports(switchType).forEach(port => {
 		try {
+			const group = port.Group ? port.Group : 'DEFAULT';
 			if (filteredPorts[switchType] === undefined) filteredPorts[switchType] = {};
-			if (filteredPorts[switchType][port.Switch] === undefined) filteredPorts[switchType][port.Switch] = {};
+			if (filteredPorts[switchType][group] === undefined) filteredPorts[switchType][group] = {};
+			if (filteredPorts[switchType][group][port.Switch] === undefined) filteredPorts[switchType][group][port.Switch] = {};
 			if (Object.keys(data.interfaces[switchType][port.Switch]).includes(port.Port)) {
-				filteredPorts[switchType][port.Switch][port.Port] = data.interfaces[switchType][port.Switch][port.Port];
+				filteredPorts[switchType][group][port.Switch][port.Port] = data.interfaces[switchType][port.Switch][port.Port];
 			}
 		} catch (error) {
-			logger.warn("Couldn't parse interfaces data");
+			logger.warn("Couldn't parse interfaces data", error);
 		}
 
 	})
@@ -1676,7 +1712,8 @@ function localPings() {
 	const hosts = pings();
 	hosts.forEach(function (host) {
 		ping.promise.probe(host.IP, {
-			timeout: 10
+			timeout: 10,
+			extra: ['-i', '2']
 		}).then(function(res) {
 			logger.log(`IP: ${host.IP}, Online: ${res.alive}`, 'A');
 			distributeData('localPing', {
@@ -1688,7 +1725,7 @@ function localPings() {
 				'HTTP':host.HTTP,
 				'HTTPS':host.HTTPS
 			});
-		});
+0		});
 	});
 }
 

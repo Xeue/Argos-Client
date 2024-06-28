@@ -235,23 +235,39 @@ nav.drag {
   box-shadow: 0 0 0 100px #ffffff36 inset !important;
 }
 
-.pingGroup::before {
-  content: attr(data-group);
+.pingGroup th {
   background: #1987545e;
-  display: block;
   color: white;
-  width: 100%;
   padding: 0.5rem;
   text-align: center;
   font-weight: bold;
 }
 
-.pingGroup[data-group="NONE"]::before {
+.pingGroup[data-group="NONE"] th {
   display: none;
 }
 
+.pingGroup {
+  border-top: none !important;
+}
 
-#pingLocalDown .pingGroup::before {
+
+.portMonGroup th {
+  background: #1987545e;
+  color: white;
+  padding: 0.5rem;
+  text-align: center;
+  font-weight: bold;
+}
+.portMonGroup[data-group="DEFAULT"] th {
+  display: none;
+}
+.portMonGroup {
+  border-top: none !important;
+}
+
+
+#pingLocalDown .pingGroup th {
   background: #dc35455e;
 }
 
