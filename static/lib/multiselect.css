@@ -146,7 +146,8 @@
     border-radius: 2.5px;
     font-size: 14px;
     /*! min-height: 44px; */
-    overflow: hidden
+    overflow: hidden;
+    min-width: 15rem;
 }
 
 .is-focused .choices__inner,

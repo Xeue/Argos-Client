@@ -923,7 +923,16 @@ function syslogSourceList() {
 
 function syslogSourceGroups() {
 	const pingList = pings();
-	return [...new Set(Object.values(pingList).map(ping => ping.Group))];
+	const pingObject = {};
+	pingList.forEach(ping => {
+		if (!pingObject[ping.Group]) pingObject[ping.Group] = [];
+		pingObject[ping.Group].push(ping);
+	})
+
+	return pingObject;
+
+	//return [...new Set(Object.values(pingList).map(ping => ping.Group))];
+
 	// const sourceList = {};
 	// pingList.forEach(pair => {
 	// 	sourceList[pair.IP] = pair.Name;
@@ -1124,6 +1133,7 @@ async function doMessage(msgObj, socket) {
 				break;
 			case 'syslog':
 				getSyslog(header, payload).then(data => {
+					logger.debug('Retrieved SYSLOG messages');
 					webServer.sendTo(socket, data);
 				})
 			default:
@@ -1231,13 +1241,18 @@ async function getTemperature(header, payload, type) {
 }
 
 async function getSyslog(header, payload) {
-	logger.log(`Getting syslogs for ${header.system}, ips: ${payload.ips.join(',')}`, 'D');
+	//logger.log(`Getting syslogs for ${header.system}, ips: ${payload.ips.map(ip => `'${ip}'`).join(',')}`, 'D');
 	const from = payload.from;
 	const to = payload.to;
 	let whereIP = '';
 	if (payload.ips.length > 0 && !payload.ips.includes('all')) {
-		const ips = payload.ips.map(ip => `'${ip}'`);
+		const ips = [];
+		payload.ips.forEach(ip => {
+			if (ip.includes(',')) ip.split(',').forEach(newIP => ips.push(newIP));
+			else ips.push(`'${ip}'`);
+		})
 		whereIP = `AND \`ip\` IN (${ips.join(',')})`
+		logger.log(`Getting syslogs for ${header.system}, where: ${whereIP}`, 'D');
 	}
 	const dateQuery = `SELECT * FROM \`syslog\` WHERE time BETWEEN FROM_UNIXTIME(${from}) AND FROM_UNIXTIME(${to}) AND \`system\` = '${header.system}' ${whereIP}; `;
 
@@ -1261,7 +1276,7 @@ async function getSyslog(header, payload) {
 		};
 	}
 
-	return dataObj = {
+	return {
 		'command': 'data',
 		'data': 'syslog',
 		'system': header.system,

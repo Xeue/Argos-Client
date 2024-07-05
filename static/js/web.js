@@ -256,7 +256,13 @@ function handleSyslogMessage(payload) {
 	$('#lastSyslog').attr('data-last-update', Date.now());
 	const $tbody = $('table[data-catagory="syslog"] tbody');
 	const type = $('table[data-catagory="syslog"]').attr('data-mode');
-	const ips = $('#syslogSelect').val();
+	const ipsRaw = $('#syslogSelect').val();
+	const ips = [];
+	ipsRaw.forEach(ip => {
+		if (ip.includes(',')) ip.replace(/\'/g, '').split(',').forEach(newIP => ips.push(newIP));
+		else ips.push(ip);
+	})
+	if (payload.logs.length < 1) return;
 	if (payload.replace) $tbody.empty();
 	if (type === 'duration' && !payload.replace) return;
 	if (type === 'live' && payload.replace) return;
@@ -939,9 +945,7 @@ function handleInterfaces(data, type) {
 	if (data == undefined) return;
 	const table = `[data-type="${type}"] table[data-catagory="interfaces"]`;
 	const _table = document.querySelector(table);
-	console.log(_table);
 	_table.replaceChildren();
-	console.log(_table);
 	//$(`${table} tbody`).empty();
 
 	if (Object.keys(data).length == 0) {
@@ -1171,6 +1175,12 @@ $(document).ready(function() {
 		removeItems: true,
 		removeItemButton: true,
 		searchPlaceholderValue: 'Select Devices',
+		sorter: (a,b) => {
+			const groupChar = '​';
+			if (a.label.includes(groupChar) && !b.label.includes(groupChar)) return 0;
+			if (!a.label.includes(groupChar) && b.label.includes(groupChar)) return 1;			
+			return a.label.localeCompare(b.label);
+		}
 	});
 
 	$(document).click(function(e) {
