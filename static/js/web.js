@@ -257,18 +257,25 @@ function handleSyslogMessage(payload) {
 	const $tbody = $('table[data-catagory="syslog"] tbody');
 	const type = $('table[data-catagory="syslog"]').attr('data-mode');
 	const ipsRaw = $('#syslogSelect').val();
+	const ipsExRaw = $('#syslogSelectEx').val();
 	const ips = [];
+	const ipsEx = [];
 	ipsRaw.forEach(ip => {
 		if (ip.includes(',')) ip.replace(/\'/g, '').split(',').forEach(newIP => ips.push(newIP));
 		else ips.push(ip);
 	})
+	ipsExRaw.forEach(ip => {
+		if (ip.includes(',')) ip.replace(/\'/g, '').split(',').forEach(newIP => ipsEx.push(newIP));
+		else ipsEx.push(ip);
+	})
+
 	if (payload.logs.length < 1) return;
 	if (payload.replace) $tbody.empty();
 	if (type === 'duration' && !payload.replace) return;
 	if (type === 'live' && payload.replace) return;
 	try {
 		const points = {};
-
+		
 		let rangeTime;
 		let firstTime;
 		let lastTime;
@@ -280,9 +287,10 @@ function handleSyslogMessage(payload) {
 			rangeTime = fullRangeTime/75;
 		}
 
+		const maxLogs = 499;
 		payload.logs.forEach(log => {
 			if (!(ips.includes(log.ip) || ips.includes('all'))) return;
-			const maxLogs = 499;
+			if (ipsEx.includes(log.ip)) return;
 			const dateTime = new Date(log.time);
 			const message = syslogFormat(log.message);
 			const name = syslogSourceList[log.ip] || log.ip;
@@ -298,20 +306,20 @@ function handleSyslogMessage(payload) {
 				<td class="text-nowrap">${name}</td>
 				<td class="text-nowrap">${dateTime.toLocaleString()}</td>
 			</tr>`);
-			if (payload.replace) {
-				const interval = Math.floor((dateTime - firstTime)/rangeTime);
-				const intervalIdentifier = new Date(interval*rangeTime + firstTime.getTime());
-				if (points[intervalIdentifier] == undefined) {
-					points[intervalIdentifier] = 1;
-				} else {
-					points[intervalIdentifier]++;
-				}
+
+			if (!payload.replace) return
+			const interval = Math.floor((dateTime - firstTime)/rangeTime);
+			const intervalIdentifier = new Date(interval*rangeTime + firstTime.getTime());
+			if (points[intervalIdentifier] == undefined) {
+				points[intervalIdentifier] = 1;
+			} else {
+				points[intervalIdentifier]++;
 			}
 		});
-		if (payload.replace) {
-			syslogHistogram.data.datasets[0].data = points;
-			syslogHistogram.update();
-		}
+
+		if (!payload.replace) return;
+		syslogHistogram.data.datasets[0].data = points;
+		syslogHistogram.update();
 	} catch (error) {
 		$tbody.prepend('<tr><td colspan="3">No Logs Found</td></tr>');
 		console.error(error);
@@ -776,6 +784,7 @@ function handleLocalPing(data) {
 	const IP = data.IP;
 	const Name = data.Name;
 	const status = data.status;
+	const lastChange = data.lastChange;
 	const group = data.Group || 'NONE';
 	const _upTable = document.getElementById('pingLocalUp');
 	const _downTable = document.getElementById('pingLocalDown');
@@ -789,10 +798,10 @@ function handleLocalPing(data) {
 		if (data.HTTPS) actions += `<a type="button" class="btn me-1 btn-secondary btn-sm" href="https://${IP}" target="_blank">HTTPS</a>`;
 		actions += '<button type="button" class="btn btn-close btn-close-white btn-sm float-end m-1 clearPing"></button>';
 
-		const row = `<tr class="pingStatus" data-ip="${IP}" data-updated-time="${Date.now()}">
+		const row = `<tr class="pingStatus" data-ip="${IP}" data-updated-time="${lastChange}">
 			<td>${Name}</td>
 			<td>${IP}</td>
-			<td data-last-update="${Date.now()}" data-compact="true"></td>
+			<td data-last-update="${lastChange}" data-compact="true"></td>
 			<td>${actions}</td>
 		</tr>`;
 
@@ -837,8 +846,8 @@ function handleLocalPing(data) {
 			else {
 				_group.append(_search);
 			}
-			_search.querySelector('[data-last-update]').setAttribute('data-last-update', Date.now());
-			_search.setAttribute('data-updated-time', Date.now());
+			_search.querySelector('[data-last-update]').setAttribute('data-last-update', lastChange);
+			_search.setAttribute('data-updated-time', lastChange);
 		}
 	}
 	doTableSort(_upTable.querySelector('.sorted'), false);
@@ -978,17 +987,17 @@ function handleInterfaces(data, type) {
 						const days = Math.floor(hours/24);
 						hours = hours-(days*24);
 						minutes = minutes-(days*24*60)-(hours*60);
-						seconds = seconds-(days*24*60*60)-(hours*60*60)-(minutes*60);
-						if (days > 0) time += ` ${days} days`;
-						if (hours > 0) time += ` ${hours}:${minutes}:${seconds}`;
+						seconds = seconds-(days*24*60*60)-(hours*60*60)-(minutes*60)+'s';
+						if (days > 0) time = ` ${days}d ${hours}h ${minutes}m`;
+						else if (hours > 0) time += ` ${hours}h ${minutes}m ${seconds}s`;
 					} else {
 						time = Port.lastFlap;
 					}
 	
-					const inErrors = Port.inErrors > 0 ? `<div>Input Errors: ${Port.inErrors}</div>` : '';
-					const outErrors = Port.outErrors > 0 ? `<div>Output Errors: ${Port.outErrors}</div>` : '';
-					const inDiscards = Port.inDiscards > 0 ? `<div>Input Discards: ${Port.inDiscards}</div>` : '';
-					const outDiscards = Port.outDiscards > 0 ? `<div>Output Discards: ${Port.outDiscards}</div>` : '';
+					const inErrors = Port.inErrors > 0 ? `<div>In Errors: ${Port.inErrors}</div>` : '';
+					const outErrors = Port.outErrors > 0 ? `<div>Out Errors: ${Port.outErrors}</div>` : '';
+					const inDiscards = Port.inDiscards > 0 ? `<div>In Discards: ${Port.inDiscards}</div>` : '';
+					const outDiscards = Port.outDiscards > 0 ? `<div>Out Discards: ${Port.outDiscards}</div>` : '';
 					const outPercent = Math.round(100*Port.outRate/Port.maxRate);
 					const outGbps = Math.round(Port.outRate/1000000000);
 					const inPercent = Math.round(100*Port.inRate/Port.maxRate);
@@ -1175,6 +1184,18 @@ $(document).ready(function() {
 		removeItems: true,
 		removeItemButton: true,
 		searchPlaceholderValue: 'Select Devices',
+		sorter: (a,b) => {
+			const groupChar = '​';
+			if (a.label.includes(groupChar) && !b.label.includes(groupChar)) return 0;
+			if (!a.label.includes(groupChar) && b.label.includes(groupChar)) return 1;			
+			return a.label.localeCompare(b.label);
+		}
+	});
+
+	new Choices('#syslogSelectEx', {
+		removeItems: true,
+		removeItemButton: true,
+		searchPlaceholderValue: 'Exclude Devices',
 		sorter: (a,b) => {
 			const groupChar = '​';
 			if (a.label.includes(groupChar) && !b.label.includes(groupChar)) return 0;
@@ -1411,9 +1432,10 @@ $(document).ready(function() {
 				'data':'syslog',
 				'from': parseInt($('#syslogFrom').val()),
 				'to': parseInt($('#syslogTo').val()),
-				'ips': $('#syslogSelect').val()
+				'ips': $('#syslogSelect').val(),
+				'ipsEx': $('#syslogSelectEx').val()
 			});
-		} else if ($trg.is('#syslogSelect')) {
+		} else if ($trg.is('#syslogSelect') || $trg.is('#syslogSelectEx')) {
 			const $btn = $('#syslogDurationPreset.active');
 			let to = parseInt($('#syslogTo').val());
 			let from = parseInt($('#syslogFrom').val());
@@ -1433,10 +1455,17 @@ $(document).ready(function() {
 				'data':'syslog',
 				'from': from,
 				'to': to,
-				'ips': $('#syslogSelect').val()
+				'ips': $('#syslogSelect').val(),
+				'ipsEx': $('#syslogSelectEx').val()
 			});
 		} else if ($trg.is('#syslogDurationPreset')) {
 			const value = $trg.val();
+			if (value == 'custom') {
+				$('#syslogCustom').removeClass('d-none');
+				return;
+			} else {
+				$('#syslogCustom').addClass('d-none');
+			}
 			let to = new Date().getTime()/1000;
 			let from = to;
 			if (value == 'live') {
@@ -1452,7 +1481,8 @@ $(document).ready(function() {
 				'data':'syslog',
 				'from': from,
 				'to': to,
-				'ips': $('#syslogSelect').val()
+				'ips': $('#syslogSelect').val(),
+				'ipsEx': $('#syslogSelectEx').val()
 			});
 		} else if ($trg.is('#csvUpload')) {
 			$('.tableImport').attr('disabled',$trg.val()=='');

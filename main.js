@@ -80,6 +80,7 @@ const data = {
 	'ups': {},
 	'phy': {}
 };
+const localPingsData = {};
 const cloudServer = {
 	'connected': false,
 	'active': false,
@@ -1133,7 +1134,7 @@ async function doMessage(msgObj, socket) {
 				break;
 			case 'syslog':
 				getSyslog(header, payload).then(data => {
-					logger.debug('Retrieved SYSLOG messages');
+					logger.debug(`Retrieved ${data.logs.length} SYSLOG messages`);
 					webServer.sendTo(socket, data);
 				})
 			default:
@@ -1252,8 +1253,16 @@ async function getSyslog(header, payload) {
 			else ips.push(`'${ip}'`);
 		})
 		whereIP = `AND \`ip\` IN (${ips.join(',')})`
-		logger.log(`Getting syslogs for ${header.system}, where: ${whereIP}`, 'D');
 	}
+	if (payload.ipsEx.length > 0 && !payload.ipsEx.includes('none')) {
+		const ipsEx = [];
+		payload.ipsEx.forEach(ip => {
+			if (ip.includes(',')) ip.split(',').forEach(newIP => ipsEx.push(newIP));
+			else ipsEx.push(`'${ip}'`);
+		})
+		whereIP += `AND \`ip\` NOT IN (${ipsEx.join(',')})`
+	}
+	logger.log(`Getting syslogs for ${header.system}, where: ${whereIP}`, 'D');
 	const dateQuery = `SELECT * FROM \`syslog\` WHERE time BETWEEN FROM_UNIXTIME(${from}) AND FROM_UNIXTIME(${to}) AND \`system\` = '${header.system}' ${whereIP}; `;
 
 	if (!config.get('localDataBase')) return {
@@ -1754,22 +1763,27 @@ function doApi(request, Switch) {
 function localPings() {
 	if (config.get('devMode')) return;
 	const hosts = pings();
-	hosts.forEach(function (host) {
-		ping.promise.probe(host.IP, {
+	hosts.forEach(async host => {
+		const response = await ping.promise.probe(host.IP, {
 			timeout: 10,
 			extra: ['-i', '2']
-		}).then(function(res) {
-			logger.log(`IP: ${host.IP}, Online: ${res.alive}`, 'A');
-			distributeData('localPing', {
-				'status':res.alive,
-				'IP':host.IP,
-				'Name':host.Name,
-				'Group':host.Group,
-				'SSH':host.SSH,
-				'HTTP':host.HTTP,
-				'HTTPS':host.HTTPS
-			});
-0		});
+		})
+		logger.log(`IP: ${host.IP}, Online: ${response.alive}`, 'A');
+		if (!localPingsData[host.IP]) localPingsData[host.IP] = {'lastChange': Date.now()};
+		if (localPingsData[host.IP].status != response.alive) {
+			localPingsData[host.IP].lastChange = Date.now();
+			localPingsData[host.IP].status = response.alive;
+		}
+		distributeData('localPing', {
+			'status':response.alive,
+			'IP':host.IP,
+			'Name':host.Name,
+			'Group':host.Group,
+			'SSH':host.SSH,
+			'HTTP':host.HTTP,
+			'HTTPS':host.HTTPS,
+			'lastChange': localPingsData[host.IP].lastChange
+		});
 	});
 }
 

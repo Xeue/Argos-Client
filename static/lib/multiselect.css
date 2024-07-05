@@ -1,7 +1,7 @@
 .choices {
     position: relative;
     overflow: hidden;
-    margin-bottom: 24px;
+    /*! margin-right: 24px; */
     font-size: 16px
 }
 
