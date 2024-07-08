@@ -1049,38 +1049,28 @@ function prettifyTime(time, compact = false) {
 		return 'never';
 	}
 	const t = Math.floor((Date.now() - time) / 1000);
-	const hours = Math.floor(t / (60 * 60));
+	const days = Math.floor(t / (60 * 60 * 24));
+	const hours = Math.floor(t / (60 * 60) % 24);
 	const minutes = Math.floor(t / 60) % 60;
 	const seconds = t % 60;
-	if (compact) return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-	if (hours == 0, minutes == 0 && seconds == 0) {
-		return 'just now';
-	} else if (hours == 0 && minutes == 0) {
-		if (seconds == 1) {
-			return '1 second ago';
-		} else {
-			return `${seconds} seconds ago`;
-		}
-	} else if (hours == 0, minutes == 1) {
-		if (seconds == 0) {
-			return '1 minute ago';
-		}
-		else if (seconds == 1) {
-			return  '1 minute, 1 second ago';
-		} else {
-			return `1 minute, ${seconds} seconds ago`;
-		}
-	} else if (hours == 0) {
-		if (seconds == 0) {
-			return minutes + ' minutes ago';
-		}
-		else if (seconds == 1) {
-			return `${minutes} minutes, 1 second ago`;
-		} else {
-			return `${minutes} minutes, ${seconds} seconds ago`;
-		}
+	let daysString = '';
+	let hoursString = '';
+	let minsString = '';
+	let secondsString = '';
+
+	if (compact) {
+		if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+		else return `${hours}h ${minutes}m ${seconds}s`;
 	} else {
-		return `${hours} hour${hours == 0 ? '' : 's'}, ${minutes} minute${minutes == 0 ? '' : 's'}, ${seconds} second${seconds == 0 ? '' : 's'} ago`;
+		if (days > 1) daysString = `${days} days, `;
+		if (days == 1) daysString = `${days} day, `;
+		if (hours > 1) hoursString = `${days} hours, `;
+		if (hours == 1) hoursString = `${days} hour, `;
+		if (minutes > 1) minsString = `${minutes} minutes, `;
+		if (minutes == 1) minsString = `${minutes} minute, `;
+		if (seconds > 1) secondsString = `${seconds} seconds, `;
+		if (seconds == 1) secondsString = `${seconds} second, `;
+		return `${daysString}${hoursString}${minsString}${secondsString} ago`;
 	}
 }
 

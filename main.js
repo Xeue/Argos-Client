@@ -1769,6 +1769,22 @@ function localPings() {
 			extra: ['-i', '2']
 		})
 		logger.log(`IP: ${host.IP}, Online: ${response.alive}`, 'A');
+		if (!response.alive) {
+			await sleep(2);
+			const recheckOne = await ping.promise.probe(host.IP, {
+				timeout: 10,
+				extra: ['-i', '2']
+			})
+			if (recheckOne.alive) response.alive = true;
+			else {
+				await sleep(2);
+				const recheckTwo = await ping.promise.probe(host.IP, {
+					timeout: 10,
+					extra: ['-i', '2']
+				})
+				if (recheckTwo.alive) response.alive = true;
+			}
+		}
 		if (!localPingsData[host.IP]) localPingsData[host.IP] = {'lastChange': Date.now()};
 		if (localPingsData[host.IP].status != response.alive) {
 			localPingsData[host.IP].lastChange = Date.now();
