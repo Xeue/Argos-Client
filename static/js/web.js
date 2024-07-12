@@ -1382,6 +1382,11 @@ $(document).ready(function() {
 			$trg.closest('tr').remove();
 		} else if ($trg.is('#fullscreen')) {
 			document.getElementById('mainCont').parentElement.requestFullscreen();
+		} else if ($trg.hasClass('chilton')) {
+			e.preventDefault();
+			const audio = new Audio('/media/CHILTON.wav');
+			audio.play();
+			setTimeout(()=>{window.location = window.location;}, 3000);
 		}
 	});
 
