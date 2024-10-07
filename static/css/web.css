@@ -152,13 +152,15 @@ nav.drag {
 }
 
 .pie {
-  --w: 85px;
-  width: var(--w);
+  --size: 85px;
+  width: var(--size);
+  height: var(--size);
   aspect-ratio: 1;
   position: relative;
   display: inline-grid;
   place-content: center;
   margin: 5px;
+  margin-block: auto;
   text-align: right;
   line-height: 1.1;
   outline: 1px solid rgb(85, 95, 106);
@@ -209,6 +211,19 @@ nav.drag {
 #nav-interfaces .interfaceGroup > th {
   display: block;
   width: 100%;
+}
+
+#nav-interfaces .interfaceCont {
+  display: grid;
+}
+
+#nav-interfaces .interfaceHeader {
+  justify-content: space-evenly;
+  flex-wrap: wrap;
+}
+
+.micaActive nav {
+  padding-right: 140px !important;
 }
 
 [data-type="password"] {

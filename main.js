@@ -15,7 +15,14 @@ import SysLogServer from './syslog.js';
 import Package from './package.json' assert {type: "json"};
 import ping from 'ping';
 import https from 'https';
+
+import {app, BrowserWindow, ipcMain, Tray, Menu} from 'electron';
+import electronEjs from 'electron-ejs';
+import AutoLaunch from 'auto-launch';
+import {MicaBrowserWindow, IS_WINDOWS_11} from 'mica-electron';
 //const snmp = require ('net-snmp');
+
+const background = IS_WINDOWS_11 ? 'micaActive' : 'bg-dark';
 
 const version = Package.version;
 
@@ -23,8 +30,10 @@ const httpsAgent = new https.Agent({
 	rejectUnauthorized: false,
 });
 
-const __dirname = path.resolve(path.dirname(decodeURI(new URL(import.meta.url).pathname))).replace('C:\\','');
+// const __dirname = path.resolve(path.dirname(decodeURI(new URL(import.meta.url).pathname))).replace('C:\\','');
+// const __dirname = app.getPath("documents");
 const __static = __dirname+'/static';
+const ejs = new electronEjs({'static': __static, 'background': background}, {});
 
 Array.prototype.symDiff = function(x) {
 	return this.filter(y => !x.includes(y)).concat(x => !y.includes(x));
@@ -116,7 +125,7 @@ const SwitchRequests = {
 	},
 	'EOS': {
 		'neighborRequest': 'show lldp neighbors',
-		'transRequest': 'show interfaces transceiver',
+		'transRequest': 'show interfaces transceiver dom',
 		'flapRequest': 'show interfaces mac',
 		'phyRequest': 'show interfaces phy detail',
 		'power': 'show system environment power',
@@ -142,23 +151,44 @@ const EOS = {
 	handleFibre: (filteredDevices, result, switchType, switchName) => {
 		const devices = data.neighbors[switchType][switchName];
 		const keys = Object.keys(devices);
-		const interfaces = result.result[0].interfaces;
+		const interfaces = result.result.pop().interfaces;
 		for (let interfaceName in interfaces) {
 			const iface = interfaces[interfaceName];
-			if ('rxPower' in iface === false) continue
+			if ('parameters' in iface === false) continue;
+			if ('rxPower' in iface.parameters === false) continue;
+
 			if (!keys.includes(interfaceName)) devices[interfaceName] = {};
 			devices[interfaceName].port = interfaceName;
 			devices[interfaceName].description = getDescription(interfaceName, switchType, switchName);
-			devices[interfaceName].rxPower = iface.rxPower.toFixed(1);
-			if ('txPower' in iface) devices[interfaceName].txPower = iface.txPower.toFixed(1);
+			devices[interfaceName].rxPower = [];
+			Object.values(iface.parameters.rxPower.channels).forEach(lane => {
+				devices[interfaceName].rxPower.push(lane.toFixed(1));
+			})
+			devices[interfaceName].txPower = [];
+			Object.values(iface.parameters.txPower.channels).forEach(lane => {
+				devices[interfaceName].txPower.push(lane.toFixed(1));
+			})
+			try {
+				data.interfaces[switchType][switchName][interfaceName].rxPower = devices[interfaceName].rxPower;
+				data.interfaces[switchType][switchName][interfaceName].txPower = devices[interfaceName].txPower;
+			} catch (error) {
+				logger.warn(`Unknown interface ${interfaceName}`, error);
+				logger.object(data.interfaces[switchType][switchName]);
+			}
 		}
-		for (let deviceName in devices) {
-			const device = devices[deviceName];
-			if ('txPower' in device === false) continue;
-			if ('rxPower' in device === false) continue;
-			if (device.rxPower < -9 && device.rxPower > -30 && device.txPower > -30) {
-				device.switch = switchName;
-				filteredDevices.push(device);
+
+		ifaceLoop:
+		for (let interfaceName in devices) {
+			const iface = devices[interfaceName];
+			if ('txPower' in iface === false) continue;
+			if ('rxPower' in iface === false) continue;
+			for (let index = 0; index < iface.rxPower.length; index++) {
+				const lane = iface.rxPower[index];
+				if (Number(lane) < thresholds.fibre && Number(lane) > -30 && Number(lane) > -30) {
+					iface.switch = switchName;
+					filteredDevices.push(iface);
+					continue ifaceLoop;
+				}
 			}
 		}
 	},
@@ -289,23 +319,39 @@ const EOS = {
 	},
 	handleInterfaces: (result, switchType, switchName) => {
 		const interfaces = result.result[1].interfaces;
-		data.interfaces[switchType][switchName] = {};
+		// data.interfaces[switchType][switchName] = {};
 		for (const interfaceName in interfaces) {
 			if (!interfaces.hasOwnProperty.call(interfaces, interfaceName)) return;
 			const iface = interfaces[interfaceName];
 			if (iface.hardware !== "ethernet") continue;
-			data.interfaces[switchType][switchName][interfaceName] = {
-				"connected": iface.interfaceStatus == "connected" ? true : false,
-				"description": iface.description,
-				"inRate": iface.interfaceStatistics.inBitsRate,
-				"outRate": iface.interfaceStatistics.outBitsRate,
-				"maxRate": iface.bandwidth,
-				"lastFlap": iface.lastStatusChangeTimestamp,
-				"flapCount": iface.interfaceCounters.linkStatusChanges,
-				"outErrors": iface.interfaceCounters.totalOutErrors,
-				"outDiscards": iface.interfaceCounters.outDiscards,
-				"inErrors": iface.interfaceCounters.totalInErrors,
-				"inDiscards": iface.interfaceCounters.inDiscards
+			if (data.interfaces[switchType][switchName] === undefined) data.interfaces[switchType][switchName] = {};
+			const ifaceData = data.interfaces[switchType][switchName][interfaceName];
+			if (ifaceData === undefined) {
+				data.interfaces[switchType][switchName][interfaceName] = {
+					"connected": iface.interfaceStatus == "connected" ? true : false,
+					"description": iface.description,
+					"inRate": iface.interfaceStatistics.inBitsRate,
+					"outRate": iface.interfaceStatistics.outBitsRate,
+					"maxRate": iface.bandwidth,
+					"lastFlap": iface.lastStatusChangeTimestamp,
+					"flapCount": iface.interfaceCounters.linkStatusChanges,
+					"outErrors": iface.interfaceCounters.totalOutErrors,
+					"outDiscards": iface.interfaceCounters.outDiscards,
+					"inErrors": iface.interfaceCounters.totalInErrors,
+					"inDiscards": iface.interfaceCounters.inDiscards
+				}
+			} else {
+				ifaceData.connected = iface.interfaceStatus == "connected" ? true : false;
+				ifaceData.description = iface.description;
+				ifaceData.inRate = iface.interfaceStatistics.inBitsRate;
+				ifaceData.outRate = iface.interfaceStatistics.outBitsRate;
+				ifaceData.maxRate = iface.bandwidth;
+				ifaceData.lastFlap = iface.lastStatusChangeTimestamp;
+				ifaceData.flapCount = iface.interfaceCounters.linkStatusChanges;
+				ifaceData.outErrors = iface.interfaceCounters.totalOutErrors;
+				ifaceData.outDiscards = iface.interfaceCounters.outDiscards;
+				ifaceData.inErrors = iface.interfaceCounters.totalInErrors;
+				ifaceData.inDiscards = iface.interfaceCounters.inDiscards;
 			}
 		}
 	}
@@ -353,7 +399,7 @@ const NXOS = {
 			const device = devices[deviceNumber];
 			if ('txPower' in device === false) continue;
 			if ('rxPower' in device === false) continue;
-			if (device.rxPower > -11) continue;
+			if (device.rxPower > thresholds.fibre) continue;
 			device.switch = switchName;
 			filteredDevices.push(device);
 		}
@@ -438,8 +484,19 @@ const interfaceFrequency = 15;
 
 /* Globals */
 
+const thresholds = {
+	'fibre': -9,
+	'bandwidth': 0.95,
+	'discard': 1000,
+	'errors': 1000,
+}
+let isQuiting = false;
+let mainWindow = null;
 let SQL;
+let configLoaded = false;
 let cachedUpsTemps = {};
+const devEnv = app.isPackaged ? './' : './';
+const __main = path.resolve(__dirname, devEnv);
 
 const logger = new Logs(
 	false,
@@ -463,156 +520,297 @@ const syslogServer = new SysLogServer(
 	doSysLogMessage
 );
 
-{ /* Config */
-	logger.printHeader('Argos Monitoring');
-	config.require('port', [], 'What port shall the server use');
-	config.require('syslogPort', [], 'What port shall the server listen to syslog messages on');
-	config.require('systemName', [], 'What is the name of the system');
-	config.require('warningTemperature', [], 'What temperature shall alerts be sent at');
-	config.require('webEnabled', {true: 'Yes', false: 'No'}, 'Should this system report back to an argos server');
-	{
-		config.require('webSocketEndpoint', [], 'What is the url of the argos server', ['webEnabled', true]);
-		config.require('secureWebSocketEndpoint', {true: 'Yes', false: 'No'}, 'Does the server use SSL (padlock in browser)', ['webEnabled', true]);
-	}
-	config.require('localDataBase', {true: 'Yes', false: 'No'}, 'Setup and use a local database to save warnings and temperature information');
-	{
-		config.require('dbUser', [], 'Database Username', ['localDataBase', true]);
-		config.require('dbPass', [], 'Database Password', ['localDataBase', true]);
-		config.require('dbPort', [], 'Database port', ['localDataBase', true]);
-		config.require('dbHost', [], 'Database address', ['localDataBase', true]);
-		config.require('dbName', [], 'Database name', ['localDataBase', true]);
-	}
-	config.require('textsEnabled', {true: 'Yes', false: 'No'}, 'Use AWS to send texts when warnings are triggered');
-	{
-		config.require('awsAccessKeyId', [], 'AWS access key for texts', ['textsEnabled', true]);
-		config.require('awsSecretAccessKey', [], 'AWS Secret access key for texts', ['textsEnabled', true]);
-		config.require('awsRegion', [], 'AWS region', ['textsEnabled', true]);
-	}
-	config.require('loggingLevel', {'A':'All', 'D':'Debug', 'W':'Warnings', 'E':'Errors'}, 'Set logging level');
-	config.require('createLogFile', {true: 'Yes', false: 'No'}, 'Save logs to local file');
-	config.require('advancedConfig', {true: 'Yes', false: 'No'}, 'Show advanced config settings');
-	{
-		config.require('debugLineNum', {true: 'Yes', false: 'No'}, 'Print line numbers', ['advancedConfig', true]);
-		config.require('printPings', {true: 'Yes', false: 'No'}, 'Print pings', ['advancedConfig', true]);
-		config.require('devMode', {true: 'Yes', false: 'No'}, 'Dev mode - Disables connections to devices', ['advancedConfig', true]);
-	}
+(async () => {
 
-	config.default('port', 8080);
-	config.default('syslogPort', 514);
-	config.default('systemName', 'Unknown');
-	config.default('warningTemperature', 35);
-	config.default('webEnabled', false);
-	config.default('localDataBase', false);
-	config.default('dbPort', '3306');
-	config.default('dbName', 'argosdata');
-	config.default('dbHost', 'localhost');
-	config.default('textsEnabled', false);
-	config.default('loggingLevel', 'W');
-	config.default('createLogFile', true);
-	config.default('debugLineNum', false);
-	config.default('printPings', false);
-	config.default('advancedConfig', false);
-	config.default('devMode', false);
-	config.default('secureWebSocketEndpoint', true);
+	await app.whenReady();
+	await setUpApp();
+	await createWindow();
 
-	if (!await config.fromFile(path.join(__dirname, 'ArgosData', 'config.conf'))) {
-		await config.fromCLI(path.join(__dirname, 'ArgosData', 'config.conf'));
-	}
-
-	if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
-		config.set('debugLineNum', true);
-	}
-
-	if (config.get('textsEnabled')) {
-		AWS.config.update({ region: config.get('awsRegion')});
-		AWS.config.credentials = new AWS.Credentials(config.get('awsAccessKeyId'), config.get('awsSecretAccessKey'));
-	}
-
-	logger.setConf({
-		'createLogFile': config.get('createLogFile'),
-		'logsFileName': 'ArgosLogging',
-		'configLocation': path.join(__dirname, 'ArgosData'),
-		'loggingLevel': config.get('loggingLevel'),
-		'debugLineNum': config.get('debugLineNum'),
-	});
-
-	logger.log('Running version: v'+version, ['H', 'SERVER', logger.g]);
-	logger.log(`Logging to: ${path.join(__dirname, 'ArgosData', 'logs')}`, ['H', 'SERVER', logger.g]);
-	logger.log(`Config saved to: ${path.join(__dirname, 'ArgosData', 'config.conf')}`, ['H', 'SERVER', logger.g]);
-	config.print();
-	config.userInput(async command => {
-		switch (command) {
-		case 'config':
-			await config.fromCLI(path.join(__dirname, 'ArgosData', 'config.conf'));
-			if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
-				config.set('debugLineNum', true);
-			}
-			logger.setConf({
-				'createLogFile': config.get('createLogFile'),
-				'logsFileName': 'ArgosLogging',
-				'configLocation': path.join(__dirname, 'ArgosData'),
-				'loggingLevel': config.get('loggingLevel'),
-				'debugLineNum': config.get('debugLineNum')
-			});
-			return true;
+	{ /* Config */
+		logger.printHeader('Argos Monitoring');
+		config.require('port', [], 'What port shall the server use');
+		config.require('syslogPort', [], 'What port shall the server listen to syslog messages on');
+		config.require('systemName', [], 'What is the name of the system');
+		config.require('warningTemperature', [], 'What temperature shall alerts be sent at');
+		config.require('webEnabled', {true: 'Yes', false: 'No'}, 'Should this system report back to an argos server');
+		{
+			config.require('webSocketEndpoint', [], 'What is the url of the argos server', ['webEnabled', true]);
+			config.require('secureWebSocketEndpoint', {true: 'Yes', false: 'No'}, 'Does the server use SSL (padlock in browser)', ['webEnabled', true]);
 		}
+		config.require('localDataBase', {true: 'Yes', false: 'No'}, 'Setup and use a local database to save warnings and temperature information');
+		{
+			config.require('dbUser', [], 'Database Username', ['localDataBase', true]);
+			config.require('dbPass', [], 'Database Password', ['localDataBase', true]);
+			config.require('dbPort', [], 'Database port', ['localDataBase', true]);
+			config.require('dbHost', [], 'Database address', ['localDataBase', true]);
+			config.require('dbName', [], 'Database name', ['localDataBase', true]);
+		}
+		config.require('textsEnabled', {true: 'Yes', false: 'No'}, 'Use AWS to send texts when warnings are triggered');
+		{
+			config.require('awsAccessKeyId', [], 'AWS access key for texts', ['textsEnabled', true]);
+			config.require('awsSecretAccessKey', [], 'AWS Secret access key for texts', ['textsEnabled', true]);
+			config.require('awsRegion', [], 'AWS region', ['textsEnabled', true]);
+		}
+		config.require('loggingLevel', {'A':'All', 'D':'Debug', 'W':'Warnings', 'E':'Errors'}, 'Set logging level');
+		config.require('createLogFile', {true: 'Yes', false: 'No'}, 'Save logs to local file');
+		config.require('advancedConfig', {true: 'Yes', false: 'No'}, 'Show advanced config settings');
+		{
+			config.require('debugLineNum', {true: 'Yes', false: 'No'}, 'Print line numbers', ['advancedConfig', true]);
+			config.require('printPings', {true: 'Yes', false: 'No'}, 'Print pings', ['advancedConfig', true]);
+			config.require('devMode', {true: 'Yes', false: 'No'}, 'Dev mode - Disables connections to devices', ['advancedConfig', true]);
+		}
+
+		config.default('port', 8080);
+		config.default('syslogPort', 514);
+		config.default('systemName', 'Unknown');
+		config.default('warningTemperature', 35);
+		config.default('webEnabled', false);
+		config.default('localDataBase', false);
+		config.default('dbPort', '3306');
+		config.default('dbName', 'argosdata');
+		config.default('dbHost', 'localhost');
+		config.default('textsEnabled', false);
+		config.default('loggingLevel', 'W');
+		config.default('createLogFile', true);
+		config.default('debugLineNum', false);
+		config.default('printPings', false);
+		config.default('advancedConfig', false);
+		config.default('devMode', false);
+		config.default('secureWebSocketEndpoint', true);
+
+		if (!await config.fromFile(path.join(__dirname, 'ArgosData', 'config.conf'))) {
+			// await config.fromCLI(path.join(__dirname, 'ArgosData', 'config.conf'));
+			await config.fromAPI(path.join(app.getPath('documents'), 'ArgosData', 'config.conf'), configQuestion, configDone);
+		}
+
+		if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
+			config.set('debugLineNum', true);
+		}
+
+		if (config.get('textsEnabled')) {
+			AWS.config.update({ region: config.get('awsRegion')});
+			AWS.config.credentials = new AWS.Credentials(config.get('awsAccessKeyId'), config.get('awsSecretAccessKey'));
+		}
+
+		logger.setConf({
+			'createLogFile': config.get('createLogFile'),
+			'logsFileName': 'ArgosLogging',
+			'configLocation': path.join(__dirname, 'ArgosData'),
+			'loggingLevel': config.get('loggingLevel'),
+			'debugLineNum': config.get('debugLineNum'),
+		});
+
+		logger.log('Running version: v'+version, ['H', 'SERVER', logger.g]);
+		logger.log(`Logging to: ${path.join(__dirname, 'ArgosData', 'logs')}`, ['H', 'SERVER', logger.g]);
+		logger.log(`Config saved to: ${path.join(__dirname, 'ArgosData', 'config.conf')}`, ['H', 'SERVER', logger.g]);
+		config.print();
+		config.userInput(async command => {
+			switch (command) {
+			case 'config':
+				await config.fromCLI(path.join(__dirname, 'ArgosData', 'config.conf'));
+				if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
+					config.set('debugLineNum', true);
+				}
+				logger.setConf({
+					'createLogFile': config.get('createLogFile'),
+					'logsFileName': 'ArgosLogging',
+					'configLocation': path.join(__dirname, 'ArgosData'),
+					'loggingLevel': config.get('loggingLevel'),
+					'debugLineNum': config.get('debugLineNum')
+				});
+				return true;
+			}
+		});
+		configLoaded = true;
+	}
+
+	if (config.get('localDataBase')) {
+		SQL = new SQLSession(
+			config.get('dbHost'),
+			config.get('dbPort'),
+			config.get('dbUser'),
+			config.get('dbPass'),
+			config.get('dbName'),
+			logger
+		);
+		await SQL.init(tables);
+		const sensor = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'frame';");
+		if (sensor.length == 0) {
+			await SQL.query("ALTER TABLE `temperature` RENAME COLUMN frame TO sensor;");
+		}
+		const sensorType = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'sensorType';");
+		if (sensorType.length == 0) {
+			await SQL.query("ALTER TABLE `temperature` ADD COLUMN sensorType text NOT NULL;");
+			await SQL.query("UPDATE `temperature` SET sensorType = 'IQ Frame' WHERE 1=1;");
+		}
+	}
+
+	webServer.start(config.get('port'));
+	syslogServer.start(config.get('syslogPort'));
+
+	logger.log(`Argos can be accessed at http://localhost:${config.get('port')}`, 'C');
+	mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}/inApp`);
+
+	connectToWebServer(true).then(()=>{
+		webLogBoot();
 	});
-}
 
-if (config.get('localDataBase')) {
-	SQL = new SQLSession(
-		config.get('dbHost'),
-		config.get('dbPort'),
-		config.get('dbUser'),
-		config.get('dbPass'),
-		config.get('dbName'),
-		logger
-	);
-	await SQL.init(tables);
-	const sensor = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'frame';");
-	if (sensor.length == 0) {
-		await SQL.query("ALTER TABLE `temperature` RENAME COLUMN frame TO sensor;");
-	}
-	const sensorType = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'sensorType';");
-	if (sensorType.length == 0) {
-		await SQL.query("ALTER TABLE `temperature` ADD COLUMN sensorType text NOT NULL;");
-		await SQL.query("UPDATE `temperature` SET sensorType = 'IQ Frame' WHERE 1=1;");
-	}
-}
+	// 1 Minute ping loop
+	setInterval(() => {
+		connectToWebServer(true);
+	}, 60*1000);
 
-webServer.start(config.get('port'));
-syslogServer.start(config.get('syslogPort'));
-
-logger.log(`Argos can be accessed at http://localhost:${config.get('port')}`, 'C');
-
-connectToWebServer(true).then(()=>{
-	webLogBoot();
+	await startLoopAfterDelay(logTemp, tempFrequency);
+	await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Media');
+	await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Media');
+	await startLoopAfterDelay(switchInterfaces, 5, 'Media', true);
+	await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Media');
+	await startLoopAfterDelay(localPings, localPingFrequency);
+	await startLoopAfterDelay(connectToWebServer, 5);
+	await startLoopAfterDelay(webLogPing, pingFrequency);
+	await startLoopAfterDelay(switchEnv, envFrequency, 'Media');
+	await startLoopAfterDelay(checkDevices, devicesFrequency, 'Media', true);
+	await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Media');
+	//await startLoopAfterDelay(switchPhy, switchStatsFrequency, 'Media');
+	await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Control');
+	await startLoopAfterDelay(switchInterfaces, 5, 'Control', true);
+	await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Control');
+	await startLoopAfterDelay(switchEnv, envFrequency, 'Control');
+	await startLoopAfterDelay(checkDevices, devicesFrequency, 'Control', false);
+	await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Control');
+	await startLoopAfterDelay(checkUps, upsFrequency);
+})().catch(error => {
+	console.log(error);
 });
 
-// 1 Minute ping loop
-setInterval(() => {
-	connectToWebServer(true);
-}, 60*1000);
 
-await startLoopAfterDelay(logTemp, tempFrequency);
-await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Media');
-await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Control');
-await startLoopAfterDelay(switchInterfaces, 5, 'Media', true);
-await startLoopAfterDelay(switchInterfaces, 5, 'Control', true);
-await startLoopAfterDelay(localPings, localPingFrequency);
-await startLoopAfterDelay(connectToWebServer, 5);
-await startLoopAfterDelay(webLogPing, pingFrequency);
-await startLoopAfterDelay(switchEnv, envFrequency, 'Media');
-await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Media');
-await startLoopAfterDelay(checkDevices, devicesFrequency, 'Media', true);
-await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Media');
-//await startLoopAfterDelay(switchPhy, switchStatsFrequency, 'Media');
-await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Media');
-await startLoopAfterDelay(switchEnv, envFrequency, 'Control');
-await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Control');
-await startLoopAfterDelay(checkDevices, devicesFrequency, 'Control', false);
-await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Control');
-await startLoopAfterDelay(checkUps, upsFrequency);
+/* Electron */
+
+
+async function setUpApp() {
+	const tray = new Tray(path.join(__static, 'img/icon/network-96.png'));
+	tray.setContextMenu(Menu.buildFromTemplate([
+		{
+			label: 'Show App', click: function () {
+				mainWindow.show();
+			}
+		},
+		{
+			label: 'Exit', click: function () {
+				isQuiting = true;
+				app.quit();
+			}
+		}
+	]));
+
+	ipcMain.on('window', (event, message) => {
+		switch (message) {
+		case 'exit':
+			app.quit();
+			break;
+		case 'minimise':
+			mainWindow.hide();
+			break;
+		default:
+			break;
+		}
+	});
+
+	ipcMain.on('config', (event, message) => {
+		switch (message) {
+		case 'start':
+			config.fromAPI(path.join(app.getPath('documents'), 'ArgosData','config.conf'), configQuestion, configDone);
+			break;
+		case 'stop':
+			logger.log('Not implemeneted yet: Cancle config change');
+			break;
+		case 'show':
+			config.print();
+			break;
+		default:
+			break;
+		}
+	});
+
+	const autoLaunch = new AutoLaunch({
+		name: 'Argos Monitoring',
+		isHidden: true,
+	});
+	autoLaunch.isEnabled().then(isEnabled => {
+		if (!isEnabled) autoLaunch.enable();
+	});
+
+	app.on('before-quit', function () {
+		isQuiting = true;
+	});
+
+	app.on('activate', async () => {
+		if (BrowserWindow.getAllWindows().length === 0) createWindow();
+	});
+
+	logger.on('logSend', message => {
+		if (!isQuiting) mainWindow.webContents.send('log', message);
+	});
+}
+
+async function createWindow() {
+	const windowOptions = {
+		width: 1440,
+		height: 720,
+		autoHideMenuBar: true,
+		webPreferences: {
+			contextIsolation: true,
+			preload: path.resolve(__main, 'preload.js'),
+		},
+		icon: path.join(__static, 'img/icon/icon.png'),
+		show: false,
+		sensor: false,
+		titleBarStyle: 'hidden',
+		titleBarOverlay: {
+			color: '#313d48',
+			symbolColor: '#ffffff',
+			height: 56
+		}
+	}
+	
+	if (IS_WINDOWS_11) {
+		mainWindow = new MicaBrowserWindow(windowOptions);
+		mainWindow.setDarkTheme();
+		mainWindow.setMicaEffect();
+	} else {
+		mainWindow = new BrowserWindow(windowOptions);
+	}
+
+	if (!app.commandLine.hasSwitch('hidden')) {
+		mainWindow.show();
+	} else {
+		mainWindow.hide();
+	}
+
+	mainWindow.on('close', function (event) {
+		if (!isQuiting) {
+			event.preventDefault();
+			mainWindow.webContents.send('requestExit');
+			event.returnValue = false;
+		}
+	});
+
+	mainWindow.on('minimize', function (event) {
+		event.preventDefault();
+		mainWindow.hide();
+	});
+
+	mainWindow.loadURL(path.resolve(__main, 'views/app.ejs'));
+
+	await new Promise(resolve => {
+		ipcMain.on('ready', (event, ready) => {
+			if (configLoaded) {
+				mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}/inApp`);
+			}
+			resolve();
+		});
+	});
+}
 
 
 /* Data */
@@ -775,6 +973,7 @@ function expressRoutes(expressApp) {
 			webEnabled:config.get('webEnabled'),
 			version: version,
 			pings:syslogSourceList(),
+			pingGroups:syslogSourceGroups(),
 			background:'micaActive'
 		});
 	});
@@ -786,6 +985,7 @@ function expressRoutes(expressApp) {
 			'aboutInfo': {
 				'Version': version,
 				'Config': config.all(),
+				'Thresholds':thresholds,
 				'Switches':switches(),
 				'Temp Sensors':temps(),
 				'UPS':ups(),
@@ -1121,7 +1321,7 @@ function makeHeader() {
 }
 
 function distributeData(type, data) {
-	sendCouldData({'command':'log', 'type':type, 'data':data});
+	sendCloudData({'command':'log', 'type':type, 'data':data});
 	webServer.sendToAll({'command':'log', 'type':type, 'data':data});
 }
 
@@ -1381,20 +1581,17 @@ async function switchInterfaces(switchType, monitoringOnly) {
 		for (const ifaceName in ifaces) {
 			if (!Object.hasOwnProperty.call(ifaces, ifaceName)) return;
 			const iface = ifaces[ifaceName];
-			const bandwidthThreshold = 0.95;
-			if ((iface.inRate/iface.maxRate > bandwidthThreshold) || (iface.outRate/iface.maxRate > bandwidthThreshold)) {
+			if ((iface.inRate/iface.maxRate > thresholds.bandwidth) || (iface.outRate/iface.maxRate > thresholds.bandwidth)) {
 				if (filteredPorts[switchType]['WARNING'] === undefined) filteredPorts[switchType]['WARNING'] = {};
 				if (filteredPorts[switchType]['WARNING'][switchName] === undefined) filteredPorts[switchType]['WARNING'][switchName] = {};
 				filteredPorts[switchType]['WARNING'][switchName][ifaceName] = iface;
 			}
-			const discardThreshold = 1000;
-			if ((iface.outDiscards > discardThreshold) || (iface.inDiscards > discardThreshold)) {
+			if ((iface.outDiscards > thresholds.discard) || (iface.inDiscards > thresholds.discard)) {
 				if (filteredPorts[switchType]['WARNING'] === undefined) filteredPorts[switchType]['WARNING'] = {};
 				if (filteredPorts[switchType]['WARNING'][switchName] === undefined) filteredPorts[switchType]['WARNING'][switchName] = {};
 				filteredPorts[switchType]['WARNING'][switchName][ifaceName] = iface;
 			}
-			const errorsThreshold = 1000;
-			if ((iface.outErrors > discardThreshold) || (iface.inErrors > discardThreshold)) {
+			if ((iface.outErrors > thresholds.errors) || (iface.inErrors > thresholds.errors)) {
 				if (filteredPorts[switchType]['WARNING'] === undefined) filteredPorts[switchType]['WARNING'] = {};
 				if (filteredPorts[switchType]['WARNING'][switchName] === undefined) filteredPorts[switchType]['WARNING'][switchName] = {};
 				filteredPorts[switchType]['WARNING'][switchName][ifaceName] = iface;
@@ -1714,7 +1911,7 @@ async function doIQTemps(Temps) {
 			logger.log('Warning: Temperature over warning limit, sending SMS', 'W');
 			sendSms(`Commitment to environment sustainability failed, MCR IS MELTING: ${tempAvg} deg C`);
 		}
-		sendCouldData({'command':'log', 'type':'temperature', 'data':Temps});
+		sendCloudData({'command':'log', 'type':'temperature', 'data':Temps});
 
 		socketSend.average = tempAvg;
 		const time = new Date().getTime();
@@ -1819,7 +2016,7 @@ async function doGenericTemps(Temps) {
 			logger.log('Warning: Temperature over warning limit, sending SMS', 'W');
 			sendSms(`Commitment to environment sustainability failed, MCR IS MELTING: ${tempAvg} deg C`);
 		}
-		sendCouldData({'command':'log', 'type':'temperature', 'data':webTemps});
+		sendCloudData({'command':'log', 'type':'temperature', 'data':webTemps});
 
 		socketSend.average = tempAvg;
 		const time = new Date().getTime();
@@ -1839,13 +2036,13 @@ async function doGenericTemps(Temps) {
 function webLogPing() {
 	if (!config.get('webEnabled')) return;
 	logger.log('Pinging webserver', 'A');
-	sendCouldData({'command':'log', 'type':'ping'});
+	sendCloudData({'command':'log', 'type':'ping'});
 }
 
 function webLogBoot() {
 	if (!config.get('webEnabled')) return;
 	logger.log('Sending boot');
-	sendCouldData({'command':'log', 'type':'boot'});
+	sendCloudData({'command':'log', 'type':'boot'});
 }
 
 function sendSms(msg) {
@@ -1888,7 +2085,7 @@ async function connectToWebServer(retry = false) {
 				let payload = {};
 				payload.command = 'register';
 				payload.name = config.get('systemName');
-				sendCouldData(payload);
+				sendCloudData(payload);
 				resolve();
 				logger.log(`${logger.g}${cloudServer.address}${logger.reset} Established a connection to webserver`, 'S');
 				cloudServer.connected = true;
@@ -1907,7 +2104,7 @@ async function connectToWebServer(retry = false) {
 				}
 				switch (msgObj.payload.command) {
 				case 'ping':
-					sendCouldData({
+					sendCloudData({
 						'command': 'pong'
 					});
 					break;
@@ -1960,13 +2157,58 @@ async function connectToWebServer(retry = false) {
 	return promise;
 }
 
-function sendCouldData(payload) {
+function sendCloudData(payload) {
 	if (!config.get('webEnabled')) return;
 	let packet = {};
 	packet.header = makeHeader();
 	packet.payload = payload;
 	if (cloudServer.connected) {
 		cloudServer.socket.send(JSON.stringify(packet));
+	}
+}
+
+
+/* Config Functions */
+
+
+async function configQuestion(question, current, options) {
+	mainWindow.webContents.send('configQuestion', JSON.stringify({
+		'question': question,
+		'current': current,
+		'options': options
+	}));
+	const awaitMessage = new Promise (resolve => {
+		ipcMain.once('configMessage', (event, value) => {
+			if (value == 'true') value = true;
+			if (value == 'false') value = false;
+			const newVal = parseInt(value);
+			if (!isNaN(newVal)) value = newVal;
+			resolve(value);
+		});
+	});
+	return awaitMessage;
+}
+
+async function configDone() {
+	mainWindow.webContents.send('configDone', true);
+	logger.setConf({
+		'createLogFile': config.get('createLogFile'),
+		'logsFileName': 'ArgosLogging',
+		'configLocation': path.join(app.getPath('documents'), 'ArgosData'),
+		'loggingLevel': config.get('loggingLevel'),
+		'debugLineNum': config.get('debugLineNum'),
+	});
+	if (configLoaded) mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}`);
+	if (config.get('localDataBase')) {
+		SQL = new SQLSession(
+			config.get('dbHost'),
+			config.get('dbPort'),
+			config.get('dbUser'),
+			config.get('dbPass'),
+			config.get('dbName'),
+			logs
+		);
+		await SQL.init(tables);
 	}
 }
 

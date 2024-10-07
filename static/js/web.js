@@ -648,7 +648,7 @@ function handleFibreData(data, type) {
 				<td>${device.port}</td>
 				<td>${lldp}</td>
 				<td>${feeding}</td>
-				<td>${device.rxPower} dBm</td>
+				<td>${device.rxPower.join(', ')} dBm</td>
 			</tr>`;
 			$(`${table} tbody`).append(row);
 		});
@@ -955,6 +955,7 @@ function handleInterfaces(data, type) {
 	const table = `[data-type="${type}"] table[data-catagory="interfaces"]`;
 	const _table = document.querySelector(table);
 	_table.replaceChildren();
+	console.log(data);
 	//$(`${table} tbody`).empty();
 
 	if (Object.keys(data).length == 0) {
@@ -972,13 +973,10 @@ function handleInterfaces(data, type) {
 			if (groupName != 'DEFAULT') _tbody.insertAdjacentHTML('afterbegin', `<tr class="interfaceGroup"><th colspan="3" data-group="${groupName}">${groupName}</th></tr>`);
 			_table.append(_tbody);
 
-			console.log(Group)
 			for (const switchName in Group) {
 				const Switch = Group[switchName];
-				console.log(Switch)
 				for (const portName in Switch) {
 					const Port = Switch[portName];
-					console.log(Port)
 	
 					let time = '';
 	
@@ -988,11 +986,11 @@ function handleInterfaces(data, type) {
 						let minutes = Math.floor(seconds/60);
 						let hours = Math.floor(minutes/60);
 						const days = Math.floor(hours/24);
-						hours = hours-(days*24);
-						minutes = minutes-(days*24*60)-(hours*60);
-						seconds = seconds-(days*24*60*60)-(hours*60*60)-(minutes*60)+'s';
-						if (days > 0) time = ` ${days}d ${hours}h ${minutes}m`;
-						else if (hours > 0) time += ` ${hours}h ${minutes}m ${seconds}s`;
+						hours = String(hours-(days*24)).padStart(2,'0');
+						minutes = String(minutes-(days*24*60)-(hours*60)).padStart(2,'0');
+						seconds = String(seconds-(days*24*60*60)-(hours*60*60)-(minutes*60)).padStart(2,'0');
+						if (days > 0) time = ` ${days}d ${hours}:${minutes}:${seconds}`;
+						else if (hours > 0) time += ` ${hours}:${minutes}:${seconds}`;
 					} else {
 						time = Port.lastFlap;
 					}
@@ -1003,14 +1001,32 @@ function handleInterfaces(data, type) {
 					const inGbps = Math.round(Port.inRate/1000000000);
 					const outColour = `hsl(${130 - outPercent*1.3}deg 100% 30.36%)`;
 					const inColour = `hsl(${120 - inPercent*1.3}deg 100% 30.36%)`;
+
+					let fibreLanes = '';
+					let fibreWarn = false;
+					if (typeof Port.rxPower !== "undefined") {
+						Port.rxPower.forEach((lane, i) =>{
+							let colour = 'bg-success';
+							if (lane < -9 && lane > -30) {
+								fibreWarn = true;
+								colour = 'bg-danger';
+							}
+							if (lane == -30) colour = 'bg-warning';
+							if (lane > 0) colour = 'bg-info';
+							fibreLanes += `<div class="badge ${colour}">Lane ${i+1}: ${lane} dBm</div>`;
+						})
+					}
 	
+					let statusBG = 'bg-danger';
+					if (Port.connected) statusBG = 'bg-success';
+					if (fibreWarn) statusBG = 'bg-warning';
 					_tbody.insertAdjacentHTML('beforeend', `<tr class="interfaceCont">
-						<td class="text-center ${Port.connected ? 'bg-success' : 'bg-danger'}">
-							<div>${switchName} - ${Port.connected ? 'UP' : 'Down'}</div>
-							<div>${portName}</div>
+						<td class="text-center ${statusBG} interfaceHeader">
+							<div>${portName} - ${Port.connected ? 'UP' : 'Down'}</div>
 							<div>${Port.description}</div>
+							<div>${switchName}</div>
 						</td>
-						<td>
+						<td class="interfaceCounts">
 							<table>
 								<tr><td>Port Flaps: </td><td>${Port.flapCount}</td></tr>
 								<tr><td>Last Flap: </td><td>${time}</td></tr>
@@ -1020,11 +1036,14 @@ function handleInterfaces(data, type) {
 								<tr><td>Out Discards: </td><td>${Port.outDiscards}</td></tr>
 							</table>
 						</td>
-						<td>
+						<td class="interfaceGraph">
 							<div class="d-flex justify-content-between">
 								<div>
 									<div>Out: ${outPercent}% - ${outGbps}Gbps</div>
 									<div>In: ${inPercent}% - ${inGbps}Gbps</div>
+									<div class="d-flex flex-column gap-1 mt-1">
+										${fibreLanes}
+									</div>
 								</div>
 								<div class="pie text-right" style="--p:${outPercent};--b:10px;--c:${outColour};--pi:${inPercent};--ci:${inColour}"></div>
 							</div>

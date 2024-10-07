@@ -1,13 +1,16 @@
 {
   "name": "argos",
-  "version": "3.11.0",
+  "version": "3.12.0",
   "description": "OB/Flypack Monitoring",
   "main": "main.js",
   "type": "module",
   "dependencies": {
+    "auto-launch": "^5.0.6",
     "aws-sdk": "^2.1450.0",
     "ejs": "^3.1.9",
+    "electron-ejs": "^1.2.1",
     "express": "^4.18.2",
+    "mica-electron": "^1.5.16",
     "net-snmp": "^3.9.7",
     "node-fetch": "^2.6.7",
     "ping": "^0.4.4",
@@ -21,14 +24,17 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron .",
-    "build": "electron-builder --win"
+    "build": "electron-builder --win",
+    "package": "electron-forge package",
+    "make": "electron-forge make"
   },
   "build": {
     "appId": "com.xeue.argos",
     "productName": "Argos",
     "files": [
-      "**/*",
-      "static/*"
+      "views/*",
+      "static/*",
+      "**/*.js"
     ],
     "win": {
       "icon": "static/img/icon/icon.ico",
@@ -46,5 +52,9 @@
     }
   },
   "author": "Sam Chilton & Ollie Quirke",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^32.1.2",
+    "electron-builder": "^25.1.7"
+  }
 }
