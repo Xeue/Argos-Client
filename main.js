@@ -30,10 +30,12 @@ const httpsAgent = new https.Agent({
 	rejectUnauthorized: false,
 });
 
-// const __dirname = path.resolve(path.dirname(decodeURI(new URL(import.meta.url).pathname))).replace('C:\\','');
-// const __dirname = app.getPath("documents");
-const __static = __dirname+'/static';
-const ejs = new electronEjs({'static': __static, 'background': background}, {});
+const __internal = import.meta.dirname;
+const __data = path.join(app.getPath("documents"), 'ArgosData');
+const __static = `${app.isPackaged ? process.resourcesPath : __internal}/static`;
+const __views = `${app.isPackaged ? process.resourcesPath : __internal}/views`;
+
+const ejs = new electronEjs({'static': __static, 'internal': __internal, 'background': background}, {});
 
 Array.prototype.symDiff = function(x) {
 	return this.filter(y => !x.includes(y)).concat(x => !y.includes(x));
@@ -495,13 +497,11 @@ let mainWindow = null;
 let SQL;
 let configLoaded = false;
 let cachedUpsTemps = {};
-const devEnv = app.isPackaged ? './' : './';
-const __main = path.resolve(__dirname, devEnv);
 
 const logger = new Logs(
 	false,
 	'ArgosLogging',
-	path.join(__dirname, 'ArgosData'),
+	__data,
 	'D',
 	false
 )
@@ -578,9 +578,9 @@ const syslogServer = new SysLogServer(
 		config.default('devMode', false);
 		config.default('secureWebSocketEndpoint', true);
 
-		if (!await config.fromFile(path.join(__dirname, 'ArgosData', 'config.conf'))) {
-			// await config.fromCLI(path.join(__dirname, 'ArgosData', 'config.conf'));
-			await config.fromAPI(path.join(app.getPath('documents'), 'ArgosData', 'config.conf'), configQuestion, configDone);
+		if (!await config.fromFile(path.join(__data, 'config.conf'))) {
+			// await config.fromCLI(path.join(__data, 'config.conf'));
+			await config.fromAPI(path.join(__data, 'config.conf'), configQuestion, configDone);
 		}
 
 		if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
@@ -595,26 +595,26 @@ const syslogServer = new SysLogServer(
 		logger.setConf({
 			'createLogFile': config.get('createLogFile'),
 			'logsFileName': 'ArgosLogging',
-			'configLocation': path.join(__dirname, 'ArgosData'),
+			'configLocation': __data,
 			'loggingLevel': config.get('loggingLevel'),
 			'debugLineNum': config.get('debugLineNum'),
 		});
 
 		logger.log('Running version: v'+version, ['H', 'SERVER', logger.g]);
-		logger.log(`Logging to: ${path.join(__dirname, 'ArgosData', 'logs')}`, ['H', 'SERVER', logger.g]);
-		logger.log(`Config saved to: ${path.join(__dirname, 'ArgosData', 'config.conf')}`, ['H', 'SERVER', logger.g]);
+		logger.log(`Logging to: ${path.join(__data, 'logs')}`, ['H', 'SERVER', logger.g]);
+		logger.log(`Config saved to: ${path.join(__data, 'config.conf')}`, ['H', 'SERVER', logger.g]);
 		config.print();
 		config.userInput(async command => {
 			switch (command) {
 			case 'config':
-				await config.fromCLI(path.join(__dirname, 'ArgosData', 'config.conf'));
+				await config.fromCLI(path.join(__data, 'config.conf'));
 				if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
 					config.set('debugLineNum', true);
 				}
 				logger.setConf({
 					'createLogFile': config.get('createLogFile'),
 					'logsFileName': 'ArgosLogging',
-					'configLocation': path.join(__dirname, 'ArgosData'),
+					'configLocation': __data,
 					'loggingLevel': config.get('loggingLevel'),
 					'debugLineNum': config.get('debugLineNum')
 				});
@@ -719,7 +719,7 @@ async function setUpApp() {
 	ipcMain.on('config', (event, message) => {
 		switch (message) {
 		case 'start':
-			config.fromAPI(path.join(app.getPath('documents'), 'ArgosData','config.conf'), configQuestion, configDone);
+			config.fromAPI(path.join(__data, 'config.conf'), configQuestion, configDone);
 			break;
 		case 'stop':
 			logger.log('Not implemeneted yet: Cancle config change');
@@ -760,7 +760,7 @@ async function createWindow() {
 		autoHideMenuBar: true,
 		webPreferences: {
 			contextIsolation: true,
-			preload: path.resolve(__main, 'preload.js'),
+			preload: path.resolve(__internal, 'preload.js'),
 		},
 		icon: path.join(__static, 'img/icon/icon.png'),
 		show: false,
@@ -800,7 +800,7 @@ async function createWindow() {
 		mainWindow.hide();
 	});
 
-	mainWindow.loadURL(path.resolve(__main, 'views/app.ejs'));
+	mainWindow.loadURL(path.resolve(__internal, 'views/app.ejs'));
 
 	await new Promise(resolve => {
 		ipcMain.on('ready', (event, ready) => {
@@ -818,7 +818,7 @@ async function createWindow() {
 
 function loadData(file) {
 	try {
-		const dataRaw = fs.readFileSync(`${__dirname}/ArgosData/data/${file}.json`);
+		const dataRaw = fs.readFileSync(`${__data}/data/${file}.json`);
 		try {
 			return JSON.parse(dataRaw);
 		} catch (error) {
@@ -867,16 +867,16 @@ function loadData(file) {
 			};
 			break;
 		}
-		if (!fs.existsSync(`${__dirname}/ArgosData/data/`)){
-			fs.mkdirSync(`${__dirname}/ArgosData/data/`);
+		if (!fs.existsSync(`${__data}/data/`)){
+			fs.mkdirSync(`${__data}/data/`);
 		}
-		fs.writeFileSync(`${__dirname}/ArgosData/data/${file}.json`, JSON.stringify(fileData, null, 4));
+		fs.writeFileSync(`${__data}/data/${file}.json`, JSON.stringify(fileData, null, 4));
 		return fileData;
 	}
 }
 function writeData(file, data) {
 	try {
-		fs.writeFileSync(`${__dirname}/ArgosData/data/${file}.json`, JSON.stringify(data, undefined, 2));
+		fs.writeFileSync(`${__data}/data/${file}.json`, JSON.stringify(data, undefined, 2));
 	} catch (error) {
 		logger.object(`Could not write the file ${file}.json, do we have permission to access the file?`, error, 'E');
 	}
@@ -939,7 +939,7 @@ function ports(type) {
 
 
 function expressRoutes(expressApp) {
-	expressApp.set('views', path.join(__dirname, 'views'));
+	expressApp.set('views', path.join(__internal, 'views'));
 	expressApp.set('view engine', 'ejs');
 	expressApp.use(express.json());
 	expressApp.use(express.static(__static));
@@ -957,7 +957,10 @@ function expressRoutes(expressApp) {
 			version: version,
 			pings:syslogSourceList(),
 			pingGroups:syslogSourceGroups(),
-			background:'bg-dark'
+			background:'bg-dark',
+			internal: __internal,
+			static: __static,
+			views: __views
 		});
 	});
 
@@ -974,7 +977,10 @@ function expressRoutes(expressApp) {
 			version: version,
 			pings:syslogSourceList(),
 			pingGroups:syslogSourceGroups(),
-			background:'micaActive'
+			background:'micaActive',
+			internal: __internal,
+			static: __static,
+			views: __views
 		});
 	});
 
@@ -2194,7 +2200,7 @@ async function configDone() {
 	logger.setConf({
 		'createLogFile': config.get('createLogFile'),
 		'logsFileName': 'ArgosLogging',
-		'configLocation': path.join(app.getPath('documents'), 'ArgosData'),
+		'configLocation': __data,
 		'loggingLevel': config.get('loggingLevel'),
 		'debugLineNum': config.get('debugLineNum'),
 	});

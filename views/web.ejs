@@ -7,11 +7,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <!-- Bootstrap CSS -->
-    <link href="lib/bootstrap.min.css" rel="stylesheet" type="text/css">
-    <link href="lib/jsoneditor.css" rel="stylesheet" type="text/css">
-    <link href="lib/datetimepicker.css" rel="stylesheet" type="text/css">
-    <link href="lib/multiselect.css" rel="stylesheet" type="text/css"/>
-    <link href="css/web.css" rel="stylesheet">
+    <link href="/lib/bootstrap.min.css" rel="stylesheet" type="text/css">
+    <link href="/lib/jsoneditor.css" rel="stylesheet" type="text/css">
+    <link href="/lib/datetimepicker.css" rel="stylesheet" type="text/css">
+    <link href="/lib/multiselect.css" rel="stylesheet" type="text/css"/>
+    <link href="/css/web.css" rel="stylesheet">
     <script type="text/javascript">
         const currentSystem = "<%=systemName%>"
         const version = '<%=version%>'
@@ -31,20 +31,20 @@
         const webSocketEndpoint = '<%=webSocketEndpoint%>';
         const secureWebsockets = <%=secureWebSocketEndpoint%>;
     </script>
-    <script type="text/javascript" src="lib/jquery-3.6.0.min.js"></script>
-    <script type="text/javascript" src="lib/bootstrap.min.js"></script>
-    <script type="text/javascript" src="lib/ejs.js"></script>
-    <script type="text/javascript" src="lib/crypto-js.min.js"></script>
-    <script type="text/javascript" src="lib/commonWS.js"></script>
-    <script type="text/javascript" src="lib/chart.js"></script>
-    <script type="text/javascript" src="lib/moment.js"></script>
-    <script type="text/javascript" src="lib/chart-adapter-moment.js"></script>
-    <script type="text/javascript" src="lib/jsoneditor.js"></script>
-    <script type="text/javascript" src="lib/datetimepicker.js"></script>
-    <script type="text/javascript" src="lib/multiselect.js"></script>
-    <script type="text/javascript" src="js/web.js"></script>
+    <script type="text/javascript" src="/lib/jquery-3.6.0.min.js"></script>
+    <script type="text/javascript" src="/lib/bootstrap.min.js"></script>
+    <script type="text/javascript" src="/lib/ejs.js"></script>
+    <script type="text/javascript" src="/lib/crypto-js.min.js"></script>
+    <script type="text/javascript" src="/lib/commonWS.js"></script>
+    <script type="text/javascript" src="/lib/chart.js"></script>
+    <script type="text/javascript" src="/lib/moment.js"></script>
+    <script type="text/javascript" src="/lib/chart-adapter-moment.js"></script>
+    <script type="text/javascript" src="/lib/jsoneditor.js"></script>
+    <script type="text/javascript" src="/lib/datetimepicker.js"></script>
+    <script type="text/javascript" src="/lib/multiselect.js"></script>
+    <script type="text/javascript" src="/js/web.js"></script>
     <title>Argos</title>
-    <link id="favicon_48" rel="icon" href="img/icon/icon.svg" sizes="256x256">
+    <link id="favicon_48" rel="icon" href="/img/icon/icon.svg" sizes="256x256">
 </head>
 
 <body id="mainCont" class="h-100 d-flex flex-column <%-background%>">
@@ -52,7 +52,7 @@
 
     <nav class="drag navbar navbar-expand-lg navbar-dark bg-title px-2">
         <a class="navbar-brand chilton" href="/">
-            <img src="img/icon/icon.svg" class="d-inline-block align-top" alt="" width="30" height="30">
+            <img src="/img/icon/icon.svg" class="d-inline-block align-top" alt="" width="30" height="30">
             Argos
         </a>
         <div class="btn-group">
@@ -74,16 +74,16 @@
         </div>
     </nav>
     <main class="tab-content container-fluid py-3 overflow-auto">
-        <%- include('tabs/media.ejs'); %>
-        <%- include('tabs/control.ejs'); %>
-        <%- include('tabs/interfaces.ejs'); %>
-        <%- include('tabs/temps.ejs'); %>
-        <%- include('tabs/pings.ejs'); %>
-        <%- include('tabs/debug.ejs'); %>
-        <%- include('tabs/syslog.ejs'); %>
+        <%- include(views+'/tabs/media.ejs'); %>
+        <%- include(views+'/tabs/control.ejs'); %>
+        <%- include(views+'/tabs/interfaces.ejs'); %>
+        <%- include(views+'/tabs/temps.ejs'); %>
+        <%- include(views+'/tabs/pings.ejs'); %>
+        <%- include(views+'/tabs/debug.ejs'); %>
+        <%- include(views+'/tabs/syslog.ejs'); %>
     </main>
     
-    <%- include('config.ejs'); %>
+    <%- include(views+'/config.ejs'); %>
 </body>
 
 </html>

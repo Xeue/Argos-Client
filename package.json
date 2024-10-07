@@ -33,6 +33,7 @@
     "productName": "Argos",
     "files": [
       "views/*",
+      "node_modules/*",
       "static/*",
       "**/*.js"
     ],
@@ -49,7 +50,17 @@
     },
     "nsis": {
       "artifactName": "Argos-v${version}.exe"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "static",
+        "to": "static"
+      },
+      {
+        "from": "views",
+        "to": "views"
+      }
+    ]
   },
   "author": "Sam Chilton & Ollie Quirke",
   "license": "MIT",
