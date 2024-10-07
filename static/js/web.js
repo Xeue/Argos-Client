@@ -969,13 +969,16 @@ function handleInterfaces(data, type) {
 
 			const _tbody = document.createElement('tbody');
 			_tbody.classList.add('portMonGroup');
-			if (groupName != 'DEFAULT') _tbody.insertAdjacentHTML('afterbegin', `<th colspan="3" data-group="${groupName}">${groupName}</th>`);
+			if (groupName != 'DEFAULT') _tbody.insertAdjacentHTML('afterbegin', `<tr class="interfaceGroup"><th colspan="3" data-group="${groupName}">${groupName}</th></tr>`);
 			_table.append(_tbody);
 
+			console.log(Group)
 			for (const switchName in Group) {
 				const Switch = Group[switchName];
+				console.log(Switch)
 				for (const portName in Switch) {
 					const Port = Switch[portName];
+					console.log(Port)
 	
 					let time = '';
 	
@@ -993,11 +996,7 @@ function handleInterfaces(data, type) {
 					} else {
 						time = Port.lastFlap;
 					}
-	
-					const inErrors = Port.inErrors > 0 ? `<div>In Errors: ${Port.inErrors}</div>` : '';
-					const outErrors = Port.outErrors > 0 ? `<div>Out Errors: ${Port.outErrors}</div>` : '';
-					const inDiscards = Port.inDiscards > 0 ? `<div>In Discards: ${Port.inDiscards}</div>` : '';
-					const outDiscards = Port.outDiscards > 0 ? `<div>Out Discards: ${Port.outDiscards}</div>` : '';
+
 					const outPercent = Math.round(100*Port.outRate/Port.maxRate);
 					const outGbps = Math.round(Port.outRate/1000000000);
 					const inPercent = Math.round(100*Port.inRate/Port.maxRate);
@@ -1005,19 +1004,21 @@ function handleInterfaces(data, type) {
 					const outColour = `hsl(${130 - outPercent*1.3}deg 100% 30.36%)`;
 					const inColour = `hsl(${120 - inPercent*1.3}deg 100% 30.36%)`;
 	
-					_tbody.insertAdjacentHTML('beforeend', `<tr>
+					_tbody.insertAdjacentHTML('beforeend', `<tr class="interfaceCont">
 						<td class="text-center ${Port.connected ? 'bg-success' : 'bg-danger'}">
 							<div>${switchName} - ${Port.connected ? 'UP' : 'Down'}</div>
 							<div>${portName}</div>
 							<div>${Port.description}</div>
 						</td>
 						<td>
-							<div>Port Flaps: ${Port.flapCount}</div>
-							<div>Last Flap: ${time}</div>
-							${inErrors}
-							${outErrors}
-							${inDiscards}
-							${outDiscards}
+							<table>
+								<tr><td>Port Flaps: </td><td>${Port.flapCount}</td></tr>
+								<tr><td>Last Flap: </td><td>${time}</td></tr>
+								<tr><td>In Errors: </td><td>${Port.inErrors}</td></tr>
+								<tr><td>Out Errors: </td><td>${Port.outErrors}</td></tr>
+								<tr><td>In Discards: </td><td>${Port.inDiscards}</td></tr>
+								<tr><td>Out Discards: </td><td>${Port.outDiscards}</td></tr>
+							</table>
 						</td>
 						<td>
 							<div class="d-flex justify-content-between">

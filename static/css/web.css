@@ -152,7 +152,7 @@ nav.drag {
 }
 
 .pie {
-  --w: 50px;
+  --w: 85px;
   width: var(--w);
   aspect-ratio: 1;
   position: relative;
@@ -161,6 +161,8 @@ nav.drag {
   margin: 5px;
   text-align: right;
   line-height: 1.1;
+  outline: 1px solid rgb(85, 95, 106);
+  border-radius: 50%;
 }
 .pie:before {
   content: "";
@@ -179,6 +181,50 @@ nav.drag {
   background: conic-gradient(var(--ci) calc(var(--pi)*1%),#0000 0);
   -webkit-mask: radial-gradient(farthest-side,#0000 calc(99% - var(--b)),#000 calc(100% - var(--b)));
           mask: radial-gradient(farthest-side,#0000 calc(99% - var(--b)),#000 calc(100% - var(--b)));
+}
+
+#nav-interfaces table,
+#nav-interfaces tbody {
+  display: block;
+}
+
+#nav-interfaces .interfaceCont {
+  float: left;
+  border-radius: 1rem;
+  overflow: hidden;
+  background: rgb(49, 61, 72);
+  margin: 0.5rem;
+}
+
+#nav-interfaces td {
+  background: transparent;
+}
+
+#nav-interfaces .interfaceGroup {
+  margin: 0.5rem;
+  display: block;
+  width: calc(100% - 1rem);
+  float: left;
+}
+#nav-interfaces .interfaceGroup > th {
+  display: block;
+  width: 100%;
+}
+
+[data-type="password"] {
+  color: transparent;
+  font-size: 0;
+}
+
+[data-type="password"]::before {
+  content: "*****";
+  color: white;
+  font-size: 1rem;
+}
+
+[data-type="password"]:has(input)::before {
+  content: "";
+  color: white;
 }
 
 [data-editor] [data-type="check"][data-value="true"]:empty::before,

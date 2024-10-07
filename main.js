@@ -12,17 +12,11 @@ import {Config} from 'xeue-config';
 import {SQLSession} from 'xeue-sql';
 import {Server} from 'xeue-webserver';
 import SysLogServer from './syslog.js';
-//import {app, BrowserWindow, ipcMain, Tray, Menu} from 'electron';
 import Package from './package.json' assert {type: "json"};
-//import electronEjs from 'electron-ejs';
-//import AutoLaunch from 'auto-launch';
 import ping from 'ping';
 import https from 'https';
-import { assert } from 'console';
-//import {MicaBrowserWindow, IS_WINDOWS_11} from 'mica-electron';
 //const snmp = require ('net-snmp');
 
-//const background = IS_WINDOWS_11 ? 'micaActive' : 'bg-dark';
 const version = Package.version;
 
 const httpsAgent = new https.Agent({
@@ -31,8 +25,6 @@ const httpsAgent = new https.Agent({
 
 const __dirname = path.resolve(path.dirname(decodeURI(new URL(import.meta.url).pathname))).replace('C:\\','');
 const __static = __dirname+'/static';
-
-//const ejs = new electronEjs({'static': __static, 'background': background}, {});
 
 Array.prototype.symDiff = function(x) {
 	return this.filter(y => !x.includes(y)).concat(x => !y.includes(x));
@@ -113,217 +105,25 @@ const tables = [{
 
 const SwitchRequests = {
 	'NXOS': {
-		'neighborRequest': {
-			"jsonrpc": "2.0",
-			"method": "cli",
-			"params": {
-				"cmd": "show cdp neighbors",
-				"version": 1
-			},
-			"id": 1
-		},
-		'transRequest': {
-			"jsonrpc": "2.0",
-			"method": "cli",
-			"params": {
-				"cmd": "show interface transceiver details",
-				"version": 1
-			},
-			"id": 1
-		},
-		'flapRequest': {
-			"jsonrpc": "2.0",
-			"method": "cli",
-			"params": {
-				"cmd": "show interface mac",
-				"version": 1
-			},
-			"id": 1
-		},
-		'power': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'show system environment power'
-				],
-				'version': 1
-			},
-			'id': ''
-		},
-		'fans': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'show system environment cooling'
-				],
-				'version': 1
-			},
-			'id': ''
-		},
-		'temperature': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'show system environment temperature'
-				],
-				'version': 1
-			},
-			'id': ''
-		},
-		'interfaces': {
-			"jsonrpc": "2.0",
-			"method": "cli",
-			"params": {
-				"cmd": "show interface",
-				"version": 1
-			},
-			"id": 1
-		}
+		'neighborRequest': "show cdp neighbors",
+		'transRequest': "show interface transceiver details",
+		'flapRequest': "show interface mac",
+		'power': 'show system environment power',
+		'fans': 'show system environment cooling',
+		'temperature': 'show system environment temperature',
+		'interfaces': "show interface",
+		'interfacesMonitoring': "show interface"
 	},
 	'EOS': {
-		'neighborRequest': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'enable',
-					'show lldp neighbors'
-				],
-				'version': 1
-			},
-			'id': ''
-		},
-		'transRequest': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'show interfaces transceiver'
-				],
-				'version': 1
-			},
-			'id': 'EapiExplorer-1'
-		},
-		'flapRequest': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				// 'format': 'text',
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'enable',
-					'show interfaces mac'
-				],
-				'version': 1
-			},
-			'id': ''
-		},
-		'phyRequest': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'enable',
-					'show interfaces phy detail'
-				],
-				'version': 1
-			},
-			'id': ''
-		},
-		'power': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'enable',
-					'show system environment power'
-				],
-				'version': 1
-			},
-			'id': ''
-		},
-		'fans': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'enable',
-					'show system environment cooling'
-				],
-				'version': 1
-			},
-			'id': ''
-		},
-		'temperature': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'enable',
-					'show system environment temperature'
-				],
-				'version': 1
-			},
-			'id': ''
-		},
-		'interfaces': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'enable',
-					'show interfaces'
-				],
-				'version': 1
-			},
-			'id': ''
-		}
+		'neighborRequest': 'show lldp neighbors',
+		'transRequest': 'show interfaces transceiver',
+		'flapRequest': 'show interfaces mac',
+		'phyRequest': 'show interfaces phy detail',
+		'power': 'show system environment power',
+		'fans': 'show system environment cooling',
+		'temperature': 'show system environment temperature',
+		'interfaces': 'show interfaces',
+		'interfacesMonitoring': 'show interfaces'
 	}
 }
 
@@ -632,17 +432,13 @@ const switchStatsFrequency = 30;
 const upsFrequency = 30;
 const devicesFrequency = 15;
 const tempFrequency = minutes(1);
-//const tempFrequency = 5;
 const localPingFrequency = 5;
 const envFrequency = 30;
 const interfaceFrequency = 15;
 
 /* Globals */
 
-let isQuiting = false;
-let mainWindow = null;
 let SQL;
-let configLoaded = false;
 let cachedUpsTemps = {};
 
 const logger = new Logs(
@@ -666,13 +462,6 @@ const syslogServer = new SysLogServer(
 	logger,
 	doSysLogMessage
 );
-
-/* Start App */
-
-
-	// await app.whenReady();
-	// await setUpApp();
-	// await createWindow();
 
 { /* Config */
 	logger.printHeader('Argos Monitoring');
@@ -728,7 +517,6 @@ const syslogServer = new SysLogServer(
 
 	if (!await config.fromFile(path.join(__dirname, 'ArgosData', 'config.conf'))) {
 		await config.fromCLI(path.join(__dirname, 'ArgosData', 'config.conf'));
-		//await config.fromAPI(path.join(__dirname, 'ArgosData', 'config.conf'), configQuestion, configDone);
 	}
 
 	if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
@@ -769,7 +557,6 @@ const syslogServer = new SysLogServer(
 			return true;
 		}
 	});
-	configLoaded = true;
 }
 
 if (config.get('localDataBase')) {
@@ -797,7 +584,6 @@ webServer.start(config.get('port'));
 syslogServer.start(config.get('syslogPort'));
 
 logger.log(`Argos can be accessed at http://localhost:${config.get('port')}`, 'C');
-//mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}/inApp`);
 
 connectToWebServer(true).then(()=>{
 	webLogBoot();
@@ -811,6 +597,8 @@ setInterval(() => {
 await startLoopAfterDelay(logTemp, tempFrequency);
 await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Media');
 await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Control');
+await startLoopAfterDelay(switchInterfaces, 5, 'Media', true);
+await startLoopAfterDelay(switchInterfaces, 5, 'Control', true);
 await startLoopAfterDelay(localPings, localPingFrequency);
 await startLoopAfterDelay(connectToWebServer, 5);
 await startLoopAfterDelay(webLogPing, pingFrequency);
@@ -840,7 +628,7 @@ function loadData(file) {
 			return [];
 		}
 	} catch (error) {
-		logger.log(`Cloud not read the file ${file}.json, attempting to create new file`, 'W');
+		logger.log(`Could not read the file ${file}.json, attempting to create new file`, 'W');
 		logger.debug('File error:', error);
 		const fileData = [];
 		switch (file) {
@@ -892,7 +680,7 @@ function writeData(file, data) {
 	try {
 		fs.writeFileSync(`${__dirname}/ArgosData/data/${file}.json`, JSON.stringify(data, undefined, 2));
 	} catch (error) {
-		logger.object(`Cloud not write the file ${file}.json, do we have permission to access the file?`, error, 'E');
+		logger.object(`Could not write the file ${file}.json, do we have permission to access the file?`, error, 'E');
 	}
 }
 
@@ -1333,7 +1121,7 @@ function makeHeader() {
 }
 
 function distributeData(type, data) {
-	sendCloudData({'command':'log', 'type':type, 'data':data});
+	sendCouldData({'command':'log', 'type':type, 'data':data});
 	webServer.sendToAll({'command':'log', 'type':type, 'data':data});
 }
 
@@ -1542,12 +1330,13 @@ async function switchEnv(switchType) {
 	distributeData(typeF, data.fans[switchType]);
 }
 
-async function switchInterfaces(switchType) {
+async function switchInterfaces(switchType, monitoringOnly) {
 	const Switches = switches(switchType);
 	logger.log('Checking switch interfaces', 'A');
 	const promisses = [];
 	for (let i = 0; i < Switches.length; i++) {
-		promisses.push(doApi('interfaces', Switches[i]));
+		if (monitoringOnly) promisses.push(doApi('interfacesMonitoring', Switches[i]));
+		else promisses.push(doApi('interfaces', Switches[i]));
 	}
 	const values = await Promise.all(promisses);
 	const filteredPorts = {};
@@ -1714,7 +1503,7 @@ function checkDevices(switchType, fromList) {
 	distributeData(type, data.devices[switchType]);
 }
 
-function doApi(request, Switch) {
+async function doApi(request, Switch) {
 	const ip = Switch.IP;
 	const user = Switch.User;
 	const pass = Switch.Pass;
@@ -1723,13 +1512,52 @@ function doApi(request, Switch) {
 	let protocol = 'http';
 	if (!SwitchRequests[OS][request]) return;
 
+	let command = SwitchRequests[OS][request];
+
+	if (request == "interfacesMonitoring") {
+		const portsArray = [];
+		ports(Switch.Type).forEach(port => {
+			if (port.Switch == Switch.Name) portsArray.push(port.Port);
+		})
+		command += ' ';
+		command += portsArray.join(',');
+	}
+
+	const body = {
+		'NXOS': {
+			"jsonrpc": "2.0",
+			"method": "cli",
+			"params": {
+				"cmd": command,
+				"version": 1
+			},
+			"id": 1
+		},
+		'EOS': {
+			'jsonrpc': '2.0',
+			'method': 'runCmds',
+			'params': {
+				'format': 'json',
+				'timestamps': false,
+				'autoComplete': false,
+				'expandAliases': false,
+				'cmds': [
+					'enable',
+					command
+				],
+				'version': 1
+			},
+			'id': ''
+		}
+	}
+
 	const options = {
 		method: 'POST',
 		headers: {
 			'content-type': 'application/json-rpc',
 			'Authorization': 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64')
 		},
-		body: JSON.stringify(SwitchRequests[OS][request]),
+		body: JSON.stringify(body[OS]),
 	}
 
 	switch (OS) {
@@ -1745,16 +1573,18 @@ function doApi(request, Switch) {
 		default:
 			break;
 	}
-	logger.log(`Polling switch API endpoint ${protocol}://${ip}/${endPoint} for data`, 'D');
+	logger.log(`Polling switch API endpoint ${protocol}://${ip}/${endPoint} for ${request} data`, 'D');
 
-	return fetch(`${protocol}://${ip}/${endPoint}`, options).then((response) => {
-		if (response.status === 200) {
-			return response.json().then((jsonRpcResponse) => { return jsonRpcResponse; });
-		}
-	}).catch((error)=>{
+	try {		
+		const response = await fetch(`${protocol}://${ip}/${endPoint}`, options);
+		if (response.status !== 200) throw new Error(`Error connection to server, repsonse code: ${response.status}`);
+		const jsonRpcResponse = await response.json();
+		if (jsonRpcResponse.error) throw new Error(JSON.stringify(jsonRpcResponse.error.data[1], null, 4))
+		return jsonRpcResponse
+	} catch (error) {
 		logger.log(`Failed to connect to switch on: ${ip}`, 'E');
 		logger.object(error, 'D');
-	});
+	}
 }
 
 
@@ -1884,7 +1714,7 @@ async function doIQTemps(Temps) {
 			logger.log('Warning: Temperature over warning limit, sending SMS', 'W');
 			sendSms(`Commitment to environment sustainability failed, MCR IS MELTING: ${tempAvg} deg C`);
 		}
-		sendCloudData({'command':'log', 'type':'temperature', 'data':Temps});
+		sendCouldData({'command':'log', 'type':'temperature', 'data':Temps});
 
 		socketSend.average = tempAvg;
 		const time = new Date().getTime();
@@ -1989,7 +1819,7 @@ async function doGenericTemps(Temps) {
 			logger.log('Warning: Temperature over warning limit, sending SMS', 'W');
 			sendSms(`Commitment to environment sustainability failed, MCR IS MELTING: ${tempAvg} deg C`);
 		}
-		sendCloudData({'command':'log', 'type':'temperature', 'data':webTemps});
+		sendCouldData({'command':'log', 'type':'temperature', 'data':webTemps});
 
 		socketSend.average = tempAvg;
 		const time = new Date().getTime();
@@ -2009,13 +1839,13 @@ async function doGenericTemps(Temps) {
 function webLogPing() {
 	if (!config.get('webEnabled')) return;
 	logger.log('Pinging webserver', 'A');
-	sendCloudData({'command':'log', 'type':'ping'});
+	sendCouldData({'command':'log', 'type':'ping'});
 }
 
 function webLogBoot() {
 	if (!config.get('webEnabled')) return;
 	logger.log('Sending boot');
-	sendCloudData({'command':'log', 'type':'boot'});
+	sendCouldData({'command':'log', 'type':'boot'});
 }
 
 function sendSms(msg) {
@@ -2058,7 +1888,7 @@ async function connectToWebServer(retry = false) {
 				let payload = {};
 				payload.command = 'register';
 				payload.name = config.get('systemName');
-				sendCloudData(payload);
+				sendCouldData(payload);
 				resolve();
 				logger.log(`${logger.g}${cloudServer.address}${logger.reset} Established a connection to webserver`, 'S');
 				cloudServer.connected = true;
@@ -2077,7 +1907,7 @@ async function connectToWebServer(retry = false) {
 				}
 				switch (msgObj.payload.command) {
 				case 'ping':
-					sendCloudData({
+					sendCouldData({
 						'command': 'pong'
 					});
 					break;
@@ -2130,7 +1960,7 @@ async function connectToWebServer(retry = false) {
 	return promise;
 }
 
-function sendCloudData(payload) {
+function sendCouldData(payload) {
 	if (!config.get('webEnabled')) return;
 	let packet = {};
 	packet.header = makeHeader();
