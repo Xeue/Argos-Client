@@ -1,6 +1,6 @@
 {
   "name": "argos",
-  "version": "3.12.0",
+  "version": "3.12.1",
   "description": "OB/Flypack Monitoring",
   "main": "main.js",
   "type": "module",
@@ -16,7 +16,7 @@
     "ping": "^0.4.4",
     "source-map-support": "^0.5.21",
     "ws": "^8.13.0",
-    "xeue-config": "^2.2.2",
+    "xeue-config": "^2.2.3",
     "xeue-logs": "^2.3.1",
     "xeue-sql": "^2.0.6",
     "xeue-webserver": "^2.0.2"

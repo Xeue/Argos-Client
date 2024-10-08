@@ -487,7 +487,7 @@ const interfaceFrequency = 15;
 /* Globals */
 
 const thresholds = {
-	'fibre': -9,
+	'fibre': -10,
 	'bandwidth': 0.95,
 	'discard': 1000,
 	'errors': 1000,
@@ -532,6 +532,13 @@ const syslogServer = new SysLogServer(
 		config.require('syslogPort', [], 'What port shall the server listen to syslog messages on');
 		config.require('systemName', [], 'What is the name of the system');
 		config.require('warningTemperature', [], 'What temperature shall alerts be sent at');
+		config.require('interfaceWarnings', {true: 'Yes', false: 'No'}, 'Highlight interfaces with high error counts');
+		{
+			config.require('bandwidthThreshold', [], 'Threshold for warning about high bandwith usage [0.0-1.0]', ['interfaceWarnings', true]);
+			config.require('discardThreshold', [], 'Threshold for warning about high interface discards [number]', ['interfaceWarnings', true]);
+			config.require('errorThreshold', [], 'Threshold for warning about high interface errors [number]', ['interfaceWarnings', true]);
+		}
+		config.require('fibreThreshold', [], 'Threshold for warning about low fibre level [-number]');
 		config.require('webEnabled', {true: 'Yes', false: 'No'}, 'Should this system report back to an argos server');
 		{
 			config.require('webSocketEndpoint', [], 'What is the url of the argos server', ['webEnabled', true]);
@@ -564,6 +571,7 @@ const syslogServer = new SysLogServer(
 		config.default('syslogPort', 514);
 		config.default('systemName', 'Unknown');
 		config.default('warningTemperature', 35);
+		config.default('interfaceWarnings', false);
 		config.default('webEnabled', false);
 		config.default('localDataBase', false);
 		config.default('dbPort', '3306');
@@ -577,6 +585,19 @@ const syslogServer = new SysLogServer(
 		config.default('advancedConfig', false);
 		config.default('devMode', false);
 		config.default('secureWebSocketEndpoint', true);
+		config.default('bandwidthThreshold', 0.95);
+		config.default('discardThreshold', 1000);
+		config.default('errorThreshold', 1000);
+		config.default('fibreThreshold', -10);
+
+		config.on('set', data => {
+			switch (data.property) {
+				case 'bandwidthThreshold': thresholds.bandwidth = data.key; break;
+				case 'discardThreshold': thresholds.discard = data.key; break;
+				case 'errorThreshold': thresholds.errors = data.key; break;
+				case 'fibreThreshold': thresholds.fibre = data.key; break;
+			}
+		})
 
 		if (!await config.fromFile(path.join(__data, 'config.conf'))) {
 			// await config.fromCLI(path.join(__data, 'config.conf'));
@@ -664,7 +685,7 @@ const syslogServer = new SysLogServer(
 	await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Media');
 	await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Media');
 	await startLoopAfterDelay(switchInterfaces, 5, 'Media', true);
-	await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Media');
+	await startLoopAfterDelay(switchFibre, 5, 'Media');
 	await startLoopAfterDelay(localPings, localPingFrequency);
 	await startLoopAfterDelay(connectToWebServer, 5);
 	await startLoopAfterDelay(webLogPing, pingFrequency);
@@ -1582,10 +1603,11 @@ async function switchInterfaces(switchType, monitoringOnly) {
 	const allIfaces = data.interfaces[switchType];
 
 	for (const switchName in allIfaces) {
-		if (!Object.hasOwnProperty.call(allIfaces, switchName)) return;
+		if (!Object.hasOwnProperty.call(allIfaces, switchName)) continue;
 		const ifaces = allIfaces[switchName];
 		for (const ifaceName in ifaces) {
-			if (!Object.hasOwnProperty.call(ifaces, ifaceName)) return;
+			if (!Object.hasOwnProperty.call(ifaces, ifaceName)) continue;
+			if (!config.get('interfaceWarnings')) continue;
 			const iface = ifaces[ifaceName];
 			if ((iface.inRate/iface.maxRate > thresholds.bandwidth) || (iface.outRate/iface.maxRate > thresholds.bandwidth)) {
 				if (filteredPorts[switchType]['WARNING'] === undefined) filteredPorts[switchType]['WARNING'] = {};
