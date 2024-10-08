@@ -82,6 +82,7 @@ templates.ports = `<% for(i = 0; i < devices.length; i++) { %>
 		<td data-type="select" data-key="Switch" data-value="<%-devices[i].Switch%>" data-options="<%-switches.join(',')%>"><%-devices[i].Switch%></td>
 		<td data-type="text" data-key="Port" data-value="<%-devices[i].Port%>"><%-devices[i].Port%></td>
 		<td data-type="text" data-key="Group" data-value="<%-devices[i].Group%>"><%-devices[i].Group%></td>
+		<td data-type="check" data-key="Alerts" data-value="<%-devices[i].Alerts%>" readonly></td>
 	  	<td>
 			<button type="button" class="btn btn-primary editConfig w-50">Edit</button>
 			<button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
@@ -990,7 +991,7 @@ function handleInterfaces(data, type) {
 						minutes = String(minutes-(days*24*60)-(hours*60)).padStart(2,'0');
 						seconds = String(seconds-(days*24*60*60)-(hours*60*60)-(minutes*60)).padStart(2,'0');
 						if (days > 0) time = ` ${days}d ${hours}:${minutes}:${seconds}`;
-						else if (hours > 0) time += ` ${hours}:${minutes}:${seconds}`;
+						else time += ` ${hours}:${minutes}:${seconds}`;
 					} else {
 						time = Port.lastFlap;
 					}
@@ -1007,7 +1008,7 @@ function handleInterfaces(data, type) {
 					if (typeof Port.rxPower !== "undefined") {
 						Port.rxPower.forEach((lane, i) =>{
 							let colour = 'bg-success';
-							if (lane < -9 && lane > -30) {
+							if (lane < thresholds.fibre && lane > -30) {
 								fibreWarn = true;
 								colour = 'bg-danger';
 							}

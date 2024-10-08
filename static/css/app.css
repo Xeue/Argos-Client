@@ -18,7 +18,7 @@ body.loaded #cancel {
 }
 
 body.showLogs #logsCont {
-   display: block;
+   display: flex;
 }
 
 body #logsCont {
@@ -179,8 +179,8 @@ button.hidden {
 
 #logsCont {
    display: flex;
-   flex-direction: column-reverse;
-   overflow: auto;
+   flex-direction: column;
+   overflow: hidden;
    height: 100%;
 }
 
@@ -188,6 +188,9 @@ button.hidden {
    font-family: Ubuntu Mono;
    margin-bottom: auto;
    line-height: normal;
+   display: flex;
+   flex-direction: column-reverse;
+   overflow-y: auto;
 }
 
 body.micaActive {

@@ -16,7 +16,7 @@ import Package from './package.json' assert {type: "json"};
 import ping from 'ping';
 import https from 'https';
 
-import {app, BrowserWindow, ipcMain, Tray, Menu} from 'electron';
+import {app, BrowserWindow, ipcMain, Tray, Menu, Notification} from 'electron';
 import electronEjs from 'electron-ejs';
 import AutoLaunch from 'auto-launch';
 import {MicaBrowserWindow, IS_WINDOWS_11} from 'mica-electron';
@@ -81,7 +81,11 @@ const data = {
 		'Media':{}
 	},
 	'ups': {},
-	'phy': {}
+	'phy': {},
+	'ports': {
+		'Control': {},
+		'Media': {}
+	}
 };
 const localPingsData = {};
 const cloudServer = {
@@ -520,7 +524,7 @@ const syslogServer = new SysLogServer(
 	doSysLogMessage
 );
 
-(async () => {
+(async () => { /* App setup and config */
 
 	await app.whenReady();
 	await setUpApp();
@@ -589,6 +593,12 @@ const syslogServer = new SysLogServer(
 		config.default('discardThreshold', 1000);
 		config.default('errorThreshold', 1000);
 		config.default('fibreThreshold', -10);
+
+
+		thresholds.bandwidth = config.get('bandwidthThreshold');
+		thresholds.discard = config.get('discardThreshold');
+		thresholds.errors = config.get('errorThreshold');
+		thresholds.fibre = config.get('fibreThreshold');
 
 		config.on('set', data => {
 			switch (data.property) {
@@ -833,6 +843,12 @@ async function createWindow() {
 	});
 }
 
+function notification(title, text) {
+	new Notification({
+		'title': title,
+		'body': text
+	}).show()
+}
 
 /* Data */
 
@@ -979,6 +995,7 @@ function expressRoutes(expressApp) {
 			pings:syslogSourceList(),
 			pingGroups:syslogSourceGroups(),
 			background:'bg-dark',
+			thresholds: thresholds,
 			internal: __internal,
 			static: __static,
 			views: __views
@@ -999,6 +1016,7 @@ function expressRoutes(expressApp) {
 			pings:syslogSourceList(),
 			pingGroups:syslogSourceGroups(),
 			background:'micaActive',
+			thresholds: thresholds,
 			internal: __internal,
 			static: __static,
 			views: __views
@@ -1119,7 +1137,6 @@ function expressRoutes(expressApp) {
 		res.send('Done');
 	});
 }
-
 
 async function doMessage(msgObj, socket) {
 	const payload = msgObj.payload;
@@ -1395,7 +1412,9 @@ async function switchFlap(switchType) {
 	const values = await Promise.all(promisses);
 	const filteredDevices = [];
 	for (let i = 0; i < values.length; i++) {
-		if (values[i] === undefined) {
+		if (values[i] === 'APIERROR') {
+			continue;
+		} else if (values[i] === undefined) {
 			logger.log(`(FLAP) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
 			continue;
 		}
@@ -1585,6 +1604,9 @@ async function switchInterfaces(switchType, monitoringOnly) {
 				break;
 		}
 	}
+
+	const allIfaces = data.interfaces[switchType];
+
 	ports(switchType).forEach(port => {
 		try {
 			const group = port.Group ? port.Group : 'DEFAULT';
@@ -1594,13 +1616,19 @@ async function switchInterfaces(switchType, monitoringOnly) {
 			if (Object.keys(data.interfaces[switchType][port.Switch]).includes(port.Port)) {
 				filteredPorts[switchType][group][port.Switch][port.Port] = data.interfaces[switchType][port.Switch][port.Port];
 			}
+
+			if (!port.Alerts) return;
+			const iface = allIfaces[port.Switch][port.Port];
+			if (!data.ports[switchType][port.Switch]) data.ports[switchType][port.Switch] = {};
+			if (data.ports[switchType][port.Switch][port.Port] != iface.connected && !iface.connected) {
+				notification('Port Down', `Port: ${port.Port} - ${getDescription(port.Port, switchType, port.Switch)} on switch: ${port.Switch} is DOWN`);
+			}
+			data.ports[switchType][port.Switch][port.Port] = iface.connected;
 		} catch (error) {
 			logger.warn("Couldn't parse interfaces data", error);
 		}
 
 	})
-
-	const allIfaces = data.interfaces[switchType];
 
 	for (const switchName in allIfaces) {
 		if (!Object.hasOwnProperty.call(allIfaces, switchName)) continue;
@@ -1804,7 +1832,13 @@ async function doApi(request, Switch) {
 		const response = await fetch(`${protocol}://${ip}/${endPoint}`, options);
 		if (response.status !== 200) throw new Error(`Error connection to server, repsonse code: ${response.status}`);
 		const jsonRpcResponse = await response.json();
-		if (jsonRpcResponse.error) throw new Error(JSON.stringify(jsonRpcResponse.error.data[1], null, 4))
+		if (jsonRpcResponse.error) {
+			jsonRpcResponse.error.data[1].errors.push('Command: '+command);
+			jsonRpcResponse.error.data[1].errors.push('Switch: '+Switch.Name);
+			logger.warn('Issue with API request, try updating the swtich', jsonRpcResponse.error.data[1].errors);
+			// throw new Error(JSON.stringify(jsonRpcResponse.error.data[1], null, 4))
+			return 'APIERROR';
+		}
 		return jsonRpcResponse
 	} catch (error) {
 		logger.log(`Failed to connect to switch on: ${ip}`, 'E');

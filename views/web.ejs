@@ -25,6 +25,7 @@
                 "<%- controlSwitches[prop].Name%>",
             <% }); %>
         ]
+        const thresholds = <%- JSON.stringify(thresholds) %>;
         let syslogSourceList = <%- JSON.stringify(pings) %>;
         let syslogSourceListGroups = <%- JSON.stringify(pingGroups) %>;
         const webEnabled = <%=webEnabled%>;
