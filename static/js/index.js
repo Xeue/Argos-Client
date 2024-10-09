@@ -45,10 +45,14 @@ document.addEventListener('DOMContentLoaded', () => {
 	});
 	
 	window.electronAPI.loaded((event, url) => {
-		const frame = document.getElementById('frame');
-		frame.setAttribute('src', url);
-		const body = document.getElementById('body');
-		body.classList.add('loaded');
+		const _mainFrame = document.getElementById('mainFrame');
+		const _dataFrame = document.getElementById('dataFrame');
+		const _aboutFrame = document.getElementById('aboutFrame');
+		_mainFrame.setAttribute('src', url+'/app');
+		_dataFrame.setAttribute('src', url+'/appData');
+		_aboutFrame.setAttribute('src', url+'/appAbout');
+		const _body = document.getElementById('body');
+		_body.classList.add('loaded');
 	});
 	
 	window.electronAPI.log((event, log) => {
@@ -64,63 +68,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
 	window.electronAPI.ready();
 
-	document.getElementById('exit').addEventListener('click', () => {
-		exitModal.show();
-	});
-	document.getElementById('cancel').addEventListener('click', () => {
-		const body = document.getElementById('body');
-		if (body.classList.contains('loaded')) {
+	on('click', '#exit', () => exitModal.show())
+	on('click', '#cancel', () => {
+		const _body = document.getElementById('body');
+		if (_body.classList.contains('loaded')) {
 			configModal.hide();
 			window.electronAPI.config('stop');
 		} else {
 			exitModal.show();
 		}
-	});
-	document.getElementById('exitYes').addEventListener('click', () => {
-		window.electronAPI.window('exit');
-	});
-	document.getElementById('exitMinimise').addEventListener('click', () => {
+	})
+
+	on('click', '#exitYes', () => window.electronAPI.window('exit'));
+	on('click', '#exitCancel', () => exitModal.hide());
+	on('click', '#exitMinimise', () => {
 		exitModal.hide();
 		window.electronAPI.window('minimise');
 	});
-	document.getElementById('exitCancel').addEventListener('click', () => {
-		exitModal.hide();
-	});
 
-	const toggleButton = document.getElementById('toggleView');
-	toggleButton.addEventListener('click', () => {
-		const body = document.getElementById('body');
-		if (body.classList.contains('showLogs')) {
-			toggleButton.innerText = 'Show Logs';
-		} else {
-			toggleButton.innerText = 'Show Monitoring';
-		}
-		body.classList.toggle('showLogs');
-	});
+	on('click', '.pageShow', _element => {
+		const _body = document.getElementById('body');
+		const page = _element.getAttribute('data-page');
+		_body.setAttribute('data-page', page);
+		if (page == 'data') document.getElementById('dataFrame').src += '';
+		if (page == 'about') document.getElementById('aboutFrame').src += '';
+	})
 
-	document.getElementById('startConfig').addEventListener('click', () => {
-		window.electronAPI.config('start');
-	});
+	on('click', '#startConfig', () => window.electronAPI.config('start'));
+	on('click', '#showConfig', () => window.electronAPI.config('show'));
+	on('click', '#clearLogs', () => document.getElementById('logs').innerHTML = '');
 
-	document.getElementById('showConfig').addEventListener('click', () => {
-		window.electronAPI.config('show');
-	});
-
-	document.getElementById('clearLogs').addEventListener('click', () => {
-		document.getElementById('logs').innerHTML = '';
-	});
-
-	document.getElementById('next').addEventListener('click', () => {
-		const answerCont = document.getElementById('answerCont');
+	on('click', '#next', () => {
+		const _answerCont = document.getElementById('answerCont');
 		let value;
-		if (answerCont.classList.contains('freeform')) {
+		if (_answerCont.classList.contains('freeform')) {
 			value = document.getElementById('answer').value;
 		} else {
 			value = document.querySelector('input[name="answer"]:checked').value;
 		}
 
-		if (value == '') value = answerCont.getAttribute('data-current');
-
+		if (value == '') value = _answerCont.getAttribute('data-current');
+		console.log(value);
 		window.electronAPI.configAnswer(value);
 	});
 });
@@ -133,7 +121,6 @@ function doLog(log) {
 	let currentCul = getClass(log.textColour);
 	let currnetSpec = 1;
 	let output = `<span class="logTimestamp">[${log.timeString}]</span><span class="logLevel ${getClass(log.levelColour)}">(${log.level})</span><span class="${getClass(log.colour)} logCatagory">${log.catagory}${log.seperator} </span>`;
-	let first = true;
 	const logArr = log.message.split('\x1b[');
 	logArr.forEach((element, index) => {
 		const num = parseInt(element.substr(0, element.indexOf('m')));
@@ -174,3 +161,22 @@ function getClass(num) {
 	if (num == 1) return 'brightLog';
 	return 'whiteLog';
 }
+
+
+/* Utility */
+
+function on(eventNames, selectors, callback) {
+	if (!Array.isArray(selectors)) selectors = [selectors];
+	if (!Array.isArray(eventNames)) eventNames = [eventNames];
+	selectors.forEach(selector => {
+		eventNames.forEach(eventName => {
+			if (selector.nodeType) {
+				selector.addEventListener(eventName, event => {callback(event.target)});
+			} else {
+				document.addEventListener(eventName, event => {
+					if (event.target.matches(selector)) callback(event.target);
+				});
+			};
+		});
+	});
+};

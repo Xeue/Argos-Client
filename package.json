@@ -16,7 +16,7 @@
     "ping": "^0.4.4",
     "source-map-support": "^0.5.21",
     "ws": "^8.13.0",
-    "xeue-config": "^2.2.3",
+    "xeue-config": "^2.2.4",
     "xeue-logs": "^2.3.1",
     "xeue-sql": "^2.0.6",
     "xeue-webserver": "^2.0.2"

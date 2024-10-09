@@ -4,24 +4,71 @@ body {
    inset: 0;
 }
 
+.navbar {
+   height: 50px;
+   flex-shrink: 0;
+ }
+
+#mainFrame,
+#dataFrame,
+#aboutFrame,
+#logsCont {
+    display: none;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    border: none;
+}
+
+[data-page="main"] {
+   #mainFrame {
+      display: block;
+   }
+   [data-page="main"] {
+      display: none;
+   }
+}
+
+[data-page="about"] {
+   #aboutFrame {
+      display: block;
+   }
+   [data-page="about"] {
+      display: none;
+   }
+}
+
+[data-page="data"] {
+   #dataFrame {
+      display: block;
+   }
+   [data-page="data"] {
+      display: none;
+   }
+}
+
+[data-page="logs"] {
+   #logsCont {
+      display: flex;
+   }
+   .logsView {
+      display: inline;
+   }
+   [data-page="logs"] {
+      display: none;
+   }
+}
+
 .logsView {
    display: none;
 }
 
-body.showLogs .logsView {
-   display: inline;
-}
-
-body.showLogs #frame,
 body.loaded #cancel {
-   display: none;
-}
-
-body.showLogs #logsCont {
-   display: flex;
-}
-
-body #logsCont {
    display: none;
 }
 
@@ -112,46 +159,6 @@ label:has(:checked) {
    color: #009e9e
 }
 
-.green {
-   background-color: #417f3f;
-   border-top: 1px solid #459942 !important
-}
-
-.red {
-   background-color: #7f3f3f;
-   border-top: 1px solid #954f4f !important
-}
-
-.blue {
-   background-color: #3f6a7f;
-   border-top: 1px solid #4c8099 !important
-}
-
-.purple {
-   background-color: #7a3f7f;
-   border-top: 1px solid #99539f !important
-}
-
-.green:hover {
-   background-color: #28b538;
-   border-top: 1px solid #3ce34f !important
-}
-
-.red:hover {
-   background-color: #d50303;
-   border-top: 1px solid #ff5f5f !important
-}
-
-.blue:hover {
-   background-color: #00abff;
-   border-top: 1px solid #62cafd !important
-}
-
-.purple:hover {
-   background-color: #ce00df;
-   border-top: 1px solid #f253ff !important
-}
-
 .versionInfo {
    align-self: center;
    margin-right: auto;
@@ -160,25 +167,11 @@ label:has(:checked) {
    color: #fff
 }
 
-#frame {
-   position: fixed;
-   top: 0;
-   bottom: 0;
-   left: 0;
-   right: 0;
-   width: 100%;
-   height: 100%;
-   overflow: hidden;
-   border: none;
-}
-
-#frame.hidden,
 button.hidden {
    display: none;
 }
 
 #logsCont {
-   display: flex;
    flex-direction: column;
    overflow: hidden;
    height: 100%;
@@ -195,6 +188,7 @@ button.hidden {
 
 body.micaActive {
    background: transparent !important;
+   color-scheme: auto;
 }
 
 .bg-title {
