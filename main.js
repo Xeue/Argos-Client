@@ -1867,7 +1867,7 @@ function localPings() {
 			extra: ['-i', '2']
 		})
 		Logs.info(`IP: ${host.IP}, Online: ${response.alive}`);
-		if (!response.alive) {
+		if (!response.alive && host.TripleCheck) {
 			await sleep(2);
 			const recheckOne = await ping.promise.probe(host.IP, {
 				timeout: 10,
@@ -1887,6 +1887,7 @@ function localPings() {
 		if (localPingsData[host.IP].status != response.alive) {
 			localPingsData[host.IP].lastChange = Date.now();
 			localPingsData[host.IP].status = response.alive;
+			if (!response.alive && host.Alert) notification("Device Offline", `Device ${host.Name} being pinged at address ${host.IP} has gone offline`);
 		}
 		distributeData('localPing', {
 			'status':response.alive,
@@ -2277,7 +2278,7 @@ async function configDone() {
 			Config.get('dbUser'),
 			Config.get('dbPass'),
 			Config.get('dbName'),
-			logs
+			Logs
 		);
 		await SQL.init(tables);
 	}

@@ -44,6 +44,8 @@ templates.pings = `<% for(i = 0; i < devices.length; i++) { %>
 	  <td data-type="check" data-key="SSH" data-value="<%-devices[i].SSH%>" readonly></td>
 	  <td data-type="check" data-key="HTTP" data-value="<%-devices[i].HTTP%>" readonly></td>
 	  <td data-type="check" data-key="HTTPS" data-value="<%-devices[i].HTTPS%>" readonly></td>
+	  <td data-type="check" data-key="Alert" data-value="<%-devices[i].Alert%>" readonly></td>
+	  <td data-type="check" data-key="TripleCheck" data-value="<%-devices[i].TripleCheck%>" readonly></td>
 	  <td class="d-flex gap-1">
 		<button type="button" class="btn btn-primary editConfig btn-sm flex-grow-1">Edit</button>
 		<button type="button" class="btn btn-danger deleteRow btn-sm flex-grow-1">Delete</button>
