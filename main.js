@@ -1731,10 +1731,14 @@ function checkDevices(switchType, fromList) {
 	Logs.info('Checking device lists for missing devices');
 	const Devices = devices();
 	const missingDevices = {};
-	let expectedDevices = [];
+	let expectedDevices = {};
 	if (fromList) {
 		for (let i in Devices) {
-			expectedDevices = [...new Set([...expectedDevices, ...parseTempalteString(Devices[i].name)])];
+			for (const device of parseTempalteString(Devices[i].Name)) {
+				expectedDevices[device] = Devices[i]
+				expectedDevices[device].Name = device
+			}
+			//expectedDevices = [...new Set([...expectedDevices, ...parseTempalteString(Devices[i].Name)])];
 		}
 	} else {
 		for (const switchName in data.neighbors[switchType]) {
@@ -1761,6 +1765,10 @@ function checkDevices(switchType, fromList) {
 			if (missingDevices[device] === undefined) missingDevices[device] = [];
 			missingDevices[device].push(Switch);
 		}
+	}
+	for (const device in missingDevices) {
+		if (!Object.hasOwnProperty.call(missingDevices, device)) continue;
+
 	}
 	data.devices[switchType] = missingDevices;
 	const type = switchType == 'Media' ? 'devices' : 'devices_control';

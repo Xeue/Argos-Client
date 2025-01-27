@@ -70,8 +70,10 @@ templates.switch = `<% for(i = 0; i < devices.length; i++) { %>
 
 templates.devices = `<% for(i = 0; i < devices.length; i++) { %>
   <tr data-index="<%=i%>" data-template="devices">
-    <td data-type="text" data-key="name" data-value="<%-devices[i].name%>"><%-devices[i].name%></td>
-    <td data-type="text" data-key="description" data-value="<%-devices[i].description%>"><%-devices[i].description%></td>
+    <td data-type="text" data-key="Name" data-value="<%-devices[i].Name%>"><%-devices[i].Name%></td>
+    <td data-type="text" data-key="Description" data-value="<%-devices[i].Description%>"><%-devices[i].Description%></td>
+	<td data-type="text" data-key="Group" data-value="<%-devices[i].Group%>"><%-devices[i].Group%></td>
+	<td data-type="check" data-key="PegLeg" data-value="<%-devices[i].PegLeg%>" readonly></td>
     <td class="d-flex gap-1">
       <button type="button" class="btn btn-primary editConfig btn-sm flex-grow-1">Edit</button>
       <button type="button" class="btn btn-danger deleteRow btn-sm flex-grow-1">Delete</button>
