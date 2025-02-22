@@ -8,7 +8,8 @@ Argos will also run a webGUI you can access at the configured port on the PC it 
 # Installation
 
 ## SQL
-To install Argos, you first need to insall Mariadb (Or MySQL, they are interchangable)
+To install Argos you dont need any other software installed.
+However if you want to track syslogs or record any of the data you first need to insall Mariadb (Or MySQL, they are interchangable)
 
 Download here: https://mariadb.org/download/?t=mariadb&p=mariadb&r=11.3.1&os=windows&cpu=x86_64&pkg=msi&m=xtom_ams
 Follow this guide: https://mariadb.com/kb/en/installing-mariadb-msi-packages-on-windows/
@@ -18,6 +19,10 @@ As part of that you will create a user and give it a password, you will need to 
 ## First install
 Once downloaded, run Argos for the frist time, it should ask you a series of questions on first install about what the config options are, of not sure, ask me!
 If this doesn't happen or you change your mind, you can click on the "Show Logs" button in the bottom right, then the "Edit Config" button to go through the setup again. Most changes will apply instantly, but I would reboot just in case!
+
+# Switch access
+For cisco and arista switches Argos needs access to the arista or cisco APIs, this is something needs to be enabled in the switch config.
+This only needs to be read only access!
 
 # Updating
 
