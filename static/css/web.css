@@ -122,11 +122,13 @@ nav.drag {
 
 .masonry table {
   margin-bottom: 0 !important;
+  position: relative;
 }
 
 #syslogHistogram {
   visibility: hidden;
-  height: 0vh !important;
+  height: 60vh !important;
+  margin-top: -60vh;
 }
 
 #syslogHistogramToggle::after {
@@ -141,6 +143,8 @@ nav.drag {
 .showHistogram #syslogHistogram {
   visibility: visible;
   height: 60vh !important;
+  position: relative;
+  margin-top: 0;
 }
 
 .showHistogram #syslogHistogramToggle::after {
@@ -148,7 +152,7 @@ nav.drag {
 }
 
 .pie {
-  --w: 50px;
+  --w: 85px;
   width: var(--w);
   aspect-ratio: 1;
   position: relative;
@@ -157,6 +161,8 @@ nav.drag {
   margin: 5px;
   text-align: right;
   line-height: 1.1;
+  outline: 1px solid rgb(85, 95, 106);
+  border-radius: 50%;
 }
 .pie:before {
   content: "";
@@ -177,7 +183,52 @@ nav.drag {
           mask: radial-gradient(farthest-side,#0000 calc(99% - var(--b)),#000 calc(100% - var(--b)));
 }
 
-[data-editor] [data-type="check"][data-value="true"]:empty::before {
+#nav-interfaces table,
+#nav-interfaces tbody {
+  display: block;
+}
+
+#nav-interfaces .interfaceCont {
+  float: left;
+  border-radius: 1rem;
+  overflow: hidden;
+  background: rgb(49, 61, 72);
+  margin: 0.5rem;
+}
+
+#nav-interfaces td {
+  background: transparent;
+}
+
+#nav-interfaces .interfaceGroup {
+  margin: 0.5rem;
+  display: block;
+  width: calc(100% - 1rem);
+  float: left;
+}
+#nav-interfaces .interfaceGroup > th {
+  display: block;
+  width: 100%;
+}
+
+[data-type="password"] {
+  color: transparent;
+  font-size: 0;
+}
+
+[data-type="password"]::before {
+  content: "*****";
+  color: white;
+  font-size: 1rem;
+}
+
+[data-type="password"]:has(input)::before {
+  content: "";
+  color: white;
+}
+
+[data-editor] [data-type="check"][data-value="true"]:empty::before,
+[data-editor] [data-type="check"][data-value="TRUE"]:empty::before {
   content:"✓";
   background: green;
   border-radius: 50%;
@@ -230,6 +281,42 @@ nav.drag {
   box-shadow: 0 0 0 100px #ffffff36 inset !important;
 }
 
+.pingGroup th {
+  background: #1987545e;
+  color: white;
+  padding: 0.5rem;
+  text-align: center;
+  font-weight: bold;
+}
+
+.pingGroup[data-group="NONE"] th {
+  display: none;
+}
+
+.pingGroup {
+  border-top: none !important;
+}
+
+
+.portMonGroup th {
+  background: #1987545e;
+  color: white;
+  padding: 0.5rem;
+  text-align: center;
+  font-weight: bold;
+}
+.portMonGroup[data-group="DEFAULT"] th {
+  display: none;
+}
+.portMonGroup {
+  border-top: none !important;
+}
+
+.portMonGroup th[data-group="WARNING"],
+#pingLocalDown .pingGroup th {
+  background: #dc35455e;
+}
+
 body.micaActive {
   background: transparent !important;
 }
@@ -255,4 +342,19 @@ td[data-value=Password]:after {
 
 .editing td[data-value=Password]:after {
   display: none;
+}
+
+@media screen and (orientation: portrait) {
+  main {
+    order: 0;
+  }
+  nav {
+    order: 1;
+    margin-top: auto;
+  }
+}
+
+
+.portMonGroup tr td:nth-of-type(3) {
+  min-width: 14rem;
 }

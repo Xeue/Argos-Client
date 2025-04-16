@@ -1,35 +1,30 @@
 /* eslint-disable no-unused-vars */
 const serverID = new Date().getTime();
 
-const {WebSocket} = require('ws');
-const express = require('express');
-const fetch = require('node-fetch');
-const AWS = require('aws-sdk');
-const fs = require('fs');
-const path = require('path');
-const {Logs} = require('xeue-logs');
-const {Config} = require('xeue-config');
-const {SQLSession} = require('xeue-sql');
-const {Server} = require('xeue-webserver');
-const {SysLogServer} = require('./syslog.js');
-const {app, BrowserWindow, ipcMain, Tray, Menu} = require('electron');
-const {version} = require('./package.json');
-const electronEjs = require('electron-ejs');
-const AutoLaunch = require('auto-launch');
-const ping = require('ping');
-const https = require('https');
-const {MicaBrowserWindow, IS_WINDOWS_11} = require('mica-electron');
+import WebSocket from 'ws';
+import express from 'express';
+import fetch from 'node-fetch';
+import AWS from 'aws-sdk';
+import fs from 'fs';
+import path from 'path';
+import {Logs} from 'xeue-logs';
+import {Config} from 'xeue-config';
+import {SQLSession} from 'xeue-sql';
+import {Server} from 'xeue-webserver';
+import SysLogServer from './syslog.js';
+import Package from './package.json' assert {type: "json"};
+import ping from 'ping';
+import https from 'https';
 //const snmp = require ('net-snmp');
 
-const background = IS_WINDOWS_11 ? 'micaActive' : 'bg-dark';
+const version = Package.version;
 
 const httpsAgent = new https.Agent({
 	rejectUnauthorized: false,
 });
 
+const __dirname = path.resolve(path.dirname(decodeURI(new URL(import.meta.url).pathname))).replace('C:\\','');
 const __static = __dirname+'/static';
-
-const ejs = new electronEjs({'static': __static, 'background': background}, {});
 
 Array.prototype.symDiff = function(x) {
 	return this.filter(y => !x.includes(y)).concat(x => !y.includes(x));
@@ -77,6 +72,7 @@ const data = {
 	'ups': {},
 	'phy': {}
 };
+const localPingsData = {};
 const cloudServer = {
 	'connected': false,
 	'active': false,
@@ -109,244 +105,346 @@ const tables = [{
 
 const SwitchRequests = {
 	'NXOS': {
-		'neighborRequest': {
-			"jsonrpc": "2.0",
-			"method": "cli",
-			"params": {
-				"cmd": "show cdp neighbors",
-				"version": 1
-			},
-			"id": 1
-		},
-		'transRequest': {
-			"jsonrpc": "2.0",
-			"method": "cli",
-			"params": {
-				"cmd": "show interface transceiver details",
-				"version": 1
-			},
-			"id": 1
-		},
-		'flapRequest': {
-			"jsonrpc": "2.0",
-			"method": "cli",
-			"params": {
-				"cmd": "show interface mac",
-				"version": 1
-			},
-			"id": 1
-		},
-		'power': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'show system environment power'
-				],
-				'version': 1
-			},
-			'id': ''
-		},
-		'fans': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'show system environment cooling'
-				],
-				'version': 1
-			},
-			'id': ''
-		},
-		'temperature': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'show system environment temperature'
-				],
-				'version': 1
-			},
-			'id': ''
-		},
-		'interfaces': {
-			"jsonrpc": "2.0",
-			"method": "cli",
-			"params": {
-				"cmd": "show interface",
-				"version": 1
-			},
-			"id": 1
-		}
+		'neighborRequest': "show cdp neighbors",
+		'transRequest': "show interface transceiver details",
+		'flapRequest': "show interface mac",
+		'power': 'show system environment power',
+		'fans': 'show system environment cooling',
+		'temperature': 'show system environment temperature',
+		'interfaces': "show interface",
+		'interfacesMonitoring': "show interface"
 	},
 	'EOS': {
-		'neighborRequest': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'enable',
-					'show lldp neighbors'
-				],
-				'version': 1
-			},
-			'id': ''
-		},
-		'transRequest': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'show interfaces transceiver'
-				],
-				'version': 1
-			},
-			'id': 'EapiExplorer-1'
-		},
-		'flapRequest': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'text',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'enable',
-					'show interfaces mac'
-				],
-				'version': 1
-			},
-			'id': ''
-		},
-		'phyRequest': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'enable',
-					'show interfaces phy detail'
-				],
-				'version': 1
-			},
-			'id': ''
-		},
-		'power': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'enable',
-					'show system environment power'
-				],
-				'version': 1
-			},
-			'id': ''
-		},
-		'fans': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'enable',
-					'show system environment cooling'
-				],
-				'version': 1
-			},
-			'id': ''
-		},
-		'temperature': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'enable',
-					'show system environment temperature'
-				],
-				'version': 1
-			},
-			'id': ''
-		},
-		'interfaces': {
-			'jsonrpc': '2.0',
-			'method': 'runCmds',
-			'params': {
-				'format': 'json',
-				'timestamps': false,
-				'autoComplete': false,
-				'expandAliases': false,
-				'cmds': [
-					'enable',
-					'show interfaces'
-				],
-				'version': 1
-			},
-			'id': ''
+		'neighborRequest': 'show lldp neighbors',
+		'transRequest': 'show interfaces transceiver',
+		'flapRequest': 'show interfaces mac',
+		'phyRequest': 'show interfaces phy detail',
+		'power': 'show system environment power',
+		'fans': 'show system environment cooling',
+		'temperature': 'show system environment temperature',
+		'interfaces': 'show interfaces',
+		'interfacesMonitoring': 'show interfaces'
+	}
+}
+
+const EOS = {
+	handleLLDP: (result, switchType, switchName) => {
+		const neighbors = result.lldpNeighbors;
+		data.neighbors[switchType][switchName] = {};
+		const thisSwitch = data.neighbors[switchType][switchName];
+		for (let j in neighbors) {
+			const neighbor = neighbors[j];
+			if (!Object.hasOwnProperty.call(neighbor, 'port')) continue;
+			if (neighbor.port.includes('Ma')) continue;
+			thisSwitch[neighbor.port] = { lldp: neighbor.neighborDevice };
+		}
+	},
+	handleFibre: (filteredDevices, result, switchType, switchName) => {
+		const devices = data.neighbors[switchType][switchName];
+		const keys = Object.keys(devices);
+		const interfaces = result.result[0].interfaces;
+		for (let interfaceName in interfaces) {
+			const iface = interfaces[interfaceName];
+			if ('rxPower' in iface === false) continue
+			if (!keys.includes(interfaceName)) devices[interfaceName] = {};
+			devices[interfaceName].port = interfaceName;
+			devices[interfaceName].description = getDescription(interfaceName, switchType, switchName);
+			devices[interfaceName].rxPower = iface.rxPower.toFixed(1);
+			if ('txPower' in iface) devices[interfaceName].txPower = iface.txPower.toFixed(1);
+		}
+		for (let deviceName in devices) {
+			const device = devices[deviceName];
+			if ('txPower' in device === false) continue;
+			if ('rxPower' in device === false) continue;
+			if (device.rxPower < -9 && device.rxPower > -30 && device.txPower > -30) {
+				device.switch = switchName;
+				filteredDevices.push(device);
+			}
+		}
+	},
+	// handleFlap: (filteredDevices, result, switchType, switchName) => {
+	// 	let devices = data.neighbors[switchType][switchName];
+	// 	const keys = Object.keys(devices);
+	// 	const split = result.result[1].output.split('\n');
+	// 	for (let i = 8; i < split.length; i++) {
+	// 		const t = split[i];
+	// 		const mac = {
+	// 			int: t.substr(0, 19).trim(),
+	// 			config: t.substr(19, 7).trim(),
+	// 			oper: t.substr(26, 9).trim(),
+	// 			phy: t.substr(34, 16).trim(),
+	// 			mac: t.substr(50, 6).trim(),
+	// 			last: t.substr(54, t.length).trim()
+	// 		};
+	// 		logger.object(mac);
+	// 		if (mac.config !== 'Up') continue;
+	// 		if (!keys.includes(mac.int)) devices[mac.int] = {};
+	// 		devices[mac.int].mac = {};
+	// 		devices[mac.int].mac.operState = mac.oper;
+	// 		devices[mac.int].mac.phyState = mac.phy;
+	// 		devices[mac.int].mac.macFault = mac.mac;
+	// 		devices[mac.int].mac.lastChange = mac.last;
+	// 		devices[mac.int].description = getDescription(mac.int, switchType, switchName);
+	// 		devices[mac.int].port = mac.int;
+	// 	}
+	// 	devices = clearEmpties(devices);
+	// 	for (let deviceNumber in devices) {
+	// 		const device = devices[deviceNumber]
+	// 		if (device.mac === undefined) continue;
+	// 		if(!('lastChange' in device.mac)) logger.log(device+' seems to have an issue','W');
+	// 		const time = device.mac.lastChange.split(':');
+	// 		const timeTotal = parseInt(time[0]) * 3600 + parseInt(time[1]) * 60 + parseInt(time[2]);
+	// 		if (timeTotal > 300) continue;
+	// 		device.switch = switchName;
+	// 		filteredDevices.push(device);
+	// 	}
+	// },
+	handleFlap: (filteredDevices, result, switchType, switchName) => {
+		let devices = data.neighbors[switchType][switchName];
+		const keys = Object.keys(devices);
+		//logger.object(result.result);
+		const interfaces = result.result[1].interfaces;
+		// logger.object(result.result[1]);
+		for (const ifaceName in interfaces) {
+			if (!Object.hasOwnProperty.call(interfaces, ifaceName)) return;
+			const iface = interfaces[ifaceName];
+			if (!devices[ifaceName]) devices[ifaceName] = {};
+			devices[ifaceName].mac = {
+				'operState': iface.intfState,
+				'phyState': iface.phyState,
+				'macFault': iface.macRxRemoteFault,
+				'lastChange': iface.intfStateLastChangeTime
+			};
+			devices[ifaceName].description = getDescription(ifaceName, switchType, switchName);
+			devices[ifaceName].port = ifaceName;
+
+		}
+		devices = clearEmpties(devices);
+		for (let deviceNumber in devices) {
+			const device = devices[deviceNumber]
+			if (device.mac === undefined) continue;
+			if(!('lastChange' in device.mac)) logger.log(device+' seems to have an issue','W');
+			const timeTotal = Date.now() - (device.mac.lastChange * 1000);
+			//logger.log(timeTotal);
+			if (timeTotal > 300000 || timeTotal == 0) continue;
+			//logger.log('flapper');
+			device.switch = switchName;
+			filteredDevices.push(device);
+		}
+	},
+	handlePower: (result, switchType, switchName) => {
+		const power = {};
+		const PSUs = result.result[1].powerSupplies;
+		for (const PSUIndex in PSUs) {
+			if (Object.hasOwnProperty.call(PSUs, PSUIndex)) {
+				const PSU = PSUs[PSUIndex];
+				const inAlert = PSU.status == "ok" ? false : true;
+				power[PSUIndex] = {
+					"outputPower": PSU.outputPower,
+					"inAlert": inAlert,
+					"uptime": PSU.uptime
+				};
+			}
+		}
+		data.power[switchType][switchName] = power;
+	},
+	handleTemperature: (result, switchType, switchName) => {
+		const slots = result.result[1].cardSlots;
+		const temperature = {};
+		slots.forEach(slot => {
+			const temps = slot.tempSensors.map(sensor => sensor.currentTemperature);
+			const alerts = slot.tempSensors.filter(sensor => sensor.inAlertState);
+			const inAlert = alerts.length > 0 ? false : true;
+			const temp = temps.reduce((partialSum, a) => partialSum + a, 0)/temps.length;
+			temperature[`${slot.entPhysicalClass} ${slot.relPos}`] = {
+				"temp": temp,
+				"inAlert": inAlert
+			};
+		});
+		data.temperature[switchType][switchName] = temperature;
+	},
+	handleFans: (result, switchType, switchName) => {
+		const psuSlots = result.result[1].powerSupplySlots;
+		const traySlots = result.result[1].fanTraySlots;
+		const fans = {};
+		psuSlots.forEach(slot => {
+			const speeds = slot.fans.map(fan => fan.actualSpeed);
+			const speed = speeds.reduce((partialSum, a) => partialSum + a, 0)/speeds.length
+			const inAlert = slot.status !== "ok" ? false : true;
+			fans[slot.label] = {
+				"speed": speed,
+				"inAlert": inAlert
+			};
+		});
+		traySlots.forEach(slot => {
+			const speeds = slot.fans.map(fan => fan.actualSpeed);
+			const speed = speeds.reduce((partialSum, a) => partialSum + a, 0)/speeds.length
+			const inAlert = slot.status !== "ok" ? false : true;
+			fans['Tray'+slot.label] = {
+				"speed": speed,
+				"inAlert": inAlert
+			};
+		});
+		data.fans[switchType][switchName] = fans;
+	},
+	handleInterfaces: (result, switchType, switchName) => {
+		const interfaces = result.result[1].interfaces;
+		data.interfaces[switchType][switchName] = {};
+		for (const interfaceName in interfaces) {
+			if (!interfaces.hasOwnProperty.call(interfaces, interfaceName)) return;
+			const iface = interfaces[interfaceName];
+			if (iface.hardware !== "ethernet") continue;
+			data.interfaces[switchType][switchName][interfaceName] = {
+				"connected": iface.interfaceStatus == "connected" ? true : false,
+				"description": iface.description,
+				"inRate": iface.interfaceStatistics.inBitsRate,
+				"outRate": iface.interfaceStatistics.outBitsRate,
+				"maxRate": iface.bandwidth,
+				"lastFlap": iface.lastStatusChangeTimestamp,
+				"flapCount": iface.interfaceCounters.linkStatusChanges,
+				"outErrors": iface.interfaceCounters.totalOutErrors,
+				"outDiscards": iface.interfaceCounters.outDiscards,
+				"inErrors": iface.interfaceCounters.totalInErrors,
+				"inDiscards": iface.interfaceCounters.inDiscards
+			}
 		}
 	}
 }
 
+const NXOS = {
+	handleLLDP: (result, switchType, switchName) => {
+		const neighbors = result.body.TABLE_cdp_neighbor_brief_info.ROW_cdp_neighbor_brief_info;
+		const switchTypeObject = data.neighbors[switchType];
+		switchTypeObject[switchName] = {};
+		const thisSwitch = data.neighbors[switchType][switchName];
+		for (let j in neighbors) {
+			const neighbor = neighbors[j];
+			if (!Object.hasOwnProperty.call(neighbor, 'intf_id')) continue;
+			if (neighbor.intf_id?.includes('mgmt')) continue;
+			thisSwitch[neighbor.intf_id] = {
+				'interface': neighbor.intf_id,
+				'lldp': neighbor.device_id,
+				'model': neighbor.platform_id,
+				'port': neighbor.port_id
+			};
+		}
+	},
+	handleFibre: (filteredDevices, result, switchType, switchName) => {
+		const devices = data.neighbors[switchType][switchName];
+		const keys = Object.keys(devices);
+		const interfaces = result.result.body.TABLE_interface.ROW_interface;
+		for (const interfaceNum in interfaces) {
+			const iface = interfaces[interfaceNum];
+			const interfaceName = iface.interface;
+			if (iface.TABLE_lane === undefined) continue;
+			const lanes = Array.isArray(iface.TABLE_lane.ROW_lane) ? iface.TABLE_lane.ROW_lane : [iface.TABLE_lane.ROW_lane];
+			for (let laneNumber = 0; laneNumber < lanes.length; laneNumber++) {
+				const lane = lanes[laneNumber];
+				const interfaceLaneName = lanes.length > 1 ? `${interfaceName}/${laneNumber+1}` : interfaceName;
+				if ('rx_pwr' in lane === false) continue
+				if (!keys.includes(interfaceLaneName)) devices[interfaceLaneName] = {};
+				devices[interfaceLaneName].port = interfaceLaneName;
+				devices[interfaceLaneName].description = getDescription(interfaceLaneName, switchType, switchName);
+				devices[interfaceLaneName].rxPower = Number(lane.rx_pwr).toFixed(1);
+				if ('tx_pwr' in lane) devices[interfaceLaneName].txPower = Number(iface.tx_pwr).toFixed(1);
+			}
+		}
+		for (let deviceNumber in devices) {
+			const device = devices[deviceNumber];
+			if ('txPower' in device === false) continue;
+			if ('rxPower' in device === false) continue;
+			if (device.rxPower > -11) continue;
+			device.switch = switchName;
+			filteredDevices.push(device);
+		}
+	},
+	handleFlap: (filteredDevices, result, switchType, switchName) => {
+		let devices = data.neighbors[switchType][switchName];
+		const keys = Object.keys(devices);
+		const split = result.output.split('\n');
+		for (let i = 8; i < split.length; i++) {
+			const t = split[i];
+			const mac = {
+				int: t.substr(0, 19).trim(),
+				config: t.substr(19, 7).trim(),
+				oper: t.substr(26, 9).trim(),
+				phy: t.substr(34, 16).trim(),
+				mac: t.substr(50, 6).trim(),
+				last: t.substr(54, t.length).trim()
+			};
+
+			if (mac.config !== 'Up') continue;
+			if (keys.includes(mac.int)) devices[mac.int] = {};
+			devices[mac.int].mac = {};
+			devices[mac.int].mac.operState = mac.oper;
+			devices[mac.int].mac.phyState = mac.phy;
+			devices[mac.int].mac.macFault = mac.mac;
+			devices[mac.int].mac.lastChange = mac.last;
+			devices[mac.int].description = getDescription(mac.int, switchType, switchName);
+			devices[mac.int].port = mac.int;
+		}
+		devices = clearEmpties(devices);
+		for (let deviceNumber in devices) {
+			const device = devices[deviceNumber]
+			if (device.mac === undefined) continue;
+			if(!('lastChange' in device.mac)) logger.log(device+' seems to have an issue','W');
+			const time = device.mac.lastChange.split(':');
+			const timeTotal = parseInt(time[0]) * 3600 + parseInt(time[1]) * 60 + parseInt(time[2]);
+			if (timeTotal > 300) continue;
+			device.switch = switchName;
+			filteredDevices.push(device);
+		}
+	},
+	handlePower: (result, switchType, switchName) => {
+		logger.object(result);
+	},
+	handleTemperature: (result, switchType, switchName) => {
+		logger.object(result);
+	},
+	handleFans: (result, switchType, switchName) => {
+		logger.object(result);
+	},
+	handleInterfaces: (result, switchType, switchName) => {
+		const interfaces = result.result.body.TABLE_interface.ROW_interface;
+		data.interfaces[switchType][switchName] = {};
+		interfaces.forEach(iface => {
+			const interfaceName = iface.interface;
+			data.interfaces[switchType][switchName][interfaceName] = {
+				"connected": iface.state == "up" ? true : false,
+				"description": iface.desc,
+				"inRate": iface.eth_inrate1_bits,
+				"outRate": iface.eth_outrate1_bits,
+				"maxRate": iface.eth_bw,
+				"lastFlap": iface.eth_link_flapped,
+				"flapCount": 1,
+				"outErrors": iface.eth_outerr,
+				"outDiscards": iface.eth_outdiscard,
+				"inErrors": iface.eth_inerr,
+				"inDiscards": iface.eth_indiscard
+			}
+		})
+	}
+}
+
 const pingFrequency = 30;
-const lldpFrequency = 30;
+const lldpFrequency = 15;
 const switchStatsFrequency = 30;
 const upsFrequency = 30;
-const devicesFrequency = 30;
+const devicesFrequency = 15;
 const tempFrequency = minutes(1);
-//const tempFrequency = 5;
-const localPingFrequency = 10;
+const localPingFrequency = 5;
 const envFrequency = 30;
-const interfaceFrequency = 30;
+const interfaceFrequency = 15;
 
 /* Globals */
 
-let isQuiting = false;
-let mainWindow = null;
 let SQL;
-let configLoaded = false;
 let cachedUpsTemps = {};
-const devEnv = app.isPackaged ? './' : './';
-const __main = path.resolve(__dirname, devEnv);
 
 const logger = new Logs(
 	false,
 	'ArgosLogging',
-	path.join(app.getPath('documents'), 'ArgosData'),
+	path.join(__dirname, 'ArgosData'),
 	'D',
 	false
 )
@@ -365,296 +463,156 @@ const syslogServer = new SysLogServer(
 	doSysLogMessage
 );
 
-/* Start App */
-
-(async () => {
-
-	await app.whenReady();
-	await setUpApp();
-	await createWindow();
-
-	{ /* Config */
-		logger.printHeader('Argos Monitoring');
-		config.require('port', [], 'What port shall the server use');
-		config.require('syslogPort', [], 'What port shall the server listen to syslog messages on');
-		config.require('systemName', [], 'What is the name of the system');
-		config.require('warningTemperature', [], 'What temperature shall alerts be sent at');
-		config.require('webEnabled', {true: 'Yes', false: 'No'}, 'Should this system report back to an argos server');
-		{
-			config.require('webSocketEndpoint', [], 'What is the url of the argos server', ['webEnabled', true]);
-			config.require('secureWebSocketEndpoint', {true: 'Yes', false: 'No'}, 'Does the server use SSL (padlock in browser)', ['webEnabled', true]);
-		}
-		config.require('localDataBase', {true: 'Yes', false: 'No'}, 'Setup and use a local database to save warnings and temperature information');
-		{
-			config.require('dbUser', [], 'Database Username', ['localDataBase', true]);
-			config.require('dbPass', [], 'Database Password', ['localDataBase', true]);
-			config.require('dbPort', [], 'Database port', ['localDataBase', true]);
-			config.require('dbHost', [], 'Database address', ['localDataBase', true]);
-			config.require('dbName', [], 'Database name', ['localDataBase', true]);
-		}
-		config.require('textsEnabled', {true: 'Yes', false: 'No'}, 'Use AWS to send texts when warnings are triggered');
-		{
-			config.require('awsAccessKeyId', [], 'AWS access key for texts', ['textsEnabled', true]);
-			config.require('awsSecretAccessKey', [], 'AWS Secret access key for texts', ['textsEnabled', true]);
-			config.require('awsRegion', [], 'AWS region', ['textsEnabled', true]);
-		}
-		config.require('loggingLevel', {'A':'All', 'D':'Debug', 'W':'Warnings', 'E':'Errors'}, 'Set logging level');
-		config.require('createLogFile', {true: 'Yes', false: 'No'}, 'Save logs to local file');
-		config.require('advancedConfig', {true: 'Yes', false: 'No'}, 'Show advanced config settings');
-		{
-			config.require('debugLineNum', {true: 'Yes', false: 'No'}, 'Print line numbers', ['advancedConfig', true]);
-			config.require('printPings', {true: 'Yes', false: 'No'}, 'Print pings', ['advancedConfig', true]);
-			config.require('devMode', {true: 'Yes', false: 'No'}, 'Dev mode - Disables connections to devices', ['advancedConfig', true]);
-		}
-
-		config.default('port', 8080);
-		config.default('syslogPort', 514);
-		config.default('systemName', 'Unknown');
-		config.default('warningTemperature', 35);
-		config.default('webEnabled', false);
-		config.default('localDataBase', false);
-		config.default('dbPort', '3306');
-		config.default('dbName', 'argosdata');
-		config.default('dbHost', 'localhost');
-		config.default('textsEnabled', false);
-		config.default('loggingLevel', 'W');
-		config.default('createLogFile', true);
-		config.default('debugLineNum', false);
-		config.default('printPings', false);
-		config.default('advancedConfig', false);
-		config.default('devMode', false);
-		config.default('secureWebSocketEndpoint', true);
-
-		if (!await config.fromFile(path.join(app.getPath('documents'), 'ArgosData', 'config.conf'))) {
-			await config.fromAPI(path.join(app.getPath('documents'), 'ArgosData', 'config.conf'), configQuestion, configDone);
-		}
-
-		if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
-			config.set('debugLineNum', true);
-		}
-
-		if (config.get('textsEnabled')) {
-			AWS.config.update({ region: config.get('awsRegion')});
-			AWS.config.credentials = new AWS.Credentials(config.get('awsAccessKeyId'), config.get('awsSecretAccessKey'));
-		}
-
-		logger.setConf({
-			'createLogFile': config.get('createLogFile'),
-			'logsFileName': 'ArgosLogging',
-			'configLocation': path.join(app.getPath('documents'), 'ArgosData'),
-			'loggingLevel': config.get('loggingLevel'),
-			'debugLineNum': config.get('debugLineNum'),
-		});
-
-		logger.log('Running version: v'+version, ['H', 'SERVER', logger.g]);
-		logger.log(`Logging to: ${path.join(app.getPath('documents'), 'ArgosData', 'logs')}`, ['H', 'SERVER', logger.g]);
-		logger.log(`Config saved to: ${path.join(app.getPath('documents'), 'ArgosData', 'config.conf')}`, ['H', 'SERVER', logger.g]);
-		config.print();
-		config.userInput(async command => {
-			switch (command) {
-			case 'config':
-				await config.fromCLI(path.join(app.getPath('documents'), 'ArgosData', 'config.conf'));
-				if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
-					config.set('debugLineNum', true);
-				}
-				logger.setConf({
-					'createLogFile': config.get('createLogFile'),
-					'logsFileName': 'ArgosLogging',
-					'configLocation': path.join(app.getPath('documents'), 'ArgosData'),
-					'loggingLevel': config.get('loggingLevel'),
-					'debugLineNum': config.get('debugLineNum')
-				});
-				return true;
-			}
-		});
-		configLoaded = true;
+{ /* Config */
+	logger.printHeader('Argos Monitoring');
+	config.require('port', [], 'What port shall the server use');
+	config.require('syslogPort', [], 'What port shall the server listen to syslog messages on');
+	config.require('systemName', [], 'What is the name of the system');
+	config.require('warningTemperature', [], 'What temperature shall alerts be sent at');
+	config.require('webEnabled', {true: 'Yes', false: 'No'}, 'Should this system report back to an argos server');
+	{
+		config.require('webSocketEndpoint', [], 'What is the url of the argos server', ['webEnabled', true]);
+		config.require('secureWebSocketEndpoint', {true: 'Yes', false: 'No'}, 'Does the server use SSL (padlock in browser)', ['webEnabled', true]);
+	}
+	config.require('localDataBase', {true: 'Yes', false: 'No'}, 'Setup and use a local database to save warnings and temperature information');
+	{
+		config.require('dbUser', [], 'Database Username', ['localDataBase', true]);
+		config.require('dbPass', [], 'Database Password', ['localDataBase', true]);
+		config.require('dbPort', [], 'Database port', ['localDataBase', true]);
+		config.require('dbHost', [], 'Database address', ['localDataBase', true]);
+		config.require('dbName', [], 'Database name', ['localDataBase', true]);
+	}
+	config.require('textsEnabled', {true: 'Yes', false: 'No'}, 'Use AWS to send texts when warnings are triggered');
+	{
+		config.require('awsAccessKeyId', [], 'AWS access key for texts', ['textsEnabled', true]);
+		config.require('awsSecretAccessKey', [], 'AWS Secret access key for texts', ['textsEnabled', true]);
+		config.require('awsRegion', [], 'AWS region', ['textsEnabled', true]);
+	}
+	config.require('loggingLevel', {'A':'All', 'D':'Debug', 'W':'Warnings', 'E':'Errors'}, 'Set logging level');
+	config.require('createLogFile', {true: 'Yes', false: 'No'}, 'Save logs to local file');
+	config.require('advancedConfig', {true: 'Yes', false: 'No'}, 'Show advanced config settings');
+	{
+		config.require('debugLineNum', {true: 'Yes', false: 'No'}, 'Print line numbers', ['advancedConfig', true]);
+		config.require('printPings', {true: 'Yes', false: 'No'}, 'Print pings', ['advancedConfig', true]);
+		config.require('devMode', {true: 'Yes', false: 'No'}, 'Dev mode - Disables connections to devices', ['advancedConfig', true]);
 	}
 
-	if (config.get('localDataBase')) {
-		SQL = new SQLSession(
-			config.get('dbHost'),
-			config.get('dbPort'),
-			config.get('dbUser'),
-			config.get('dbPass'),
-			config.get('dbName'),
-			logger
-		);
-		await SQL.init(tables);
-		const sensor = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'frame';");
-		if (sensor.length == 0) {
-			await SQL.query("ALTER TABLE `temperature` RENAME COLUMN frame TO sensor;");
-		}
-		const sensorType = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'sensorType';");
-		if (sensorType.length == 0) {
-			await SQL.query("ALTER TABLE `temperature` ADD COLUMN sensorType text NOT NULL;");
-			await SQL.query("UPDATE `temperature` SET sensorType = 'IQ Frame' WHERE 1=1;");
-		}
+	config.default('port', 8080);
+	config.default('syslogPort', 514);
+	config.default('systemName', 'Unknown');
+	config.default('warningTemperature', 35);
+	config.default('webEnabled', false);
+	config.default('localDataBase', false);
+	config.default('dbPort', '3306');
+	config.default('dbName', 'argosdata');
+	config.default('dbHost', 'localhost');
+	config.default('textsEnabled', false);
+	config.default('loggingLevel', 'W');
+	config.default('createLogFile', true);
+	config.default('debugLineNum', false);
+	config.default('printPings', false);
+	config.default('advancedConfig', false);
+	config.default('devMode', false);
+	config.default('secureWebSocketEndpoint', true);
+
+	if (!await config.fromFile(path.join(__dirname, 'ArgosData', 'config.conf'))) {
+		await config.fromCLI(path.join(__dirname, 'ArgosData', 'config.conf'));
 	}
 
-	webServer.start(config.get('port'));
-	syslogServer.start(config.get('syslogPort'));
+	if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
+		config.set('debugLineNum', true);
+	}
 
-	logger.log(`Argos can be accessed at http://localhost:${config.get('port')}`, 'C');
-	mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}/inApp`);
+	if (config.get('textsEnabled')) {
+		AWS.config.update({ region: config.get('awsRegion')});
+		AWS.config.credentials = new AWS.Credentials(config.get('awsAccessKeyId'), config.get('awsSecretAccessKey'));
+	}
 
-	connectToWebServer(true).then(()=>{
-		webLogBoot();
+	logger.setConf({
+		'createLogFile': config.get('createLogFile'),
+		'logsFileName': 'ArgosLogging',
+		'configLocation': path.join(__dirname, 'ArgosData'),
+		'loggingLevel': config.get('loggingLevel'),
+		'debugLineNum': config.get('debugLineNum'),
 	});
 
-	// 1 Minute ping loop
-	setInterval(() => {
-		connectToWebServer(true);
-	}, 60*1000);
-	
-	await startLoopAfterDelay(logTemp, tempFrequency);
-	await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Media');
-	await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Control');
-	await startLoopAfterDelay(localPings, localPingFrequency);
-	await startLoopAfterDelay(connectToWebServer, 5);
-	await startLoopAfterDelay(webLogPing, pingFrequency);
-	await startLoopAfterDelay(switchEnv, envFrequency, 'Media');
-	await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Media');
-	await startLoopAfterDelay(checkDevices, devicesFrequency, 'Media', true);
-	await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Media');
-	//await startLoopAfterDelay(switchPhy, switchStatsFrequency, 'Media');
-	await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Media');
-	await startLoopAfterDelay(switchEnv, envFrequency, 'Control');
-	await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Control');
-	await startLoopAfterDelay(checkDevices, devicesFrequency, 'Control', false);
-	await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Control');
-	await startLoopAfterDelay(checkUps, upsFrequency);
-})().catch(error => {
-	console.log(error);
+	logger.log('Running version: v'+version, ['H', 'SERVER', logger.g]);
+	logger.log(`Logging to: ${path.join(__dirname, 'ArgosData', 'logs')}`, ['H', 'SERVER', logger.g]);
+	logger.log(`Config saved to: ${path.join(__dirname, 'ArgosData', 'config.conf')}`, ['H', 'SERVER', logger.g]);
+	config.print();
+	config.userInput(async command => {
+		switch (command) {
+		case 'config':
+			await config.fromCLI(path.join(__dirname, 'ArgosData', 'config.conf'));
+			if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
+				config.set('debugLineNum', true);
+			}
+			logger.setConf({
+				'createLogFile': config.get('createLogFile'),
+				'logsFileName': 'ArgosLogging',
+				'configLocation': path.join(__dirname, 'ArgosData'),
+				'loggingLevel': config.get('loggingLevel'),
+				'debugLineNum': config.get('debugLineNum')
+			});
+			return true;
+		}
+	});
+}
+
+if (config.get('localDataBase')) {
+	SQL = new SQLSession(
+		config.get('dbHost'),
+		config.get('dbPort'),
+		config.get('dbUser'),
+		config.get('dbPass'),
+		config.get('dbName'),
+		logger
+	);
+	await SQL.init(tables);
+	const sensor = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'frame';");
+	if (sensor.length == 0) {
+		await SQL.query("ALTER TABLE `temperature` RENAME COLUMN frame TO sensor;");
+	}
+	const sensorType = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'sensorType';");
+	if (sensorType.length == 0) {
+		await SQL.query("ALTER TABLE `temperature` ADD COLUMN sensorType text NOT NULL;");
+		await SQL.query("UPDATE `temperature` SET sensorType = 'IQ Frame' WHERE 1=1;");
+	}
+}
+
+webServer.start(config.get('port'));
+syslogServer.start(config.get('syslogPort'));
+
+logger.log(`Argos can be accessed at http://localhost:${config.get('port')}`, 'C');
+
+connectToWebServer(true).then(()=>{
+	webLogBoot();
 });
 
+// 1 Minute ping loop
+setInterval(() => {
+	connectToWebServer(true);
+}, 60*1000);
 
-/* Electron */
-
-
-async function setUpApp() {
-	const tray = new Tray(path.join(__static, 'img/icon/network-96.png'));
-	tray.setContextMenu(Menu.buildFromTemplate([
-		{
-			label: 'Show App', click: function () {
-				mainWindow.show();
-			}
-		},
-		{
-			label: 'Exit', click: function () {
-				isQuiting = true;
-				app.quit();
-			}
-		}
-	]));
-
-	ipcMain.on('window', (event, message) => {
-		switch (message) {
-		case 'exit':
-			app.quit();
-			break;
-		case 'minimise':
-			mainWindow.hide();
-			break;
-		default:
-			break;
-		}
-	});
-
-	ipcMain.on('config', (event, message) => {
-		switch (message) {
-		case 'start':
-			config.fromAPI(path.join(app.getPath('documents'), 'ArgosData','config.conf'), configQuestion, configDone);
-			break;
-		case 'stop':
-			logger.log('Not implemeneted yet: Cancle config change');
-			break;
-		case 'show':
-			config.print();
-			break;
-		default:
-			break;
-		}
-	});
-
-	const autoLaunch = new AutoLaunch({
-		name: 'Argos Monitoring',
-		isHidden: true,
-	});
-	autoLaunch.isEnabled().then(isEnabled => {
-		if (!isEnabled) autoLaunch.enable();
-	});
-
-	app.on('before-quit', function () {
-		isQuiting = true;
-	});
-
-	app.on('activate', async () => {
-		if (BrowserWindow.getAllWindows().length === 0) createWindow();
-	});
-
-	logger.on('logSend', message => {
-		if (!isQuiting) mainWindow.webContents.send('log', message);
-	});
-}
-
-async function createWindow() {
-	const windowOptions = {
-		width: 1440,
-		height: 720,
-		autoHideMenuBar: true,
-		webPreferences: {
-			contextIsolation: true,
-			preload: path.resolve(__main, 'preload.js')
-		},
-		icon: path.join(__static, 'img/icon/icon.png'),
-		show: false,
-		sensor: false,
-		titleBarStyle: 'hidden',
-		titleBarOverlay: {
-			color: '#313d48',
-			symbolColor: '#ffffff',
-			height: 56
-		}
-	}
-	
-	if (IS_WINDOWS_11) {
-		mainWindow = new MicaBrowserWindow(windowOptions);
-		mainWindow.setDarkTheme();
-		mainWindow.setMicaEffect();
-	} else {
-		mainWindow = new BrowserWindow(windowOptions);
-	}
-
-	if (!app.commandLine.hasSwitch('hidden')) {
-		mainWindow.show();
-	} else {
-		mainWindow.hide();
-	}
-
-	mainWindow.on('close', function (event) {
-		if (!isQuiting) {
-			event.preventDefault();
-			mainWindow.webContents.send('requestExit');
-			event.returnValue = false;
-		}
-	});
-
-	mainWindow.on('minimize', function (event) {
-		event.preventDefault();
-		mainWindow.hide();
-	});
-
-	mainWindow.loadURL(path.resolve(__main, 'views/app.ejs'));
-
-	await new Promise(resolve => {
-		ipcMain.on('ready', (event, ready) => {
-			if (configLoaded) {
-				mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}/inApp`);
-			}
-			resolve();
-		});
-	});
-}
+await startLoopAfterDelay(logTemp, tempFrequency);
+await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Media');
+await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Control');
+await startLoopAfterDelay(switchInterfaces, 5, 'Media', true);
+await startLoopAfterDelay(switchInterfaces, 5, 'Control', true);
+await startLoopAfterDelay(localPings, localPingFrequency);
+await startLoopAfterDelay(connectToWebServer, 5);
+await startLoopAfterDelay(webLogPing, pingFrequency);
+await startLoopAfterDelay(switchEnv, envFrequency, 'Media');
+await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Media');
+await startLoopAfterDelay(checkDevices, devicesFrequency, 'Media', true);
+await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Media');
+//await startLoopAfterDelay(switchPhy, switchStatsFrequency, 'Media');
+await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Media');
+await startLoopAfterDelay(switchEnv, envFrequency, 'Control');
+await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Control');
+await startLoopAfterDelay(checkDevices, devicesFrequency, 'Control', false);
+await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Control');
+await startLoopAfterDelay(checkUps, upsFrequency);
 
 
 /* Data */
@@ -662,7 +620,7 @@ async function createWindow() {
 
 function loadData(file) {
 	try {
-		const dataRaw = fs.readFileSync(`${app.getPath('documents')}/ArgosData/data/${file}.json`);
+		const dataRaw = fs.readFileSync(`${__dirname}/ArgosData/data/${file}.json`);
 		try {
 			return JSON.parse(dataRaw);
 		} catch (error) {
@@ -670,7 +628,7 @@ function loadData(file) {
 			return [];
 		}
 	} catch (error) {
-		logger.log(`Cloud not read the file ${file}.json, attempting to create new file`, 'W');
+		logger.log(`Could not read the file ${file}.json, attempting to create new file`, 'W');
 		logger.debug('File error:', error);
 		const fileData = [];
 		switch (file) {
@@ -687,7 +645,7 @@ function loadData(file) {
 				'Pass': 'Password',
 				'IP':'0.0.0.0',
 				'Type': 'Media',
-				'OS': 'Media'
+				'OS': 'EOS'
 			};
 			break;
 		case 'Ports':
@@ -711,18 +669,18 @@ function loadData(file) {
 			};
 			break;
 		}
-		if (!fs.existsSync(`${app.getPath('documents')}/ArgosData/data/`)){
-			fs.mkdirSync(`${app.getPath('documents')}/ArgosData/data/`);
+		if (!fs.existsSync(`${__dirname}/ArgosData/data/`)){
+			fs.mkdirSync(`${__dirname}/ArgosData/data/`);
 		}
-		fs.writeFileSync(`${app.getPath('documents')}/ArgosData/data/${file}.json`, JSON.stringify(fileData, null, 4));
+		fs.writeFileSync(`${__dirname}/ArgosData/data/${file}.json`, JSON.stringify(fileData, null, 4));
 		return fileData;
 	}
 }
 function writeData(file, data) {
 	try {
-		fs.writeFileSync(`${app.getPath('documents')}/ArgosData/data/${file}.json`, JSON.stringify(data, undefined, 2));
+		fs.writeFileSync(`${__dirname}/ArgosData/data/${file}.json`, JSON.stringify(data, undefined, 2));
 	} catch (error) {
-		logger.object(`Cloud not write the file ${file}.json, do we have permission to access the file?`, error, 'E');
+		logger.object(`Could not write the file ${file}.json, do we have permission to access the file?`, error, 'E');
 	}
 }
 
@@ -751,6 +709,26 @@ function syslogSourceList() {
 	})
 	return sourceList;
 }
+
+function syslogSourceGroups() {
+	const pingList = pings();
+	const pingObject = {};
+	pingList.forEach(ping => {
+		if (!pingObject[ping.Group]) pingObject[ping.Group] = [];
+		pingObject[ping.Group].push(ping);
+	})
+
+	return pingObject;
+
+	//return [...new Set(Object.values(pingList).map(ping => ping.Group))];
+
+	// const sourceList = {};
+	// pingList.forEach(pair => {
+	// 	sourceList[pair.IP] = pair.Name;
+	// })
+	// return sourceList;
+}
+
 function ports(type) {
 	const Ports = loadData('Ports');
 	const Switches = switches(type).map(arr => arr.Name);
@@ -763,7 +741,7 @@ function ports(type) {
 
 
 function expressRoutes(expressApp) {
-	expressApp.set('views', path.join(__main, 'views'));
+	expressApp.set('views', path.join(__dirname, 'views'));
 	expressApp.set('view engine', 'ejs');
 	expressApp.use(express.json());
 	expressApp.use(express.static(__static));
@@ -780,6 +758,7 @@ function expressRoutes(expressApp) {
 			webEnabled:config.get('webEnabled'),
 			version: version,
 			pings:syslogSourceList(),
+			pingGroups:syslogSourceGroups(),
 			background:'bg-dark'
 		});
 	});
@@ -943,6 +922,7 @@ async function doMessage(msgObj, socket) {
 				break;
 			case 'syslog':
 				getSyslog(header, payload).then(data => {
+					logger.debug(`Retrieved ${data.logs.length} SYSLOG messages`);
 					webServer.sendTo(socket, data);
 				})
 			default:
@@ -1050,14 +1030,27 @@ async function getTemperature(header, payload, type) {
 }
 
 async function getSyslog(header, payload) {
-	logger.log(`Getting syslogs for ${header.system}, ips: ${payload.ips.join(',')}`, 'D');
+	//logger.log(`Getting syslogs for ${header.system}, ips: ${payload.ips.map(ip => `'${ip}'`).join(',')}`, 'D');
 	const from = payload.from;
 	const to = payload.to;
 	let whereIP = '';
 	if (payload.ips.length > 0 && !payload.ips.includes('all')) {
-		const ips = payload.ips.map(ip => `'${ip}'`);
+		const ips = [];
+		payload.ips.forEach(ip => {
+			if (ip.includes(',')) ip.split(',').forEach(newIP => ips.push(newIP));
+			else ips.push(`'${ip}'`);
+		})
 		whereIP = `AND \`ip\` IN (${ips.join(',')})`
 	}
+	if (payload.ipsEx.length > 0 && !payload.ipsEx.includes('none')) {
+		const ipsEx = [];
+		payload.ipsEx.forEach(ip => {
+			if (ip.includes(',')) ip.split(',').forEach(newIP => ipsEx.push(newIP));
+			else ipsEx.push(`'${ip}'`);
+		})
+		whereIP += `AND \`ip\` NOT IN (${ipsEx.join(',')})`
+	}
+	logger.log(`Getting syslogs for ${header.system}, where: ${whereIP}`, 'D');
 	const dateQuery = `SELECT * FROM \`syslog\` WHERE time BETWEEN FROM_UNIXTIME(${from}) AND FROM_UNIXTIME(${to}) AND \`system\` = '${header.system}' ${whereIP}; `;
 
 	if (!config.get('localDataBase')) return {
@@ -1080,7 +1073,7 @@ async function getSyslog(header, payload) {
 		};
 	}
 
-	return dataObj = {
+	return {
 		'command': 'data',
 		'data': 'syslog',
 		'system': header.system,
@@ -1128,7 +1121,7 @@ function makeHeader() {
 }
 
 function distributeData(type, data) {
-	sendCloudData({'command':'log', 'type':type, 'data':data});
+	sendCouldData({'command':'log', 'type':type, 'data':data});
 	webServer.sendToAll({'command':'log', 'type':type, 'data':data});
 }
 
@@ -1193,7 +1186,7 @@ async function switchFlap(switchType) {
 		}
 	}
 	data.mac[switchType] = filteredDevices;
-	const type = switchType == 'Media' ? 'flap' : 'flap_control';
+	const type = switchType == 'Media' ? 'mac' : 'mac_control';
 	distributeData(type, data.mac[switchType]);
 }
 
@@ -1337,12 +1330,13 @@ async function switchEnv(switchType) {
 	distributeData(typeF, data.fans[switchType]);
 }
 
-async function switchInterfaces(switchType) {
+async function switchInterfaces(switchType, monitoringOnly) {
 	const Switches = switches(switchType);
 	logger.log('Checking switch interfaces', 'A');
 	const promisses = [];
 	for (let i = 0; i < Switches.length; i++) {
-		promisses.push(doApi('interfaces', Switches[i]));
+		if (monitoringOnly) promisses.push(doApi('interfacesMonitoring', Switches[i]));
+		else promisses.push(doApi('interfaces', Switches[i]));
 	}
 	const values = await Promise.all(promisses);
 	const filteredPorts = {};
@@ -1366,16 +1360,48 @@ async function switchInterfaces(switchType) {
 	}
 	ports(switchType).forEach(port => {
 		try {
+			const group = port.Group ? port.Group : 'DEFAULT';
 			if (filteredPorts[switchType] === undefined) filteredPorts[switchType] = {};
-			if (filteredPorts[switchType][port.Switch] === undefined) filteredPorts[switchType][port.Switch] = {};
+			if (filteredPorts[switchType][group] === undefined) filteredPorts[switchType][group] = {};
+			if (filteredPorts[switchType][group][port.Switch] === undefined) filteredPorts[switchType][group][port.Switch] = {};
 			if (Object.keys(data.interfaces[switchType][port.Switch]).includes(port.Port)) {
-				filteredPorts[switchType][port.Switch][port.Port] = data.interfaces[switchType][port.Switch][port.Port];
+				filteredPorts[switchType][group][port.Switch][port.Port] = data.interfaces[switchType][port.Switch][port.Port];
 			}
 		} catch (error) {
-			logger.warn("Couldn't parse interfaces data");
+			logger.warn("Couldn't parse interfaces data", error);
 		}
 
 	})
+
+	const allIfaces = data.interfaces[switchType];
+
+	for (const switchName in allIfaces) {
+		if (!Object.hasOwnProperty.call(allIfaces, switchName)) return;
+		const ifaces = allIfaces[switchName];
+		for (const ifaceName in ifaces) {
+			if (!Object.hasOwnProperty.call(ifaces, ifaceName)) return;
+			const iface = ifaces[ifaceName];
+			const bandwidthThreshold = 0.95;
+			if ((iface.inRate/iface.maxRate > bandwidthThreshold) || (iface.outRate/iface.maxRate > bandwidthThreshold)) {
+				if (filteredPorts[switchType]['WARNING'] === undefined) filteredPorts[switchType]['WARNING'] = {};
+				if (filteredPorts[switchType]['WARNING'][switchName] === undefined) filteredPorts[switchType]['WARNING'][switchName] = {};
+				filteredPorts[switchType]['WARNING'][switchName][ifaceName] = iface;
+			}
+			const discardThreshold = 1000;
+			if ((iface.outDiscards > discardThreshold) || (iface.inDiscards > discardThreshold)) {
+				if (filteredPorts[switchType]['WARNING'] === undefined) filteredPorts[switchType]['WARNING'] = {};
+				if (filteredPorts[switchType]['WARNING'][switchName] === undefined) filteredPorts[switchType]['WARNING'][switchName] = {};
+				filteredPorts[switchType]['WARNING'][switchName][ifaceName] = iface;
+			}
+			const errorsThreshold = 1000;
+			if ((iface.outErrors > discardThreshold) || (iface.inErrors > discardThreshold)) {
+				if (filteredPorts[switchType]['WARNING'] === undefined) filteredPorts[switchType]['WARNING'] = {};
+				if (filteredPorts[switchType]['WARNING'][switchName] === undefined) filteredPorts[switchType]['WARNING'][switchName] = {};
+				filteredPorts[switchType]['WARNING'][switchName][ifaceName] = iface;
+			}
+		}
+	}
+
 	const type = switchType == 'Media' ? 'interfaces' : 'interfaces_control';
 	distributeData(type, filteredPorts[switchType]);
 }
@@ -1477,7 +1503,7 @@ function checkDevices(switchType, fromList) {
 	distributeData(type, data.devices[switchType]);
 }
 
-function doApi(request, Switch) {
+async function doApi(request, Switch) {
 	const ip = Switch.IP;
 	const user = Switch.User;
 	const pass = Switch.Pass;
@@ -1486,13 +1512,52 @@ function doApi(request, Switch) {
 	let protocol = 'http';
 	if (!SwitchRequests[OS][request]) return;
 
+	let command = SwitchRequests[OS][request];
+
+	if (request == "interfacesMonitoring") {
+		const portsArray = [];
+		ports(Switch.Type).forEach(port => {
+			if (port.Switch == Switch.Name) portsArray.push(port.Port);
+		})
+		command += ' ';
+		command += portsArray.join(',');
+	}
+
+	const body = {
+		'NXOS': {
+			"jsonrpc": "2.0",
+			"method": "cli",
+			"params": {
+				"cmd": command,
+				"version": 1
+			},
+			"id": 1
+		},
+		'EOS': {
+			'jsonrpc': '2.0',
+			'method': 'runCmds',
+			'params': {
+				'format': 'json',
+				'timestamps': false,
+				'autoComplete': false,
+				'expandAliases': false,
+				'cmds': [
+					'enable',
+					command
+				],
+				'version': 1
+			},
+			'id': ''
+		}
+	}
+
 	const options = {
 		method: 'POST',
 		headers: {
 			'content-type': 'application/json-rpc',
 			'Authorization': 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64')
 		},
-		body: JSON.stringify(SwitchRequests[OS][request]),
+		body: JSON.stringify(body[OS]),
 	}
 
 	switch (OS) {
@@ -1508,16 +1573,18 @@ function doApi(request, Switch) {
 		default:
 			break;
 	}
-	logger.log(`Polling switch API endpoint ${protocol}://${ip}/${endPoint} for data`, 'D');
+	logger.log(`Polling switch API endpoint ${protocol}://${ip}/${endPoint} for ${request} data`, 'D');
 
-	return fetch(`${protocol}://${ip}/${endPoint}`, options).then((response) => {
-		if (response.status === 200) {
-			return response.json().then((jsonRpcResponse) => { return jsonRpcResponse; });
-		}
-	}).catch((error)=>{
+	try {		
+		const response = await fetch(`${protocol}://${ip}/${endPoint}`, options);
+		if (response.status !== 200) throw new Error(`Error connection to server, repsonse code: ${response.status}`);
+		const jsonRpcResponse = await response.json();
+		if (jsonRpcResponse.error) throw new Error(JSON.stringify(jsonRpcResponse.error.data[1], null, 4))
+		return jsonRpcResponse
+	} catch (error) {
 		logger.log(`Failed to connect to switch on: ${ip}`, 'E');
 		logger.object(error, 'D');
-	});
+	}
 }
 
 
@@ -1526,19 +1593,42 @@ function doApi(request, Switch) {
 function localPings() {
 	if (config.get('devMode')) return;
 	const hosts = pings();
-	hosts.forEach(function (host) {
-		ping.promise.probe(host.IP, {
-			timeout: 10
-		}).then(function(res) {
-			logger.log(`IP: ${host.IP}, Online: ${res.alive}`, 'A');
-			distributeData('localPing', {
-				'status':res.alive,
-				'IP':host.IP,
-				'Name':host.Name,
-				'SSH':host.SSH,
-				'HTTP':host.HTTP,
-				'HTTPS':host.HTTPS
-			});
+	hosts.forEach(async host => {
+		const response = await ping.promise.probe(host.IP, {
+			timeout: 10,
+			extra: ['-i', '2']
+		})
+		logger.log(`IP: ${host.IP}, Online: ${response.alive}`, 'A');
+		if (!response.alive) {
+			await sleep(2);
+			const recheckOne = await ping.promise.probe(host.IP, {
+				timeout: 10,
+				extra: ['-i', '2']
+			})
+			if (recheckOne.alive) response.alive = true;
+			else {
+				await sleep(2);
+				const recheckTwo = await ping.promise.probe(host.IP, {
+					timeout: 10,
+					extra: ['-i', '2']
+				})
+				if (recheckTwo.alive) response.alive = true;
+			}
+		}
+		if (!localPingsData[host.IP]) localPingsData[host.IP] = {'lastChange': Date.now()};
+		if (localPingsData[host.IP].status != response.alive) {
+			localPingsData[host.IP].lastChange = Date.now();
+			localPingsData[host.IP].status = response.alive;
+		}
+		distributeData('localPing', {
+			'status':response.alive,
+			'IP':host.IP,
+			'Name':host.Name,
+			'Group':host.Group,
+			'SSH':host.SSH,
+			'HTTP':host.HTTP,
+			'HTTPS':host.HTTPS,
+			'lastChange': localPingsData[host.IP].lastChange
 		});
 	});
 }
@@ -1624,7 +1714,7 @@ async function doIQTemps(Temps) {
 			logger.log('Warning: Temperature over warning limit, sending SMS', 'W');
 			sendSms(`Commitment to environment sustainability failed, MCR IS MELTING: ${tempAvg} deg C`);
 		}
-		sendCloudData({'command':'log', 'type':'temperature', 'data':Temps});
+		sendCouldData({'command':'log', 'type':'temperature', 'data':Temps});
 
 		socketSend.average = tempAvg;
 		const time = new Date().getTime();
@@ -1729,7 +1819,7 @@ async function doGenericTemps(Temps) {
 			logger.log('Warning: Temperature over warning limit, sending SMS', 'W');
 			sendSms(`Commitment to environment sustainability failed, MCR IS MELTING: ${tempAvg} deg C`);
 		}
-		sendCloudData({'command':'log', 'type':'temperature', 'data':webTemps});
+		sendCouldData({'command':'log', 'type':'temperature', 'data':webTemps});
 
 		socketSend.average = tempAvg;
 		const time = new Date().getTime();
@@ -1749,13 +1839,13 @@ async function doGenericTemps(Temps) {
 function webLogPing() {
 	if (!config.get('webEnabled')) return;
 	logger.log('Pinging webserver', 'A');
-	sendCloudData({'command':'log', 'type':'ping'});
+	sendCouldData({'command':'log', 'type':'ping'});
 }
 
 function webLogBoot() {
 	if (!config.get('webEnabled')) return;
 	logger.log('Sending boot');
-	sendCloudData({'command':'log', 'type':'boot'});
+	sendCouldData({'command':'log', 'type':'boot'});
 }
 
 function sendSms(msg) {
@@ -1798,7 +1888,7 @@ async function connectToWebServer(retry = false) {
 				let payload = {};
 				payload.command = 'register';
 				payload.name = config.get('systemName');
-				sendCloudData(payload);
+				sendCouldData(payload);
 				resolve();
 				logger.log(`${logger.g}${cloudServer.address}${logger.reset} Established a connection to webserver`, 'S');
 				cloudServer.connected = true;
@@ -1817,7 +1907,7 @@ async function connectToWebServer(retry = false) {
 				}
 				switch (msgObj.payload.command) {
 				case 'ping':
-					sendCloudData({
+					sendCouldData({
 						'command': 'pong'
 					});
 					break;
@@ -1870,7 +1960,7 @@ async function connectToWebServer(retry = false) {
 	return promise;
 }
 
-function sendCloudData(payload) {
+function sendCouldData(payload) {
 	if (!config.get('webEnabled')) return;
 	let packet = {};
 	packet.header = makeHeader();
@@ -1880,50 +1970,6 @@ function sendCloudData(payload) {
 	}
 }
 
-
-/* Config Functions */
-
-
-async function configQuestion(question, current, options) {
-	mainWindow.webContents.send('configQuestion', JSON.stringify({
-		'question': question,
-		'current': current,
-		'options': options
-	}));
-	const awaitMessage = new Promise (resolve => {
-		ipcMain.once('configMessage', (event, value) => {
-			if (value == 'true') value = true;
-			if (value == 'false') value = false;
-			const newVal = parseInt(value);
-			if (!isNaN(newVal)) value = newVal;
-			resolve(value);
-		});
-	});
-	return awaitMessage;
-}
-
-async function configDone() {
-	mainWindow.webContents.send('configDone', true);
-	logger.setConf({
-		'createLogFile': config.get('createLogFile'),
-		'logsFileName': 'ArgosLogging',
-		'configLocation': path.join(app.getPath('documents'), 'ArgosData'),
-		'loggingLevel': config.get('loggingLevel'),
-		'debugLineNum': config.get('debugLineNum'),
-	});
-	if (configLoaded) mainWindow.webContents.send('loaded', `http://localhost:${config.get('port')}`);
-	if (config.get('localDataBase')) {
-		SQL = new SQLSession(
-			config.get('dbHost'),
-			config.get('dbPort'),
-			config.get('dbUser'),
-			config.get('dbPass'),
-			config.get('dbName'),
-			logs
-		);
-		await SQL.init(tables);
-	}
-}
 
 /* Utility Functions */
 
@@ -1991,9 +2037,9 @@ function clearEmpties(object) {
 	return object;
 }
 
-async function startLoopAfterDelay(callback, seconds, ...arguments) {
-	setInterval(callback, seconds * 1000, ...arguments);
-	callback(...arguments);
+async function startLoopAfterDelay(callback, seconds, ...args) {
+	setInterval(callback, seconds * 1000, ...args);
+	callback(...args);
 	logger.log('Starting '+callback.name, 'A');
 	await sleep(1);
 }
@@ -2002,273 +2048,6 @@ async function sleep(seconds) {
 	await new Promise (resolve => setTimeout(resolve, 1000*seconds));
 }
 
-
-const EOS = {
-	handleLLDP: (result, switchType, switchName) => {
-		const neighbors = result.lldpNeighbors;
-		data.neighbors[switchType][switchName] = {};
-		const thisSwitch = data.neighbors[switchType][switchName];
-		for (let j in neighbors) {
-			const neighbor = neighbors[j];
-			if (!Object.hasOwnProperty.call(neighbor, 'port')) continue;
-			if (neighbor.port.includes('Ma')) continue;
-			thisSwitch[neighbor.port] = { lldp: neighbor.neighborDevice };
-		}
-	},
-	handleFibre: (filteredDevices, result, switchType, switchName) => {
-		const devices = data.neighbors[switchType][switchName];
-		const keys = Object.keys(devices);
-		const interfaces = result.result[0].interfaces;
-		for (let interfaceName in interfaces) {
-			const interface = interfaces[interfaceName];
-			if ('rxPower' in interface === false) continue
-			if (!keys.includes(interfaceName)) devices[interfaceName] = {};
-			devices[interfaceName].port = interfaceName;
-			devices[interfaceName].description = getDescription(interfaceName, switchType, switchName);
-			devices[interfaceName].rxPower = interface.rxPower.toFixed(1);
-			if ('txPower' in interface) devices[interfaceName].txPower = interface.txPower.toFixed(1);
-		}
-		for (let deviceName in devices) {
-			const device = devices[deviceName];
-			if ('txPower' in device === false) continue;
-			if ('rxPower' in device === false) continue;
-			if (device.rxPower < -9 && device.rxPower > -30 && device.txPower > -30) {
-				device.switch = switchName;
-				filteredDevices.push(device);
-			}
-		}
-	},
-	handleFlap: (filteredDevices, result, switchType, switchName) => {
-		let devices = data.neighbors[switchType][switchName];
-		const keys = Object.keys(devices);
-		const split = result.result[1].output.split('\n');
-		for (let i = 8; i < split.length; i++) {
-			const t = split[i];
-			const mac = {
-				int: t.substr(0, 19).trim(),
-				config: t.substr(19, 7).trim(),
-				oper: t.substr(26, 9).trim(),
-				phy: t.substr(34, 16).trim(),
-				mac: t.substr(50, 6).trim(),
-				last: t.substr(54, t.length).trim()
-			};
-
-			if (mac.config !== 'Up') continue;
-			if (!keys.includes(mac.int)) devices[mac.int] = {};
-			devices[mac.int].mac = {};
-			devices[mac.int].mac.operState = mac.oper;
-			devices[mac.int].mac.phyState = mac.phy;
-			devices[mac.int].mac.macFault = mac.mac;
-			devices[mac.int].mac.lastChange = mac.last;
-			devices[mac.int].description = getDescription(mac.int, switchType, switchName);
-			devices[mac.int].port = mac.int;
-		}
-		devices = clearEmpties(devices);
-		for (let deviceNumber in devices) {
-			const device = devices[deviceNumber]
-			if (device.mac === undefined) continue;
-			if(!('lastChange' in device.mac)) logger.log(device+' seems to have an issue','W');
-			const time = device.mac.lastChange.split(':');
-			const timeTotal = parseInt(time[0]) * 3600 + parseInt(time[1]) * 60 + parseInt(time[2]);
-			if (timeTotal > 300) continue;
-			device.switch = switchName;
-			filteredDevices.push(device);
-		}
-	},
-	handlePower: (result, switchType, switchName) => {
-		const power = {};
-		const PSUs = result.result[1].powerSupplies;
-		for (const PSUIndex in PSUs) {
-			if (Object.hasOwnProperty.call(PSUs, PSUIndex)) {
-				const PSU = PSUs[PSUIndex];
-				const inAlert = PSU.status == "ok" ? false : true;
-				power[PSUIndex] = {
-					"outputPower": PSU.outputPower,
-					"inAlert": inAlert,
-					"uptime": PSU.uptime
-				};
-			}
-		}
-		data.power[switchType][switchName] = power;
-	},
-	handleTemperature: (result, switchType, switchName) => {
-		const slots = result.result[1].cardSlots;
-		const temperature = {};
-		slots.forEach(slot => {
-			const temps = slot.tempSensors.map(sensor => sensor.currentTemperature);
-			const alerts = slot.tempSensors.filter(sensor => sensor.inAlertState);
-			const inAlert = alerts.length > 0 ? false : true;
-			const temp = temps.reduce((partialSum, a) => partialSum + a, 0)/temps.length;
-			temperature[`${slot.entPhysicalClass} ${slot.relPos}`] = {
-				"temp": temp,
-				"inAlert": inAlert
-			};
-		});
-		data.temperature[switchType][switchName] = temperature;
-	},
-	handleFans: (result, switchType, switchName) => {
-		const psuSlots = result.result[1].powerSupplySlots;
-		const traySlots = result.result[1].fanTraySlots;
-		const fans = {};
-		psuSlots.forEach(slot => {
-			const speeds = slot.fans.map(fan => fan.actualSpeed);
-			const speed = speeds.reduce((partialSum, a) => partialSum + a, 0)/speeds.length
-			const inAlert = slot.status !== "ok" ? false : true;
-			fans[slot.label] = {
-				"speed": speed,
-				"inAlert": inAlert
-			};
-		});
-		traySlots.forEach(slot => {
-			const speeds = slot.fans.map(fan => fan.actualSpeed);
-			const speed = speeds.reduce((partialSum, a) => partialSum + a, 0)/speeds.length
-			const inAlert = slot.status !== "ok" ? false : true;
-			fans['Tray'+slot.label] = {
-				"speed": speed,
-				"inAlert": inAlert
-			};
-		});
-		data.fans[switchType][switchName] = fans;
-	},
-	handleInterfaces: (result, switchType, switchName) => {
-		const interfaces = result.result[1].interfaces;
-		data.interfaces[switchType][switchName] = {};
-		for (const interfaceName in interfaces) {
-			if (interfaces.hasOwnProperty.call(interfaces, interfaceName)) {
-				const interface = interfaces[interfaceName];
-				if (interface.hardware !== "ethernet") continue;
-				data.interfaces[switchType][switchName][interfaceName] = {
-					"connected": interface.interfaceStatus == "connected" ? true : false,
-					"description": interface.description,
-					"inRate": interface.interfaceStatistics.inBitsRate,
-					"outRate": interface.interfaceStatistics.outBitsRate,
-					"maxRate": interface.bandwidth,
-					"lastFlap": interface.lastStatusChangeTimestamp,
-					"flapCount": interface.interfaceCounters.linkStatusChanges,
-					"outErrors": interface.interfaceCounters.totalOutErrors,
-					"outDiscards": interface.interfaceCounters.outDiscards,
-					"inErrors": interface.interfaceCounters.totalInErrors,
-					"inDiscards": interface.interfaceCounters.inDiscards
-				}
-			}
-		}
-	}
-}
-
-const NXOS = {
-	handleLLDP: (result, switchType, switchName) => {
-		const neighbors = result.body.TABLE_cdp_neighbor_brief_info.ROW_cdp_neighbor_brief_info;
-		const switchTypeObject = data.neighbors[switchType];
-		switchTypeObject[switchName] = {};
-		const thisSwitch = data.neighbors[switchType][switchName];
-		for (let j in neighbors) {
-			const neighbor = neighbors[j];
-			if (!Object.hasOwnProperty.call(neighbor, 'intf_id')) continue;
-			if (neighbor.intf_id?.includes('mgmt')) continue;
-			thisSwitch[neighbor.intf_id] = {
-				'interface': neighbor.intf_id,
-				'lldp': neighbor.device_id,
-				'model': neighbor.platform_id,
-				'port': neighbor.port_id
-			};
-		}
-	},
-	handleFibre: (filteredDevices, result, switchType, switchName) => {
-		const devices = data.neighbors[switchType][switchName];
-		const keys = Object.keys(devices);
-		const interfaces = result.result.body.TABLE_interface.ROW_interface;
-		for (const interfaceNum in interfaces) {
-			const interface = interfaces[interfaceNum];
-			const interfaceName = interface.interface;
-			if (interface.TABLE_lane === undefined) continue;
-			const lanes = Array.isArray(interface.TABLE_lane.ROW_lane) ? interface.TABLE_lane.ROW_lane : [interface.TABLE_lane.ROW_lane];
-			for (let laneNumber = 0; laneNumber < lanes.length; laneNumber++) {
-				const lane = lanes[laneNumber];
-				const interfaceLaneName = lanes.length > 1 ? `${interfaceName}/${laneNumber+1}` : interfaceName;
-				if ('rx_pwr' in lane === false) continue
-				if (!keys.includes(interfaceLaneName)) devices[interfaceLaneName] = {};
-				devices[interfaceLaneName].port = interfaceLaneName;
-				devices[interfaceLaneName].description = getDescription(interfaceLaneName, switchType, switchName);
-				devices[interfaceLaneName].rxPower = Number(lane.rx_pwr).toFixed(1);
-				if ('tx_pwr' in lane) devices[interfaceLaneName].txPower = Number(interface.tx_pwr).toFixed(1);
-			}
-		}
-		for (let deviceNumber in devices) {
-			const device = devices[deviceNumber];
-			if ('txPower' in device === false) continue;
-			if ('rxPower' in device === false) continue;
-			if (device.rxPower > -11) continue;
-			device.switch = switchName;
-			filteredDevices.push(device);
-		}
-	},
-	handleFlap: (filteredDevices, result, switchType, switchName) => {
-		let devices = data.neighbors[switchType][switchName];
-		const keys = Object.keys(devices);
-		const split = result.output.split('\n');
-		for (let i = 8; i < split.length; i++) {
-			const t = split[i];
-			const mac = {
-				int: t.substr(0, 19).trim(),
-				config: t.substr(19, 7).trim(),
-				oper: t.substr(26, 9).trim(),
-				phy: t.substr(34, 16).trim(),
-				mac: t.substr(50, 6).trim(),
-				last: t.substr(54, t.length).trim()
-			};
-
-			if (mac.config !== 'Up') continue;
-			if (keys.includes(mac.int)) devices[mac.int] = {};
-			devices[mac.int].mac = {};
-			devices[mac.int].mac.operState = mac.oper;
-			devices[mac.int].mac.phyState = mac.phy;
-			devices[mac.int].mac.macFault = mac.mac;
-			devices[mac.int].mac.lastChange = mac.last;
-			devices[mac.int].description = getDescription(mac.int, switchType, switchName);
-			devices[mac.int].port = mac.int;
-		}
-		devices = clearEmpties(devices);
-		for (let deviceNumber in devices) {
-			const device = devices[deviceNumber]
-			if (device.mac === undefined) continue;
-			if(!('lastChange' in device.mac)) logger.log(device+' seems to have an issue','W');
-			const time = device.mac.lastChange.split(':');
-			const timeTotal = parseInt(time[0]) * 3600 + parseInt(time[1]) * 60 + parseInt(time[2]);
-			if (timeTotal > 300) continue;
-			device.switch = switchName;
-			filteredDevices.push(device);
-		}
-	},
-	handlePower: (result, switchType, switchName) => {
-		logger.object(result);
-	},
-	handleTemperature: (result, switchType, switchName) => {
-		logger.object(result);
-	},
-	handleFans: (result, switchType, switchName) => {
-		logger.object(result);
-	},
-	handleInterfaces: (result, switchType, switchName) => {
-		const interfaces = result.result.body.TABLE_interface.ROW_interface;
-		data.interfaces[switchType][switchName] = {};
-		interfaces.forEach(interface => {
-			const interfaceName = interface.interface;
-			data.interfaces[switchType][switchName][interfaceName] = {
-				"connected": interface.state == "up" ? true : false,
-				"description": interface.desc,
-				"inRate": interface.eth_inrate1_bits,
-				"outRate": interface.eth_outrate1_bits,
-				"maxRate": interface.eth_bw,
-				"lastFlap": interface.eth_link_flapped,
-				"flapCount": 1,
-				"outErrors": interface.eth_outerr,
-				"outDiscards": interface.eth_outdiscard,
-				"inErrors": interface.eth_inerr,
-				"inDiscards": interface.eth_indiscard
-			}
-		})
-	}
-}
 
 
 

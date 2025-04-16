@@ -3,11 +3,26 @@
         <div class="d-flex justify-content-between flex-wrap">
             <h4>Syslogs</h4>
             <div class="buttonBox d-flex gap-2 flex-wrap">
-                <div class="d-flex align-self-center">
+                <div class="d-flex align-self-center gap-2 align-items-center">
                     <button id="syslogHistogramToggle" class="btn btn-sm btn-secondary me-2"></button>
-                    <label for="syslogSelect" class="pe-2 pt-1">Devices</label>
-                    <select id="syslogSelect" multiple>
+                    <label for="syslogSelect">Devices</label>
+                    <select id="syslogSelect" multiple class="me-2">
                         <option value="all" selected="selected">All</option>
+                        <% Object.keys(pingGroups).forEach(group => { %>
+                            <option value="<%- pingGroups[group].map(ping => `'${ping.IP}'`).join(',') %>"><%- group %>​</option>
+                        <% }); %>
+
+                        <% Object.keys(pings).forEach(IP => { %>
+                            <option value="<%- IP %>"><%- pings[IP] %></option>
+                        <% }); %>
+                    </select>
+                    <label for="syslogSelectEx">Exclude Devices</label>
+                    <select id="syslogSelectEx" multiple>
+                        <option value="none" selected="selected">None</option>
+                        <% Object.keys(pingGroups).forEach(group => { %>
+                            <option value="<%- pingGroups[group].map(ping => `'${ping.IP}'`).join(',') %>"><%- group %>​</option>
+                        <% }); %>
+
                         <% Object.keys(pings).forEach(IP => { %>
                             <option value="<%- IP %>"><%- pings[IP] %></option>
                         <% }); %>
@@ -17,6 +32,7 @@
                     <span class="pe-2 pt-1">During the last</span>
                     <select id="syslogDurationPreset" class="btn bg-secondary text-light d-inline active">
                         <option value="live" selected>Live updates</option>
+                        <option value="custom" selected>Custom</option>
                         <option value="3600">1 Hour</button>
                         <option value="7200">2 Hours</button>
                         <option value="21600">6 Hours</button>
@@ -28,8 +44,8 @@
                         <option value="290304000">All</button>
                     </select>
                 </div>
-                <div class="d-flex align-self-center">
-                    <span class="pe-2">Or select from</span>
+                <div class="d-flex align-self-center d-none" id="syslogCustom">
+                    <span class="pe-2">From</span>
                     <button id="syslogFromPick" class="btn btn-secondary btn-sm"></button>
                     <input type="hidden" id="syslogFrom" value="">
                     <span class="px-2">until</span>

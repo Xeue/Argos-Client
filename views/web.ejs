@@ -26,6 +26,7 @@
             <% }); %>
         ]
         let syslogSourceList = <%- JSON.stringify(pings) %>;
+        let syslogSourceListGroups = <%- JSON.stringify(pingGroups) %>;
         const webEnabled = <%=webEnabled%>;
         const webSocketEndpoint = '<%=webSocketEndpoint%>';
         const secureWebsockets = <%=secureWebSocketEndpoint%>;
@@ -46,11 +47,11 @@
     <link id="favicon_48" rel="icon" href="img/icon/icon.svg" sizes="256x256">
 </head>
 
-<body class="h-100 d-flex flex-column <%-background%>">
+<body id="mainCont" class="h-100 d-flex flex-column <%-background%>">
     <div id="loading" class="hidden"></div>
 
     <nav class="drag navbar navbar-expand-lg navbar-dark bg-title px-2">
-        <a class="navbar-brand" href="#">
+        <a class="navbar-brand chilton" href="/">
             <img src="img/icon/icon.svg" class="d-inline-block align-top" alt="" width="30" height="30">
             Argos
         </a>
@@ -61,16 +62,21 @@
         <div class="d-flex gap-2 justify-content-center w-100 flex-wrap" role="tablist">
             <button class="btn btn-secondary navTab active" id="nav-media-tab" data-bs-toggle="tab" data-bs-target="#nav-media" type="button" role="tab" aria-controls="nav-media" aria-selected="true">Media</button>
             <button class="btn btn-secondary navTab" id="nav-control-tab" data-bs-toggle="tab" data-bs-target="#nav-control" type="button" role="tab" aria-controls="nav-control" aria-selected="true">Control</button>
+            <button class="btn btn-secondary navTab" id="nav-interfaces-tab" data-bs-toggle="tab" data-bs-target="#nav-interfaces" type="button" role="tab" aria-controls="nav-interfaces" aria-selected="true">Interfaces</button>
             <button class="btn btn-secondary navTab" id="nav-temps-tab" data-bs-toggle="tab" data-bs-target="#nav-temps" type="button" role="tab" aria-controls="nav-temps" aria-selected="true">Temps/UPS</button>
             <button class="btn btn-secondary navTab" id="nav-pings-tab" data-bs-toggle="tab" data-bs-target="#nav-pings" type="button" role="tab" aria-controls="nav-pings" aria-selected="true">Pings</button>
             <button class="btn btn-secondary navTab" id="nav-debug-tab" data-bs-toggle="tab" data-bs-target="#nav-debug" type="button" role="tab" aria-controls="nav-debug" aria-selected="true">Debug</button>
             <button class="btn btn-secondary navTab" id="nav-syslog-tab" data-bs-toggle="tab" data-bs-target="#nav-syslog" type="button" role="tab" aria-controls="nav-syslog" aria-selected="true">Syslog</button>
-            <button class="btn btn-secondary" id="toggleConfig">Edit Devices</button>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-primary" id="toggleConfig">Config</button>
+            <button class="btn btn-secondary" id="fullscreen">Fullscreen</button>
         </div>
     </nav>
     <main class="tab-content container-fluid py-3 overflow-auto">
         <%- include('tabs/media.ejs'); %>
         <%- include('tabs/control.ejs'); %>
+        <%- include('tabs/interfaces.ejs'); %>
         <%- include('tabs/temps.ejs'); %>
         <%- include('tabs/pings.ejs'); %>
         <%- include('tabs/debug.ejs'); %>

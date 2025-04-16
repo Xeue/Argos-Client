@@ -1,6 +1,6 @@
-const udp = require('dgram');
+import udp from 'dgram';
 
-class SysLogServer {
+export default class SysLogServer {
     constructor(
         logger,
 		doSysLogMessage = () => {}
@@ -35,5 +35,3 @@ class SysLogServer {
         return server;
     }
 }
-
-module.exports.SysLogServer = SysLogServer;

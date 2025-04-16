@@ -18,7 +18,7 @@ templates.nameIP = `<% for(i = 0; i < devices.length; i++) { %>
     <td data-type="text" data-key="Name" data-value="<%-devices[i].Name%>"><%-devices[i].Name%></td>
     <td data-type="text" data-key="IP" data-value="<%-devices[i].IP%>"><%-devices[i].IP%></td>
     <td>
-      <button type="button" class="btn btn-danger editConfig w-50">Edit</button>
+      <button type="button" class="btn btn-primary editConfig w-50">Edit</button>
       <button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
     </td>
   </tr>
@@ -30,7 +30,7 @@ templates.sensors = `<% for(i = 0; i < devices.length; i++) { %>
 	  <td data-type="text" data-key="IP" data-value="<%-devices[i].IP%>"><%-devices[i].IP%></td>
 	  <td data-type="select" data-key="Type" data-value="<%-devices[i].Type%>" data-options="IQ Frame,Will N Sensor"><%-devices[i].Type%></td>
 	  <td>
-		<button type="button" class="btn btn-danger editConfig w-50">Edit</button>
+		<button type="button" class="btn btn-primary editConfig w-50">Edit</button>
 		<button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
 	  </td>
 	</tr>
@@ -40,11 +40,12 @@ templates.pings = `<% for(i = 0; i < devices.length; i++) { %>
 	<tr data-index="<%=i%>" data-template="pings">
 	  <td data-type="text" data-key="Name" data-value="<%-devices[i].Name%>"><%-devices[i].Name%></td>
 	  <td data-type="text" data-key="IP" data-value="<%-devices[i].IP%>"><%-devices[i].IP%></td>
+	  <td data-type="text" data-key="Group" data-value="<%-devices[i].Group%>"><%-devices[i].Group%></td>
 	  <td data-type="check" data-key="SSH" data-value="<%-devices[i].SSH%>" readonly></td>
 	  <td data-type="check" data-key="HTTP" data-value="<%-devices[i].HTTP%>" readonly></td>
 	  <td data-type="check" data-key="HTTPS" data-value="<%-devices[i].HTTPS%>" readonly></td>
 	  <td>
-		<button type="button" class="btn btn-danger editConfig w-50">Edit</button>
+		<button type="button" class="btn btn-primary editConfig w-50">Edit</button>
 		<button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
 	  </td>
 	</tr>
@@ -59,7 +60,7 @@ templates.switch = `<% for(i = 0; i < devices.length; i++) { %>
 	<td data-type="select" data-key="Type" data-value="<%-devices[i].Type%>" data-options="Control,Media"><%-devices[i].Type%></td>
 	<td data-type="select" data-key="OS" data-value="<%-devices[i].OS%>" data-options="EOS,NXOS,IOS"><%-devices[i].OS%></td>
     <td>
-      <button type="button" class="btn btn-danger editConfig w-50">Edit</button>
+      <button type="button" class="btn btn-primary editConfig w-50">Edit</button>
       <button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
     </td>
   </tr>
@@ -70,7 +71,7 @@ templates.devices = `<% for(i = 0; i < devices.length; i++) { %>
     <td data-type="text" data-key="name" data-value="<%-devices[i].name%>"><%-devices[i].name%></td>
     <td data-type="text" data-key="description" data-value="<%-devices[i].description%>"><%-devices[i].description%></td>
     <td>
-      <button type="button" class="btn btn-danger editConfig w-50">Edit</button>
+      <button type="button" class="btn btn-primary editConfig w-50">Edit</button>
       <button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
     </td>
   </tr>
@@ -80,8 +81,9 @@ templates.ports = `<% for(i = 0; i < devices.length; i++) { %>
 	<tr data-index="<%=i%>" data-template="ports">
 		<td data-type="select" data-key="Switch" data-value="<%-devices[i].Switch%>" data-options="<%-switches.join(',')%>"><%-devices[i].Switch%></td>
 		<td data-type="text" data-key="Port" data-value="<%-devices[i].Port%>"><%-devices[i].Port%></td>
+		<td data-type="text" data-key="Group" data-value="<%-devices[i].Group%>"><%-devices[i].Group%></td>
 	  	<td>
-			<button type="button" class="btn btn-danger editConfig w-50">Edit</button>
+			<button type="button" class="btn btn-primary editConfig w-50">Edit</button>
 			<button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
 	  	</td>
 	</tr>
@@ -254,13 +256,26 @@ function handleSyslogMessage(payload) {
 	$('#lastSyslog').attr('data-last-update', Date.now());
 	const $tbody = $('table[data-catagory="syslog"] tbody');
 	const type = $('table[data-catagory="syslog"]').attr('data-mode');
-	const ips = $('#syslogSelect').val();
+	const ipsRaw = $('#syslogSelect').val();
+	const ipsExRaw = $('#syslogSelectEx').val();
+	const ips = [];
+	const ipsEx = [];
+	ipsRaw.forEach(ip => {
+		if (ip.includes(',')) ip.replace(/\'/g, '').split(',').forEach(newIP => ips.push(newIP));
+		else ips.push(ip);
+	})
+	ipsExRaw.forEach(ip => {
+		if (ip.includes(',')) ip.replace(/\'/g, '').split(',').forEach(newIP => ipsEx.push(newIP));
+		else ipsEx.push(ip);
+	})
+
+	if (payload.logs.length < 1) return;
 	if (payload.replace) $tbody.empty();
 	if (type === 'duration' && !payload.replace) return;
 	if (type === 'live' && payload.replace) return;
 	try {
 		const points = {};
-
+		
 		let rangeTime;
 		let firstTime;
 		let lastTime;
@@ -272,16 +287,16 @@ function handleSyslogMessage(payload) {
 			rangeTime = fullRangeTime/75;
 		}
 
+		const maxLogs = 499;
 		payload.logs.forEach(log => {
 			if (!(ips.includes(log.ip) || ips.includes('all'))) return;
-			const maxLogs = 499;
+			if (ipsEx.includes(log.ip)) return;
 			const dateTime = new Date(log.time);
 			const message = syslogFormat(log.message);
 			const name = syslogSourceList[log.ip] || log.ip;
 			const $liveLogs = $('.logType_live');
 			if ($liveLogs.length > maxLogs) {
 				for (let index = maxLogs; index < $liveLogs.length; index++) {
-					console.log(index);
 					const log = $liveLogs[index];
 					log.remove();
 				}
@@ -291,20 +306,20 @@ function handleSyslogMessage(payload) {
 				<td class="text-nowrap">${name}</td>
 				<td class="text-nowrap">${dateTime.toLocaleString()}</td>
 			</tr>`);
-			if (payload.replace) {
-				const interval = Math.floor((dateTime - firstTime)/rangeTime);
-				const intervalIdentifier = new Date(interval*rangeTime + firstTime.getTime());
-				if (points[intervalIdentifier] == undefined) {
-					points[intervalIdentifier] = 1;
-				} else {
-					points[intervalIdentifier]++;
-				}
+
+			if (!payload.replace) return
+			const interval = Math.floor((dateTime - firstTime)/rangeTime);
+			const intervalIdentifier = new Date(interval*rangeTime + firstTime.getTime());
+			if (points[intervalIdentifier] == undefined) {
+				points[intervalIdentifier] = 1;
+			} else {
+				points[intervalIdentifier]++;
 			}
 		});
-		if (payload.replace) {
-			syslogHistogram.data.datasets[0].data = points;
-			syslogHistogram.update();
-		}
+
+		if (!payload.replace) return;
+		syslogHistogram.data.datasets[0].data = points;
+		syslogHistogram.update();
 	} catch (error) {
 		$tbody.prepend('<tr><td colspan="3">No Logs Found</td></tr>');
 		console.error(error);
@@ -649,8 +664,14 @@ function handleDevicesData(data, type) {
 	} else {
 		$(`[data-type="${type}"][data-type="alive"]`).removeClass('text-muted');
 		$(table).removeClass('text-muted');
+
+		data = Object.keys(data).sort().reduce((obj, key) => {
+			obj[key] = data[key]; 
+			return obj;
+		},{});
+
 		$.each(data, (port, lldp) => {
-			let row = '<tr><td>' + port + '</td>';
+			let row = `<tr data-port="${port}"><td>${port}</td>`;
 			switch (type) {
 			case 'Control':
 				for (let index = 0; index < ControlSwitches.length; index++) {
@@ -695,7 +716,7 @@ function handleMacData(data) {
 			} else {
 				feeding = '<em class="text-muted">n/a</em>';
 			}
-			let s = `<tr><td>${v.switch}</td><td>${v.port}</td><td>${lldp}</td><td>${feeding}</td><td>${v.mac.phyState}</td><td>${v.mac.lastChange}</td></tr>`;
+			let s = `<tr><td>${v.switch}</td><td>${v.port}</td><td>${lldp}</td><td>${feeding}</td><td>${v.mac.phyState == 'linkUp' ? 'Up' : 'Down'}</td><td><div data-last-update="${v.mac.lastChange*1000}" data-compact="true"></div></td></tr>`;
 			$('table#mac tbody').append(s);
 		});
 	}
@@ -749,7 +770,7 @@ function handleUPSData(data) {
 		$.each(data, (k, v) => {
 			let s;
 			if (v.Status === 'Offline') {
-				s = `<tr><td>${v.name}</td><td colspan="4" class="text-center">Offline</td><td></td></tr>`;
+				s = `<tr><td>${v.Name}</td><td colspan="5" class="text-center bg-danger">Offline</td></tr>`;
 			} else {
 				s = `<tr><td>${v.name}</td><td>${v.voltageIn}V ${v.freqIn}Hz</td><td>${v.voltageOut}V ${v.freqOut}Hz</td><td>${v.autonomy} min</td><td>${v.temp}°C</td><td>${v.load}%</td></tr>`;
 			}
@@ -763,36 +784,74 @@ function handleLocalPing(data) {
 	const IP = data.IP;
 	const Name = data.Name;
 	const status = data.status;
-	const $upTab = $('#pingLocalUp');
-	const $downTab = $('#pingLocalDown');
-	const $search = $(`.pingStatus[data-ip="${IP}"]`);
-	let actions = '';
-	if (data.SSH) actions += `<a type="button" class="btn me-1 btn-secondary btn-sm" href="ssh://${IP}" target="_blank">SSH</a>`;
-	if (data.HTTP) actions += `<a type="button" class="btn me-1 btn-secondary btn-sm" href="http://${IP}" target="_blank">HTTP</a>`;
-	if (data.HTTPS) actions += `<a type="button" class="btn me-1 btn-secondary btn-sm" href="https://${IP}" target="_blank">HTTPS</a>`;
-	actions += '<button type="button" class="btn btn-close btn-close-white btn-sm float-end m-1 clearPing"></button>';
-	if ($search.length < 1) {
-		const $row = $(`<tr class="pingStatus" data-ip="${IP}" data-updated-time="${Date.now()}">
+	const lastChange = data.lastChange;
+	const group = data.Group || 'NONE';
+	const _upTable = document.getElementById('pingLocalUp');
+	const _downTable = document.getElementById('pingLocalDown');
+	const _search = document.querySelector(`.pingStatus[data-ip="${IP}"]`);
+
+	if (!_search) {
+
+		let actions = '';
+		if (data.SSH) actions += `<a type="button" class="btn me-1 btn-secondary btn-sm" href="ssh://${IP}" target="_blank">SSH</a>`;
+		if (data.HTTP) actions += `<a type="button" class="btn me-1 btn-secondary btn-sm" href="http://${IP}" target="_blank">HTTP</a>`;
+		if (data.HTTPS) actions += `<a type="button" class="btn me-1 btn-secondary btn-sm" href="https://${IP}" target="_blank">HTTPS</a>`;
+		actions += '<button type="button" class="btn btn-close btn-close-white btn-sm float-end m-1 clearPing"></button>';
+
+		const row = `<tr class="pingStatus" data-ip="${IP}" data-updated-time="${lastChange}">
 			<td>${Name}</td>
 			<td>${IP}</td>
-			<td data-last-update="${Date.now()}"></td>
+			<td data-last-update="${lastChange}" data-compact="true"></td>
 			<td>${actions}</td>
-		</tr>`);
-		if (status) {
-			$upTab.append($row);
-		} else {
-			$downTab.append($row);
+		</tr>`;
+
+		const _thisTable = status ? _upTable : _downTable;
+
+		const _group = _thisTable.querySelector(`.pingGroup[data-group="${group}"]`);
+		if (!_group) {
+			const _tbodyGroup = document.createElement('tbody');
+			_tbodyGroup.classList.add('pingGroup');
+			_tbodyGroup.setAttribute('data-group', group);
+			const _groupHeader = document.createElement('th');
+			_groupHeader.setAttribute('colspan', 5);
+			_groupHeader.innerHTML = group;
+			_tbodyGroup.append(_groupHeader);
+			_thisTable.append(_tbodyGroup);
+			_tbodyGroup.insertAdjacentHTML('beforeend', row);
+		}
+		else {
+			_group.insertAdjacentHTML('beforeend', row);
 		}
 	} else {
-		const $table = $search.closest('.table');
-		if (($table.is('#pingLocalDown') && status) && true) {
-			$upTab.append($search);
-		} else if (($table.is('#pingLocalUp') && !status) && true) {
-			$downTab.append($search);
+		const _table = _search.closest('.table');
+		let _thisTable;
+		if ((_table.id == 'pingLocalDown' && status)) {
+			_thisTable = _upTable;
+		} else if ((_table.id == 'pingLocalUp' && !status)) {
+			_thisTable = _downTable;
+		}
+		if (_thisTable) {
+			const _group = _thisTable.querySelector(`.pingGroup[data-group="${group}"]`);
+			if (!_group) {
+				const _tbodyGroup = document.createElement('tbody');
+				_tbodyGroup.classList.add('pingGroup');
+				_tbodyGroup.setAttribute('data-group', group);
+				const _groupHeader = document.createElement('th');
+				_groupHeader.setAttribute('colspan', 5);
+				_groupHeader.innerHTML = group;
+				_tbodyGroup.append(_groupHeader);
+				_thisTable.append(_tbodyGroup);
+				_tbodyGroup.append(_search);
+			}
+			else {
+				_group.append(_search);
+			}
+			_search.querySelector('[data-last-update]').setAttribute('data-last-update', lastChange);
+			_search.setAttribute('data-updated-time', lastChange);
 		}
 	}
-	doTableSort($upTab.find('.sorted'), false);
-	doTableSort($downTab.find('.sorted'), false);
+	doTableSort(_upTable.querySelector('.sorted'), false);
+	doTableSort(_downTable.querySelector('.sorted'), false);
 
 	if (status) {
 		$('#lastLocalPingUp').attr('data-last-update', Date.now());
@@ -894,71 +953,87 @@ function handleDevicesFans(data, type) {
 function handleInterfaces(data, type) {
 	if (data == undefined) return;
 	const table = `[data-type="${type}"] table[data-catagory="interfaces"]`;
-	$(`${table} tbody`).empty();
+	const _table = document.querySelector(table);
+	_table.replaceChildren();
+	//$(`${table} tbody`).empty();
+
 	if (Object.keys(data).length == 0) {
 		$(`[data-type="${type}"][data-type="interfaces"]`).addClass('text-muted');
-		$(table).addClass('text-muted');
+		_table.classList.add('text-muted');
 	} else {
 		$(`[data-type="${type}"][data-type="interfaces"]`).removeClass('text-muted');
-		$(table).removeClass('text-muted');
-		for (const Switch in data) {
-			for (const Port in data[Switch]) {
-				const portInfo = data[Switch][Port];
+		_table.classList.remove('text-muted');
 
-				let time = '';
+		for (const groupName in data) {
+			const Group = data[groupName];
 
-				if (Number(portInfo.lastFlap)) {
-					const timeOffset = new Date();
-					let seconds = Math.floor(timeOffset/1000 - portInfo.lastFlap);
-					let minutes = Math.floor(seconds/60);
-					let hours = Math.floor(minutes/60);
-					const days = Math.floor(hours/24);
-					hours = hours-(days*24);
-					minutes = minutes-(days*24*60)-(hours*60);
-					seconds = seconds-(days*24*60*60)-(hours*60*60)-(minutes*60);
-					if (days > 0) time += ` ${days} days`;
-					if (hours > 0) time += ` ${hours}:${minutes}:${seconds}`;
-				} else {
-					time = portInfo.lastFlap;
-				}
+			const _tbody = document.createElement('tbody');
+			_tbody.classList.add('portMonGroup');
+			if (groupName != 'DEFAULT') _tbody.insertAdjacentHTML('afterbegin', `<tr class="interfaceGroup"><th colspan="3" data-group="${groupName}">${groupName}</th></tr>`);
+			_table.append(_tbody);
 
-				const inErrors = portInfo.inErrors > 0 ? `<div>Input Errors: ${portInfo.inErrors}</div>` : '';
-				const outErrors = portInfo.outErrors > 0 ? `<div>Output Errors: ${portInfo.outErrors}</div>` : '';
-				const inDiscards = portInfo.inDiscards > 0 ? `<div>Input Discards: ${portInfo.inDiscards}</div>` : '';
-				const outDiscards = portInfo.outDiscards > 0 ? `<div>Output Discards: ${portInfo.outDiscards}</div>` : '';
-				const outPercent = Math.round(100*portInfo.outRate/portInfo.maxRate);
-				const outGbps = Math.round(portInfo.outRate/1000000000);
-				const inPercent = Math.round(100*portInfo.inRate/portInfo.maxRate);
-				const inGbps = Math.round(portInfo.inRate/1000000000);
-				const outColour = `hsl(${130 - outPercent*1.3}deg 100% 30.36%)`;
-				const inColour = `hsl(${120 - inPercent*1.3}deg 100% 30.36%)`;
+			console.log(Group)
+			for (const switchName in Group) {
+				const Switch = Group[switchName];
+				console.log(Switch)
+				for (const portName in Switch) {
+					const Port = Switch[portName];
+					console.log(Port)
+	
+					let time = '';
+	
+					if (Number(Port.lastFlap)) {
+						const timeOffset = new Date();
+						let seconds = Math.floor(timeOffset/1000 - Port.lastFlap);
+						let minutes = Math.floor(seconds/60);
+						let hours = Math.floor(minutes/60);
+						const days = Math.floor(hours/24);
+						hours = hours-(days*24);
+						minutes = minutes-(days*24*60)-(hours*60);
+						seconds = seconds-(days*24*60*60)-(hours*60*60)-(minutes*60)+'s';
+						if (days > 0) time = ` ${days}d ${hours}h ${minutes}m`;
+						else if (hours > 0) time += ` ${hours}h ${minutes}m ${seconds}s`;
+					} else {
+						time = Port.lastFlap;
+					}
 
-				$(`${table} tbody`).append(`<tr>
-					<td class="text-center ${portInfo.connected ? 'bg-success' : 'bg-danger'}">
-						<div>${Switch} - ${portInfo.connected ? 'UP' : 'Down'}</div>
-						<div>${Port}</div>
-						<div>${portInfo.description}</div>
-					</td>
-					<td>
-						<div>Port Flaps: ${portInfo.flapCount}</div>
-						<div>Last Flap: ${time}</div>
-						${inErrors}
-						${outErrors}
-						${inDiscards}
-						${outDiscards}
-					</td>
-					<td>
-						<div class="d-flex">
-							<div>
-								<div>Out: ${outPercent}% - ${outGbps}Gbps</div>
-								<div>In: ${inPercent}% - ${inGbps}Gbps</div>
+					const outPercent = Math.round(100*Port.outRate/Port.maxRate);
+					const outGbps = Math.round(Port.outRate/1000000000);
+					const inPercent = Math.round(100*Port.inRate/Port.maxRate);
+					const inGbps = Math.round(Port.inRate/1000000000);
+					const outColour = `hsl(${130 - outPercent*1.3}deg 100% 30.36%)`;
+					const inColour = `hsl(${120 - inPercent*1.3}deg 100% 30.36%)`;
+	
+					_tbody.insertAdjacentHTML('beforeend', `<tr class="interfaceCont">
+						<td class="text-center ${Port.connected ? 'bg-success' : 'bg-danger'}">
+							<div>${switchName} - ${Port.connected ? 'UP' : 'Down'}</div>
+							<div>${portName}</div>
+							<div>${Port.description}</div>
+						</td>
+						<td>
+							<table>
+								<tr><td>Port Flaps: </td><td>${Port.flapCount}</td></tr>
+								<tr><td>Last Flap: </td><td>${time}</td></tr>
+								<tr><td>In Errors: </td><td>${Port.inErrors}</td></tr>
+								<tr><td>Out Errors: </td><td>${Port.outErrors}</td></tr>
+								<tr><td>In Discards: </td><td>${Port.inDiscards}</td></tr>
+								<tr><td>Out Discards: </td><td>${Port.outDiscards}</td></tr>
+							</table>
+						</td>
+						<td>
+							<div class="d-flex justify-content-between">
+								<div>
+									<div>Out: ${outPercent}% - ${outGbps}Gbps</div>
+									<div>In: ${inPercent}% - ${inGbps}Gbps</div>
+								</div>
+								<div class="pie text-right" style="--p:${outPercent};--b:10px;--c:${outColour};--pi:${inPercent};--ci:${inColour}"></div>
 							</div>
-							<div class="pie text-right" style="--p:${outPercent};--b:10px;--c:${outColour};--pi:${inPercent};--ci:${inColour}"></div>
-						</div>
-					</td>
-				</tr>`);
+						</td>
+					</tr>`)
+				}
 			}
 		}
+
 	}
 	lastSwitchTemperature = Date.now();
 }
@@ -966,43 +1041,37 @@ function handleInterfaces(data, type) {
 function updateLast() {
 	$('[data-last-update]').each(function(i, element) {
 		const $element = $(element);
-		$element.text(prettifyTime($element.attr('data-last-update')));
+		$element.text(prettifyTime($element.attr('data-last-update'), $element.attr('data-compact') || false));
 	});
 }
 
-function prettifyTime(time) {
+function prettifyTime(time, compact = false) {
 	if (time == -1) {
 		return 'never';
 	}
-	let t = Math.floor((Date.now() - time) / 1000);
-	let minutes = Math.floor(t / 60);
-	let seconds = t % 60;
-	if (minutes == 0 && seconds == 0) {
-		return 'just now';
-	} else if (minutes == 0) {
-		if (seconds == 1) {
-			return '1 second ago';
-		} else {
-			return seconds + ' seconds ago';
-		}
-	} else if (minutes == 1) {
-		if (seconds == 0) {
-			return '1 minute ago';
-		}
-		else if (seconds == 1) {
-			return '1 minute, 1 second ago';
-		} else {
-			return '1 minute, ' + seconds + ' seconds ago';
-		}
+	const t = Math.floor((Date.now() - time) / 1000);
+	const days = Math.floor(t / (60 * 60 * 24));
+	const hours = Math.floor(t / (60 * 60) % 24);
+	const minutes = Math.floor(t / 60) % 60;
+	const seconds = t % 60;
+	let daysString = '';
+	let hoursString = '';
+	let minsString = '';
+	let secondsString = '';
+
+	if (compact) {
+		if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+		else return `${hours}h ${minutes}m ${seconds}s`;
 	} else {
-		if (seconds == 0) {
-			return minutes + ' minutes ago';
-		}
-		else if (seconds == 1) {
-			return minutes + ' minutes, 1 second ago';
-		} else {
-			return minutes + ' minutes, ' + seconds + ' seconds ago';
-		}
+		if (days > 1) daysString = `${days} days, `;
+		if (days == 1) daysString = `${days} day, `;
+		if (hours > 1) hoursString = `${days} hours, `;
+		if (hours == 1) hoursString = `${days} hour, `;
+		if (minutes > 1) minsString = `${minutes} minutes, `;
+		if (minutes == 1) minsString = `${minutes} minute, `;
+		if (seconds > 1) secondsString = `${seconds} seconds, `;
+		if (seconds == 1) secondsString = `${seconds} second, `;
+		return `${daysString}${hoursString}${minsString}${secondsString} ago`;
 	}
 }
 
@@ -1106,6 +1175,24 @@ $(document).ready(function() {
 		removeItems: true,
 		removeItemButton: true,
 		searchPlaceholderValue: 'Select Devices',
+		sorter: (a,b) => {
+			const groupChar = '​';
+			if (a.label.includes(groupChar) && !b.label.includes(groupChar)) return 0;
+			if (!a.label.includes(groupChar) && b.label.includes(groupChar)) return 1;			
+			return a.label.localeCompare(b.label);
+		}
+	});
+
+	new Choices('#syslogSelectEx', {
+		removeItems: true,
+		removeItemButton: true,
+		searchPlaceholderValue: 'Exclude Devices',
+		sorter: (a,b) => {
+			const groupChar = '​';
+			if (a.label.includes(groupChar) && !b.label.includes(groupChar)) return 0;
+			if (!a.label.includes(groupChar) && b.label.includes(groupChar)) return 1;			
+			return a.label.localeCompare(b.label);
+		}
 	});
 
 	$(document).click(function(e) {
@@ -1288,12 +1375,19 @@ $(document).ready(function() {
 			const $cont = $('div[data-catagory="syslog"]');
 			$cont.toggleClass('showHistogram');
 		} else if ($trg.hasClass('sortable')) {
-			doTableSort($trg, true);
+			doTableSort($trg[0], true);
 		} else if ($trg.hasClass('navTab')) {
 			const tab = $trg.attr('id').replace('nav-','').replace('-tab','');
 			history.pushState({}, '', `#${tab}`);
 		} else if ($trg.hasClass('clearPing')) {
 			$trg.closest('tr').remove();
+		} else if ($trg.is('#fullscreen')) {
+			document.getElementById('mainCont').parentElement.requestFullscreen();
+		} else if ($trg.hasClass('chilton')) {
+			e.preventDefault();
+			const audio = new Audio('/media/CHILTON.wav');
+			audio.play();
+			setTimeout(()=>{window.location = window.location;}, 3000);
 		}
 	});
 
@@ -1334,9 +1428,10 @@ $(document).ready(function() {
 				'data':'syslog',
 				'from': parseInt($('#syslogFrom').val()),
 				'to': parseInt($('#syslogTo').val()),
-				'ips': $('#syslogSelect').val()
+				'ips': $('#syslogSelect').val(),
+				'ipsEx': $('#syslogSelectEx').val()
 			});
-		} else if ($trg.is('#syslogSelect')) {
+		} else if ($trg.is('#syslogSelect') || $trg.is('#syslogSelectEx')) {
 			const $btn = $('#syslogDurationPreset.active');
 			let to = parseInt($('#syslogTo').val());
 			let from = parseInt($('#syslogFrom').val());
@@ -1356,10 +1451,17 @@ $(document).ready(function() {
 				'data':'syslog',
 				'from': from,
 				'to': to,
-				'ips': $('#syslogSelect').val()
+				'ips': $('#syslogSelect').val(),
+				'ipsEx': $('#syslogSelectEx').val()
 			});
 		} else if ($trg.is('#syslogDurationPreset')) {
 			const value = $trg.val();
+			if (value == 'custom') {
+				$('#syslogCustom').removeClass('d-none');
+				return;
+			} else {
+				$('#syslogCustom').addClass('d-none');
+			}
 			let to = new Date().getTime()/1000;
 			let from = to;
 			if (value == 'live') {
@@ -1375,7 +1477,8 @@ $(document).ready(function() {
 				'data':'syslog',
 				'from': from,
 				'to': to,
-				'ips': $('#syslogSelect').val()
+				'ips': $('#syslogSelect').val(),
+				'ipsEx': $('#syslogSelectEx').val()
 			});
 		} else if ($trg.is('#csvUpload')) {
 			$('.tableImport').attr('disabled',$trg.val()=='');
@@ -1518,7 +1621,7 @@ function configRowDone($trg) {
 		}
 		$trg.html('Edit');
 		$trg.addClass('editConfig');
-		$trg.addClass('btn-danger');
+		$trg.addClass('btn-primary');
 		$trg.removeClass('doneConfig');
 		$trg.removeClass('btn-success');
 	});
@@ -1562,39 +1665,58 @@ function download(filename, text) {
 	document.body.removeChild(element);
 }
 
-function doTableSort($trg, toggleDir = true) {
-	const sortTag = $trg.attr('data-sort-tag');
+function doTableSort(_target, toggleDir = true) {
+	const sortTag = _target.getAttribute('data-sort-tag');
 	const tag = sortTag === undefined ? undefined : sortTag;
-	const $th = $trg.closest('th');
-	const $table = $th.closest('table');
-	const $tbody = $table.find('tbody');
-	const $rows = $tbody.children('tr');
-	const index = $th.index();
-	let dir = $th.hasClass('sortedDesc') ? -1 : 1;
+	const _th = _target.closest('th') ? _target.closest('th') : _target;
+	const _table = _th.closest('table');
+	const __tbodys = _table.getElementsByTagName('tbody');
+	const index = [..._th.parentNode.children].indexOf(_th);
+	let dir = _th.classList.contains('sortedDesc') ? -1 : 1;
+
 	if (toggleDir) {
-		if (!$th.hasClass('sorted')) dir = -1;
-		$table.find('.sortedAsc').removeClass('sortedAsc');
-		$table.find('.sortedDesc').removeClass('sortedDesc');
-		$table.find('.sorted').removeClass('sorted');
+		if (!_th.classList.contains('sorted')) dir = -1;
+
+		for (const _child of _th.parentElement.children) {
+			_child.classList.remove('sortedAsc');
+			_child.classList.remove('sortedDesc');
+			_child.classList.remove('sorted');
+		}
+
 		if (dir < 0) {
 			dir = 1;
-			$th.addClass('sortedAsc');
+			_th.classList.add('sortedAsc');
 		} else {
 			dir = -1;
-			$th.addClass('sortedDesc');
+			_th.classList.add('sortedDesc');
 		}
-		$th.addClass('sorted');
+
+		_th.classList.add('sorted');
 	}
-	$rows.sort((a, b) => {
-		if (tag) {
-			return (Number($(a).attr(`data-${tag}`)) - Number($(b).attr(`data-${tag}`)))*dir;
-		} else {
-			const aVal = $(a).children().eq(index).html();
-			const bVal = $(b).children().eq(index).html();
-			return aVal.localeCompare(bVal, undefined, { numeric: true })*dir;
+
+	for (const _tbody of __tbodys) {
+		const __trs = Array.from(_tbody.getElementsByTagName('tr'));
+		if (__trs.length < 2) continue;
+		__trs.sort((a, b) => {
+			if (tag) {
+				return (Number($(a).attr(`data-${tag}`)) - Number($(b).attr(`data-${tag}`)))*dir;
+			} else {
+				const aVal = $(a).children().eq(index).html();
+				const bVal = $(b).children().eq(index).html();
+				return aVal.localeCompare(bVal, undefined, { numeric: true })*dir;
+			}
+		});
+		for (const _tr of __trs) {
+			_tbody.append(_tr)
 		}
+	}
+
+	const __tbodysArray = Array.from(__tbodys);
+	if (__tbodysArray.length < 2) return;
+	__tbodysArray.sort((_a, _b) => {
+		return _a.getAttribute('data-group').localeCompare(_b.getAttribute('data-group'));
 	});
-	$rows.each(function(i, $row) {
-		$tbody.append($row);
-	});
+	for (const _tbody of __tbodysArray) {
+		_table.append(_tbody)
+	}
 }
