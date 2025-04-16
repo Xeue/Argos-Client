@@ -9,13 +9,15 @@
         <title>Argos</title>
         <link id="favicon_48" rel="icon" href="<%-static%>/img/icon/icon.svg" sizes="256x256">
     </head>
-    <body class="<%-background%>" id="body">
-        <iframe id="frame"></iframe>
+    <body class="<%-background%>" id="body" data-page="main" data-bs-theme="dark">
+        <iframe id="mainFrame"></iframe>
+        <iframe id="dataFrame"></iframe>
+        <iframe id="aboutFrame"></iframe>
         <main id="logsCont">
-            <nav class="drag navbar navbar-expand-lg navbar-dark bg-title px-2 m-0">
+            <nav class="bg-title border-bottom drag m-0 navbar px-2 py-0">
                 <a class="navbar-brand" href="#">
-                    <img src="../static/img/icon/icon.svg" class="d-inline-block align-top" alt="" width="30" height="30">
-                    Argos
+                    <img src="<%-static%>/img/icon/icon.svg" class="d-inline-block align-top" alt="" width="30" height="30">
+                    Argos - Logs
                 </a>
             </nav>
             <div id="logs"></div>
@@ -63,7 +65,10 @@
             <button type="button" class="btn btn-secondary logsView" id="startConfig">Edit Config</button>
             <button type="button" class="btn btn-secondary logsView" id="showConfig">Show Config</button>
             <button type="button" class="btn btn-secondary logsView" id="clearLogs">Clear Logs</button>
-            <button type="button" class="btn btn-primary" id="toggleView">Show Logs</button>
+            <button type="button" class="btn btn-primary pageShow" data-page="logs">Show Logs</button>
+            <button type="button" class="btn btn-primary pageShow" data-page="about">Show About</button>
+            <button type="button" class="btn btn-primary pageShow" data-page="data">Show Data</button>
+            <button type="button" class="btn btn-primary pageShow" data-page="main">Show Monitoring</button>
         </nav>
     </body>
 </html>

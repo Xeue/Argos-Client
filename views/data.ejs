@@ -14,23 +14,18 @@
     <script type="text/javascript" src="lib/bootstrap.min.js"></script>
 	<script type="text/javascript" src="lib/jsoneditor.js"></script>
     <script type="text/javascript">
-		const about = <%- JSON.stringify(aboutInfo) %>;
+		const data = <%- JSON.stringify(data) %>;
 		const options = {
 			'mode': 'tree',
 			'mainMenuBar': false,
 			'navigationBar': false
 		};
 		$(document).ready(function() {
-			const container = document.getElementById('aboutInfo');
-			const editor = new JSONEditor(container, options, about);
-			editor.expand({
-				"path": ['Config'],
-				"isExpand": true,
-				"recursive": false
-			});
+			const container = document.getElementById('dataInfo');
+			const editor = new JSONEditor(container, options, data);
 		})
     </script>
-    <title><%=systemName%> About</title>
+    <title><%=systemName%> Data</title>
     <link id="favicon_48" rel="icon" href="img/icon/icon.svg" sizes="256x256">
     <link rel="manifest" href="manifest.json">
 </head>
@@ -42,13 +37,13 @@
         <div class="d-flex align-items-center">
 			<a class="navbar-brand" href="#">
 				<img src="img/icon/icon.svg" class="d-inline-block align-top" alt="" width="30" height="30">
-				Argos - About
+				Argos - Data
 			</a>
 		</div>
     </nav>
 
     <main class="overflow-auto">
-		<div id="aboutInfo"></div>
+		<div id="dataInfo"></div>
 	</main>
 </body>
 

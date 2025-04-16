@@ -17,9 +17,9 @@ templates.nameIP = `<% for(i = 0; i < devices.length; i++) { %>
   <tr data-index="<%=i%>" data-template="nameIP">
     <td data-type="text" data-key="Name" data-value="<%-devices[i].Name%>"><%-devices[i].Name%></td>
     <td data-type="text" data-key="IP" data-value="<%-devices[i].IP%>"><%-devices[i].IP%></td>
-    <td>
-      <button type="button" class="btn btn-primary editConfig w-50">Edit</button>
-      <button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
+    <td class="d-flex gap-1">
+      <button type="button" class="btn btn-primary editConfig btn-sm flex-grow-1">Edit</button>
+      <button type="button" class="btn btn-danger deleteRow btn-sm flex-grow-1">Delete</button>
     </td>
   </tr>
 <% } %>`;
@@ -29,9 +29,9 @@ templates.sensors = `<% for(i = 0; i < devices.length; i++) { %>
 	  <td data-type="text" data-key="Name" data-value="<%-devices[i].Name%>"><%-devices[i].Name%></td>
 	  <td data-type="text" data-key="IP" data-value="<%-devices[i].IP%>"><%-devices[i].IP%></td>
 	  <td data-type="select" data-key="Type" data-value="<%-devices[i].Type%>" data-options="IQ Frame,Will N Sensor"><%-devices[i].Type%></td>
-	  <td>
-		<button type="button" class="btn btn-primary editConfig w-50">Edit</button>
-		<button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
+	  <td class="d-flex gap-1">
+		<button type="button" class="btn btn-primary editConfig btn-sm flex-grow-1">Edit</button>
+		<button type="button" class="btn btn-danger deleteRow btn-sm flex-grow-1">Delete</button>
 	  </td>
 	</tr>
   <% } %>`;
@@ -44,9 +44,11 @@ templates.pings = `<% for(i = 0; i < devices.length; i++) { %>
 	  <td data-type="check" data-key="SSH" data-value="<%-devices[i].SSH%>" readonly></td>
 	  <td data-type="check" data-key="HTTP" data-value="<%-devices[i].HTTP%>" readonly></td>
 	  <td data-type="check" data-key="HTTPS" data-value="<%-devices[i].HTTPS%>" readonly></td>
-	  <td>
-		<button type="button" class="btn btn-primary editConfig w-50">Edit</button>
-		<button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
+	  <td data-type="check" data-key="Alert" data-value="<%-devices[i].Alert%>" readonly></td>
+	  <td data-type="check" data-key="TripleCheck" data-value="<%-devices[i].TripleCheck%>" readonly></td>
+	  <td class="d-flex gap-1">
+		<button type="button" class="btn btn-primary editConfig btn-sm flex-grow-1">Edit</button>
+		<button type="button" class="btn btn-danger deleteRow btn-sm flex-grow-1">Delete</button>
 	  </td>
 	</tr>
   <% } %>`;
@@ -59,9 +61,9 @@ templates.switch = `<% for(i = 0; i < devices.length; i++) { %>
     <td data-type="password" data-key="Pass" data-value="<%-devices[i].Pass%>"><%-devices[i].Pass%></td>
 	<td data-type="select" data-key="Type" data-value="<%-devices[i].Type%>" data-options="Control,Media"><%-devices[i].Type%></td>
 	<td data-type="select" data-key="OS" data-value="<%-devices[i].OS%>" data-options="EOS,NXOS,IOS"><%-devices[i].OS%></td>
-    <td>
-      <button type="button" class="btn btn-primary editConfig w-50">Edit</button>
-      <button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
+    <td class="d-flex gap-1">
+      <button type="button" class="btn btn-primary editConfig btn-sm flex-grow-1">Edit</button>
+      <button type="button" class="btn btn-danger deleteRow btn-sm flex-grow-1">Delete</button>
     </td>
   </tr>
 <% } %>`;
@@ -70,9 +72,9 @@ templates.devices = `<% for(i = 0; i < devices.length; i++) { %>
   <tr data-index="<%=i%>" data-template="devices">
     <td data-type="text" data-key="name" data-value="<%-devices[i].name%>"><%-devices[i].name%></td>
     <td data-type="text" data-key="description" data-value="<%-devices[i].description%>"><%-devices[i].description%></td>
-    <td>
-      <button type="button" class="btn btn-primary editConfig w-50">Edit</button>
-      <button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
+    <td class="d-flex gap-1">
+      <button type="button" class="btn btn-primary editConfig btn-sm flex-grow-1">Edit</button>
+      <button type="button" class="btn btn-danger deleteRow btn-sm flex-grow-1">Delete</button>
     </td>
   </tr>
 <% } %>`;
@@ -82,9 +84,10 @@ templates.ports = `<% for(i = 0; i < devices.length; i++) { %>
 		<td data-type="select" data-key="Switch" data-value="<%-devices[i].Switch%>" data-options="<%-switches.join(',')%>"><%-devices[i].Switch%></td>
 		<td data-type="text" data-key="Port" data-value="<%-devices[i].Port%>"><%-devices[i].Port%></td>
 		<td data-type="text" data-key="Group" data-value="<%-devices[i].Group%>"><%-devices[i].Group%></td>
-	  	<td>
-			<button type="button" class="btn btn-primary editConfig w-50">Edit</button>
-			<button type="button" class="btn btn-danger deleteRow w-50">Delete</button>
+		<td data-type="check" data-key="Alerts" data-value="<%-devices[i].Alerts%>" readonly></td>
+	  	<td class="d-flex gap-1">
+			<button type="button" class="btn btn-primary editConfig btn-sm flex-grow-1">Edit</button>
+			<button type="button" class="btn btn-danger deleteRow btn-sm flex-grow-1">Delete</button>
 	  	</td>
 	</tr>
 <% } %>`;
@@ -648,7 +651,7 @@ function handleFibreData(data, type) {
 				<td>${device.port}</td>
 				<td>${lldp}</td>
 				<td>${feeding}</td>
-				<td>${device.rxPower} dBm</td>
+				<td>${device.rxPower.join(', ')} dBm</td>
 			</tr>`;
 			$(`${table} tbody`).append(row);
 		});
@@ -955,7 +958,6 @@ function handleInterfaces(data, type) {
 	const table = `[data-type="${type}"] table[data-catagory="interfaces"]`;
 	const _table = document.querySelector(table);
 	_table.replaceChildren();
-	//$(`${table} tbody`).empty();
 
 	if (Object.keys(data).length == 0) {
 		$(`[data-type="${type}"][data-type="interfaces"]`).addClass('text-muted');
@@ -972,13 +974,10 @@ function handleInterfaces(data, type) {
 			if (groupName != 'DEFAULT') _tbody.insertAdjacentHTML('afterbegin', `<tr class="interfaceGroup"><th colspan="3" data-group="${groupName}">${groupName}</th></tr>`);
 			_table.append(_tbody);
 
-			console.log(Group)
 			for (const switchName in Group) {
 				const Switch = Group[switchName];
-				console.log(Switch)
 				for (const portName in Switch) {
 					const Port = Switch[portName];
-					console.log(Port)
 	
 					let time = '';
 	
@@ -988,11 +987,11 @@ function handleInterfaces(data, type) {
 						let minutes = Math.floor(seconds/60);
 						let hours = Math.floor(minutes/60);
 						const days = Math.floor(hours/24);
-						hours = hours-(days*24);
-						minutes = minutes-(days*24*60)-(hours*60);
-						seconds = seconds-(days*24*60*60)-(hours*60*60)-(minutes*60)+'s';
-						if (days > 0) time = ` ${days}d ${hours}h ${minutes}m`;
-						else if (hours > 0) time += ` ${hours}h ${minutes}m ${seconds}s`;
+						hours = String(hours-(days*24)).padStart(2,'0');
+						minutes = String(minutes-(days*24*60)-(hours*60)).padStart(2,'0');
+						seconds = String(seconds-(days*24*60*60)-(hours*60*60)-(minutes*60)).padStart(2,'0');
+						if (days > 0) time = ` ${days}d ${hours}:${minutes}:${seconds}`;
+						else time += ` ${hours}:${minutes}:${seconds}`;
 					} else {
 						time = Port.lastFlap;
 					}
@@ -1003,14 +1002,32 @@ function handleInterfaces(data, type) {
 					const inGbps = Math.round(Port.inRate/1000000000);
 					const outColour = `hsl(${130 - outPercent*1.3}deg 100% 30.36%)`;
 					const inColour = `hsl(${120 - inPercent*1.3}deg 100% 30.36%)`;
+
+					let fibreLanes = '';
+					let fibreWarn = false;
+					if (typeof Port.rxPower !== "undefined") {
+						Port.rxPower.forEach((lane, i) =>{
+							let colour = 'bg-success';
+							if (lane < thresholds.fibre && lane > -30) {
+								fibreWarn = true;
+								colour = 'bg-danger';
+							}
+							if (lane == -30) colour = 'bg-warning';
+							if (lane > 0) colour = 'bg-info';
+							fibreLanes += `<div class="badge ${colour}">Lane ${i+1}: ${lane} dBm</div>`;
+						})
+					}
 	
+					let statusBG = 'bg-danger';
+					if (Port.connected) statusBG = 'bg-success';
+					if (fibreWarn) statusBG = 'bg-warning';
 					_tbody.insertAdjacentHTML('beforeend', `<tr class="interfaceCont">
-						<td class="text-center ${Port.connected ? 'bg-success' : 'bg-danger'}">
-							<div>${switchName} - ${Port.connected ? 'UP' : 'Down'}</div>
-							<div>${portName}</div>
+						<td class="text-center ${statusBG} interfaceHeader">
+							<div>${portName} - ${Port.connected ? 'UP' : 'Down'}</div>
 							<div>${Port.description}</div>
+							<div>${switchName}</div>
 						</td>
-						<td>
+						<td class="interfaceCounts">
 							<table>
 								<tr><td>Port Flaps: </td><td>${Port.flapCount}</td></tr>
 								<tr><td>Last Flap: </td><td>${time}</td></tr>
@@ -1020,11 +1037,14 @@ function handleInterfaces(data, type) {
 								<tr><td>Out Discards: </td><td>${Port.outDiscards}</td></tr>
 							</table>
 						</td>
-						<td>
+						<td class="interfaceGraph">
 							<div class="d-flex justify-content-between">
 								<div>
 									<div>Out: ${outPercent}% - ${outGbps}Gbps</div>
 									<div>In: ${inPercent}% - ${inGbps}Gbps</div>
+									<div class="d-flex flex-column gap-1 mt-1">
+										${fibreLanes}
+									</div>
 								</div>
 								<div class="pie text-right" style="--p:${outPercent};--b:10px;--c:${outColour};--pi:${inPercent};--ci:${inColour}"></div>
 							</div>
@@ -1195,6 +1215,8 @@ $(document).ready(function() {
 		}
 	});
 
+	const configModal = new bootstrap.Modal(document.getElementById('config'), {'backdrop':'static'});
+
 	$(document).click(function(e) {
 		const $trg = $(e.target);
 		if ($trg.hasClass('tempBut')) {
@@ -1239,34 +1261,32 @@ $(document).ready(function() {
 				'from': from,
 				'to': to
 			});
-		} else if ($trg.is('#toggleConfig') || $trg.is('#closeConfig')) {
-			if ($('#config').hasClass('hidden')) {
-				loading(true);
-				Promise.allSettled([
-					getConfig('switches'),
-					getConfig('ports'),
-					getConfig('devices'),
-					getConfig('ups'),
-					getConfig('temps'),
-					getConfig('pings')
-				]).then(values => {
-					const [switches, ports, devices, ups, temps, pings] = values;
-					loading(false);
-					$('#config').removeClass('hidden');
-					editors['switches'] = renderEditorTab(switches.value, editors['switches'], templates.switch, 'configSwitches');
-					editors['ports'] = renderEditorTab(ports.value, editors['ports'], templates.ports, 'configPorts');
-					editors['devices'] = renderEditorTab(devices.value, editors['devices'], templates.devices, 'configDevices');
-					editors['ups'] = renderEditorTab(ups.value, editors['ups'], templates.nameIP, 'configUps');
-					editors['temps'] = renderEditorTab(temps.value, editors['temps'], templates.sensors, 'configTemps');
-					editors['pings'] = renderEditorTab(pings.value, editors['pings'], templates.pings, 'configPings');
-				}).catch(error => {
-					console.error(error);
-				});
-			} else {
-				$('#config').addClass('hidden');
-			}
+		} else if ($trg.is('#toggleConfig')) {
+			loading(true);
+			Promise.allSettled([
+				getConfig('switches'),
+				getConfig('ports'),
+				getConfig('devices'),
+				getConfig('ups'),
+				getConfig('temps'),
+				getConfig('pings')
+			]).then(values => {
+				const [switches, ports, devices, ups, temps, pings] = values;
+				loading(false);
+				editors['switches'] = renderEditorTab(switches.value, editors['switches'], templates.switch, 'configSwitches');
+				editors['ports'] = renderEditorTab(ports.value, editors['ports'], templates.ports, 'configPorts');
+				editors['devices'] = renderEditorTab(devices.value, editors['devices'], templates.devices, 'configDevices');
+				editors['ups'] = renderEditorTab(ups.value, editors['ups'], templates.nameIP, 'configUps');
+				editors['temps'] = renderEditorTab(temps.value, editors['temps'], templates.sensors, 'configTemps');
+				editors['pings'] = renderEditorTab(pings.value, editors['pings'], templates.pings, 'configPings');
+				configModal.show();
+			}).catch(error => {
+				console.error(error);
+			});
+		} else if ($trg.is('#closeConfig')) {
+			configModal.hide();
 		} else if ($trg.hasClass('tableExport')) {
-			const $active = $trg.closest('.alert.container').find('.tab-pane.active');
+			const $active = $trg.closest('.modal-content').find('.tab-pane.active');
 			const $table = $active.find('table');
 			const editor = $table.data('editor');
 			const editorJSON = editors[editor].get();
@@ -1276,7 +1296,7 @@ $(document).ready(function() {
 			}
 			download(`${editor}.csv`,csv);
 		} else if ($trg.hasClass('tableImport')) {
-			const $active = $trg.closest('.alert.container').find('.tab-pane.active');
+			const $active = $trg.closest('.modal-content').find('.tab-pane.active');
 			const $table = $active.find('table.table');
 			const $body = $table.find('tbody');
 			const editor = $table.data('editor');
@@ -1300,7 +1320,7 @@ $(document).ready(function() {
 			};
 			reader.readAsText(files[0]);
 		} else if ($trg.hasClass('toggleTableRaw')) {
-			const $active = $trg.closest('.alert.container').find('.tab-pane.active');
+			const $active = $trg.closest('.modal-content').find('.tab-pane.active');
 			$active.find('.dataTable').collapse('toggle');
 			$active.find('.dataRaw').collapse('toggle');
 		} else if ($trg.hasClass('editConfig')) {
@@ -1308,7 +1328,7 @@ $(document).ready(function() {
 		} else if ($trg.hasClass('doneConfig')) {
 			configRowDone($trg);
 		} else if ($trg.hasClass('tableNew')) {
-			const $tbody = $trg.closest('.alert.container').find('.tab-pane.active').find('.dataTable').find('tbody');
+			const $tbody = $trg.closest('.modal-content').find('.tab-pane.active').find('.dataTable').find('tbody');
 			const $rows = $tbody.children();
 			const index = $rows.length;
 			const template = $tbody.data('template');
@@ -1517,7 +1537,7 @@ function configRowEdit($trg) {
 		let $td = $(this);
 		switch ($td.data('type')) {
 		case 'text': {
-			let $txt = $(`<input type="text" class="form-control" value="${$td.data('value')}" name="${$td.data('key')}"></input>`);
+			let $txt = $(`<input type="text" class="form-control form-control-sm" value="${$td.data('value')}" name="${$td.data('key')}"></input>`);
 			$txt.change(function() {
 				$td.data('value', $txt.val());
 			});
@@ -1526,7 +1546,7 @@ function configRowEdit($trg) {
 			break;
 		}
 		case 'password': {
-			let $txt = $(`<input type="password" class="form-control" value="${$td.data('value')}" name="${$td.data('key')}"></input>`);
+			let $txt = $(`<input type="password" class="form-control form-control-sm" value="${$td.data('value')}" name="${$td.data('key')}"></input>`);
 			$txt.change(function() {
 				$td.data('value', $txt.val());
 			});
@@ -1546,8 +1566,8 @@ function configRowEdit($trg) {
 			break;
 		}
 		case 'range': {
-			let $from = $(`<input type="text" class="editRange form-control text-end" value="${$td.data('from')}" name="${$td.data('key-from')}"></input>`);
-			let $to = $(`<input type="text" class="editRange form-control" value="${$td.data('to')}" name="${$td.data('key-to')}"></input>`);
+			let $from = $(`<input type="text" class="editRange form-control text-end form-control-sm" value="${$td.data('from')}" name="${$td.data('key-from')}"></input>`);
+			let $to = $(`<input type="text" class="editRange form-control form-control-sm" value="${$td.data('to')}" name="${$td.data('key-to')}"></input>`);
 			$from.change(function() {
 				$td.data('from', $from.val());
 			});
@@ -1562,7 +1582,7 @@ function configRowEdit($trg) {
 			break;
 		}
 		case 'select': {
-			let txt = `<select class="btn btn-outline-light" name="${$td.data('key')}">`;
+			let txt = `<select class="form-select form-select-sm" name="${$td.data('key')}">`;
 			const options = $td.data('options').split(',');
 			options.forEach(option => {
 				const selected = option == $td.data('value') ? 'selected' : '';

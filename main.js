@@ -7,15 +7,22 @@ import fetch from 'node-fetch';
 import AWS from 'aws-sdk';
 import fs from 'fs';
 import path from 'path';
-import {Logs} from 'xeue-logs';
-import {Config} from 'xeue-config';
-import {SQLSession} from 'xeue-sql';
-import {Server} from 'xeue-webserver';
-import SysLogServer from './syslog.js';
-import Package from './package.json' assert {type: "json"};
+import {Logs as _Logs} from 'xeue-logs';
+import {Config as _Config} from 'xeue-config';
+import {SQLSession as _SQL} from 'xeue-sql';
+import {Server as _Server} from 'xeue-webserver';
+import _SysLogServer from './syslog.js';
+import Package from './package.json' with {type: "json"};
 import ping from 'ping';
 import https from 'https';
+
+import {app, BrowserWindow, ipcMain, Tray, Menu, Notification, screen} from 'electron';
+import electronEjs from 'electron-ejs';
+import AutoLaunch from 'auto-launch';
+import {MicaBrowserWindow, IS_WINDOWS_11} from 'mica-electron';
 //const snmp = require ('net-snmp');
+
+const background = IS_WINDOWS_11 ? 'micaActive' : 'bg-dark';
 
 const version = Package.version;
 
@@ -23,8 +30,12 @@ const httpsAgent = new https.Agent({
 	rejectUnauthorized: false,
 });
 
-const __dirname = path.resolve(path.dirname(decodeURI(new URL(import.meta.url).pathname))).replace('C:\\','');
-const __static = __dirname+'/static';
+const __internal = import.meta.dirname;
+const __data = path.join(app.getPath("documents"), 'ArgosData');
+const __static = `${app.isPackaged ? process.resourcesPath : __internal}/static`;
+const __views = `${app.isPackaged ? process.resourcesPath : __internal}/views`;
+
+const ejs = new electronEjs({'static': __static, 'internal': __internal, 'background': background}, {});
 
 Array.prototype.symDiff = function(x) {
 	return this.filter(y => !x.includes(y)).concat(x => !y.includes(x));
@@ -70,7 +81,11 @@ const data = {
 		'Media':{}
 	},
 	'ups': {},
-	'phy': {}
+	'phy': {},
+	'ports': {
+		'Control': {},
+		'Media': {}
+	}
 };
 const localPingsData = {};
 const cloudServer = {
@@ -116,7 +131,7 @@ const SwitchRequests = {
 	},
 	'EOS': {
 		'neighborRequest': 'show lldp neighbors',
-		'transRequest': 'show interfaces transceiver',
+		'transRequest': 'show interfaces transceiver dom',
 		'flapRequest': 'show interfaces mac',
 		'phyRequest': 'show interfaces phy detail',
 		'power': 'show system environment power',
@@ -142,23 +157,44 @@ const EOS = {
 	handleFibre: (filteredDevices, result, switchType, switchName) => {
 		const devices = data.neighbors[switchType][switchName];
 		const keys = Object.keys(devices);
-		const interfaces = result.result[0].interfaces;
+		const interfaces = result.result.pop().interfaces;
 		for (let interfaceName in interfaces) {
 			const iface = interfaces[interfaceName];
-			if ('rxPower' in iface === false) continue
+			if ('parameters' in iface === false) continue;
+			if ('rxPower' in iface.parameters === false) continue;
+
 			if (!keys.includes(interfaceName)) devices[interfaceName] = {};
 			devices[interfaceName].port = interfaceName;
 			devices[interfaceName].description = getDescription(interfaceName, switchType, switchName);
-			devices[interfaceName].rxPower = iface.rxPower.toFixed(1);
-			if ('txPower' in iface) devices[interfaceName].txPower = iface.txPower.toFixed(1);
+			devices[interfaceName].rxPower = [];
+			Object.values(iface.parameters.rxPower.channels).forEach(lane => {
+				devices[interfaceName].rxPower.push(lane.toFixed(1));
+			})
+			devices[interfaceName].txPower = [];
+			Object.values(iface.parameters.txPower.channels).forEach(lane => {
+				devices[interfaceName].txPower.push(lane.toFixed(1));
+			})
+			try {
+				data.interfaces[switchType][switchName][interfaceName].rxPower = devices[interfaceName].rxPower;
+				data.interfaces[switchType][switchName][interfaceName].txPower = devices[interfaceName].txPower;
+			} catch (error) {
+				Logs.warn(`Unknown interface ${interfaceName}`, error);
+				Logs.debug('Unknown interface data',data.interfaces[switchType][switchName]);
+			}
 		}
-		for (let deviceName in devices) {
-			const device = devices[deviceName];
-			if ('txPower' in device === false) continue;
-			if ('rxPower' in device === false) continue;
-			if (device.rxPower < -9 && device.rxPower > -30 && device.txPower > -30) {
-				device.switch = switchName;
-				filteredDevices.push(device);
+
+		ifaceLoop:
+		for (let interfaceName in devices) {
+			const iface = devices[interfaceName];
+			if ('txPower' in iface === false) continue;
+			if ('rxPower' in iface === false) continue;
+			for (let index = 0; index < iface.rxPower.length; index++) {
+				const lane = iface.rxPower[index];
+				if (Number(lane) < thresholds.fibre && Number(lane) > -30 && Number(lane) > -30) {
+					iface.switch = switchName;
+					filteredDevices.push(iface);
+					continue ifaceLoop;
+				}
 			}
 		}
 	},
@@ -176,7 +212,7 @@ const EOS = {
 	// 			mac: t.substr(50, 6).trim(),
 	// 			last: t.substr(54, t.length).trim()
 	// 		};
-	// 		logger.object(mac);
+	// 		Logs.object(mac);
 	// 		if (mac.config !== 'Up') continue;
 	// 		if (!keys.includes(mac.int)) devices[mac.int] = {};
 	// 		devices[mac.int].mac = {};
@@ -191,7 +227,7 @@ const EOS = {
 	// 	for (let deviceNumber in devices) {
 	// 		const device = devices[deviceNumber]
 	// 		if (device.mac === undefined) continue;
-	// 		if(!('lastChange' in device.mac)) logger.log(device+' seems to have an issue','W');
+	// 		if(!('lastChange' in device.mac)) Logs.log(device+' seems to have an issue','W');
 	// 		const time = device.mac.lastChange.split(':');
 	// 		const timeTotal = parseInt(time[0]) * 3600 + parseInt(time[1]) * 60 + parseInt(time[2]);
 	// 		if (timeTotal > 300) continue;
@@ -201,10 +237,7 @@ const EOS = {
 	// },
 	handleFlap: (filteredDevices, result, switchType, switchName) => {
 		let devices = data.neighbors[switchType][switchName];
-		const keys = Object.keys(devices);
-		//logger.object(result.result);
 		const interfaces = result.result[1].interfaces;
-		// logger.object(result.result[1]);
 		for (const ifaceName in interfaces) {
 			if (!Object.hasOwnProperty.call(interfaces, ifaceName)) return;
 			const iface = interfaces[ifaceName];
@@ -223,11 +256,9 @@ const EOS = {
 		for (let deviceNumber in devices) {
 			const device = devices[deviceNumber]
 			if (device.mac === undefined) continue;
-			if(!('lastChange' in device.mac)) logger.log(device+' seems to have an issue','W');
+			if(!('lastChange' in device.mac)) Logs.warn(device+' seems to have an issue');
 			const timeTotal = Date.now() - (device.mac.lastChange * 1000);
-			//logger.log(timeTotal);
 			if (timeTotal > 300000 || timeTotal == 0) continue;
-			//logger.log('flapper');
 			device.switch = switchName;
 			filteredDevices.push(device);
 		}
@@ -289,23 +320,39 @@ const EOS = {
 	},
 	handleInterfaces: (result, switchType, switchName) => {
 		const interfaces = result.result[1].interfaces;
-		data.interfaces[switchType][switchName] = {};
+		// data.interfaces[switchType][switchName] = {};
 		for (const interfaceName in interfaces) {
 			if (!interfaces.hasOwnProperty.call(interfaces, interfaceName)) return;
 			const iface = interfaces[interfaceName];
 			if (iface.hardware !== "ethernet") continue;
-			data.interfaces[switchType][switchName][interfaceName] = {
-				"connected": iface.interfaceStatus == "connected" ? true : false,
-				"description": iface.description,
-				"inRate": iface.interfaceStatistics.inBitsRate,
-				"outRate": iface.interfaceStatistics.outBitsRate,
-				"maxRate": iface.bandwidth,
-				"lastFlap": iface.lastStatusChangeTimestamp,
-				"flapCount": iface.interfaceCounters.linkStatusChanges,
-				"outErrors": iface.interfaceCounters.totalOutErrors,
-				"outDiscards": iface.interfaceCounters.outDiscards,
-				"inErrors": iface.interfaceCounters.totalInErrors,
-				"inDiscards": iface.interfaceCounters.inDiscards
+			if (data.interfaces[switchType][switchName] === undefined) data.interfaces[switchType][switchName] = {};
+			const ifaceData = data.interfaces[switchType][switchName][interfaceName];
+			if (ifaceData === undefined) {
+				data.interfaces[switchType][switchName][interfaceName] = {
+					"connected": iface.interfaceStatus == "connected" ? true : false,
+					"description": iface.description,
+					"inRate": iface.interfaceStatistics.inBitsRate,
+					"outRate": iface.interfaceStatistics.outBitsRate,
+					"maxRate": iface.bandwidth,
+					"lastFlap": iface.lastStatusChangeTimestamp,
+					"flapCount": iface.interfaceCounters.linkStatusChanges,
+					"outErrors": iface.interfaceCounters.totalOutErrors,
+					"outDiscards": iface.interfaceCounters.outDiscards,
+					"inErrors": iface.interfaceCounters.totalInErrors,
+					"inDiscards": iface.interfaceCounters.inDiscards
+				}
+			} else {
+				ifaceData.connected = iface.interfaceStatus == "connected" ? true : false;
+				ifaceData.description = iface.description;
+				ifaceData.inRate = iface.interfaceStatistics.inBitsRate;
+				ifaceData.outRate = iface.interfaceStatistics.outBitsRate;
+				ifaceData.maxRate = iface.bandwidth;
+				ifaceData.lastFlap = iface.lastStatusChangeTimestamp;
+				ifaceData.flapCount = iface.interfaceCounters.linkStatusChanges;
+				ifaceData.outErrors = iface.interfaceCounters.totalOutErrors;
+				ifaceData.outDiscards = iface.interfaceCounters.outDiscards;
+				ifaceData.inErrors = iface.interfaceCounters.totalInErrors;
+				ifaceData.inDiscards = iface.interfaceCounters.inDiscards;
 			}
 		}
 	}
@@ -353,7 +400,7 @@ const NXOS = {
 			const device = devices[deviceNumber];
 			if ('txPower' in device === false) continue;
 			if ('rxPower' in device === false) continue;
-			if (device.rxPower > -11) continue;
+			if (device.rxPower > thresholds.fibre) continue;
 			device.switch = switchName;
 			filteredDevices.push(device);
 		}
@@ -387,7 +434,7 @@ const NXOS = {
 		for (let deviceNumber in devices) {
 			const device = devices[deviceNumber]
 			if (device.mac === undefined) continue;
-			if(!('lastChange' in device.mac)) logger.log(device+' seems to have an issue','W');
+			if(!('lastChange' in device.mac)) Logs.warn(device+' seems to have an issue');
 			const time = device.mac.lastChange.split(':');
 			const timeTotal = parseInt(time[0]) * 3600 + parseInt(time[1]) * 60 + parseInt(time[2]);
 			if (timeTotal > 300) continue;
@@ -396,13 +443,13 @@ const NXOS = {
 		}
 	},
 	handlePower: (result, switchType, switchName) => {
-		logger.object(result);
+		Logs.object(result);
 	},
 	handleTemperature: (result, switchType, switchName) => {
-		logger.object(result);
+		Logs.object(result);
 	},
 	handleFans: (result, switchType, switchName) => {
-		logger.object(result);
+		Logs.object(result);
 	},
 	handleInterfaces: (result, switchType, switchName) => {
 		const interfaces = result.result.body.TABLE_interface.ROW_interface;
@@ -438,198 +485,382 @@ const interfaceFrequency = 15;
 
 /* Globals */
 
+const thresholds = {
+	'fibre': -10,
+	'bandwidth': 0.95,
+	'discard': 1000,
+	'errors': 1000,
+}
+let isQuiting = false;
+let mainWindow = null;
 let SQL;
+let configLoaded = false;
 let cachedUpsTemps = {};
 
-const logger = new Logs(
+const Logs = new _Logs(
 	false,
 	'ArgosLogging',
-	path.join(__dirname, 'ArgosData'),
+	__data,
 	'D',
 	false
 )
-const config = new Config(
-	logger
+const Config = new _Config(
+	Logs
 );
-const webServer = new Server(
+const Server = new _Server(
 	expressRoutes,
-	logger,
+	Logs,
 	version,
-	config,
+	Config,
 	doMessage
 );
-const syslogServer = new SysLogServer(
-	logger,
+const SyslogServer = new _SysLogServer(
+	Logs,
 	doSysLogMessage
 );
 
-{ /* Config */
-	logger.printHeader('Argos Monitoring');
-	config.require('port', [], 'What port shall the server use');
-	config.require('syslogPort', [], 'What port shall the server listen to syslog messages on');
-	config.require('systemName', [], 'What is the name of the system');
-	config.require('warningTemperature', [], 'What temperature shall alerts be sent at');
-	config.require('webEnabled', {true: 'Yes', false: 'No'}, 'Should this system report back to an argos server');
-	{
-		config.require('webSocketEndpoint', [], 'What is the url of the argos server', ['webEnabled', true]);
-		config.require('secureWebSocketEndpoint', {true: 'Yes', false: 'No'}, 'Does the server use SSL (padlock in browser)', ['webEnabled', true]);
-	}
-	config.require('localDataBase', {true: 'Yes', false: 'No'}, 'Setup and use a local database to save warnings and temperature information');
-	{
-		config.require('dbUser', [], 'Database Username', ['localDataBase', true]);
-		config.require('dbPass', [], 'Database Password', ['localDataBase', true]);
-		config.require('dbPort', [], 'Database port', ['localDataBase', true]);
-		config.require('dbHost', [], 'Database address', ['localDataBase', true]);
-		config.require('dbName', [], 'Database name', ['localDataBase', true]);
-	}
-	config.require('textsEnabled', {true: 'Yes', false: 'No'}, 'Use AWS to send texts when warnings are triggered');
-	{
-		config.require('awsAccessKeyId', [], 'AWS access key for texts', ['textsEnabled', true]);
-		config.require('awsSecretAccessKey', [], 'AWS Secret access key for texts', ['textsEnabled', true]);
-		config.require('awsRegion', [], 'AWS region', ['textsEnabled', true]);
-	}
-	config.require('loggingLevel', {'A':'All', 'D':'Debug', 'W':'Warnings', 'E':'Errors'}, 'Set logging level');
-	config.require('createLogFile', {true: 'Yes', false: 'No'}, 'Save logs to local file');
-	config.require('advancedConfig', {true: 'Yes', false: 'No'}, 'Show advanced config settings');
-	{
-		config.require('debugLineNum', {true: 'Yes', false: 'No'}, 'Print line numbers', ['advancedConfig', true]);
-		config.require('printPings', {true: 'Yes', false: 'No'}, 'Print pings', ['advancedConfig', true]);
-		config.require('devMode', {true: 'Yes', false: 'No'}, 'Dev mode - Disables connections to devices', ['advancedConfig', true]);
-	}
+(async () => { /* App setup and config */
 
-	config.default('port', 8080);
-	config.default('syslogPort', 514);
-	config.default('systemName', 'Unknown');
-	config.default('warningTemperature', 35);
-	config.default('webEnabled', false);
-	config.default('localDataBase', false);
-	config.default('dbPort', '3306');
-	config.default('dbName', 'argosdata');
-	config.default('dbHost', 'localhost');
-	config.default('textsEnabled', false);
-	config.default('loggingLevel', 'W');
-	config.default('createLogFile', true);
-	config.default('debugLineNum', false);
-	config.default('printPings', false);
-	config.default('advancedConfig', false);
-	config.default('devMode', false);
-	config.default('secureWebSocketEndpoint', true);
+	await app.whenReady();
+	await setUpApp();
+	await createWindow();
 
-	if (!await config.fromFile(path.join(__dirname, 'ArgosData', 'config.conf'))) {
-		await config.fromCLI(path.join(__dirname, 'ArgosData', 'config.conf'));
-	}
-
-	if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
-		config.set('debugLineNum', true);
-	}
-
-	if (config.get('textsEnabled')) {
-		AWS.config.update({ region: config.get('awsRegion')});
-		AWS.config.credentials = new AWS.Credentials(config.get('awsAccessKeyId'), config.get('awsSecretAccessKey'));
-	}
-
-	logger.setConf({
-		'createLogFile': config.get('createLogFile'),
-		'logsFileName': 'ArgosLogging',
-		'configLocation': path.join(__dirname, 'ArgosData'),
-		'loggingLevel': config.get('loggingLevel'),
-		'debugLineNum': config.get('debugLineNum'),
-	});
-
-	logger.log('Running version: v'+version, ['H', 'SERVER', logger.g]);
-	logger.log(`Logging to: ${path.join(__dirname, 'ArgosData', 'logs')}`, ['H', 'SERVER', logger.g]);
-	logger.log(`Config saved to: ${path.join(__dirname, 'ArgosData', 'config.conf')}`, ['H', 'SERVER', logger.g]);
-	config.print();
-	config.userInput(async command => {
-		switch (command) {
-		case 'config':
-			await config.fromCLI(path.join(__dirname, 'ArgosData', 'config.conf'));
-			if (config.get('loggingLevel') == 'D' || config.get('loggingLevel') == 'A') {
-				config.set('debugLineNum', true);
-			}
-			logger.setConf({
-				'createLogFile': config.get('createLogFile'),
-				'logsFileName': 'ArgosLogging',
-				'configLocation': path.join(__dirname, 'ArgosData'),
-				'loggingLevel': config.get('loggingLevel'),
-				'debugLineNum': config.get('debugLineNum')
-			});
-			return true;
+	{ /* Config */
+		Logs.printHeader('Argos Monitoring');
+		Config.require('port', [], 'What port shall the server use');
+		Config.require('syslogPort', [], 'What port shall the server listen to syslog messages on');
+		Config.require('systemName', [], 'What is the name of the system');
+		Config.require('warningTemperature', [], 'What temperature shall alerts be sent at');
+		Config.require('interfaceWarnings', {true: 'Yes', false: 'No'}, 'Highlight interfaces with high error counts');
+		{
+			Config.require('bandwidthThreshold', [], 'Threshold for warning about high bandwith usage [0.0-1.0]', ['interfaceWarnings', true]);
+			Config.require('discardThreshold', [], 'Threshold for warning about high interface discards [number]', ['interfaceWarnings', true]);
+			Config.require('errorThreshold', [], 'Threshold for warning about high interface errors [number]', ['interfaceWarnings', true]);
 		}
+		Config.require('fibreThreshold', [], 'Threshold for warning about low fibre level [-number]');
+		Config.require('webEnabled', {true: 'Yes', false: 'No'}, 'Should this system report back to an argos server');
+		{
+			Config.require('webSocketEndpoint', [], 'What is the url of the argos server', ['webEnabled', true]);
+			Config.require('secureWebSocketEndpoint', {true: 'Yes', false: 'No'}, 'Does the server use SSL (padlock in browser)', ['webEnabled', true]);
+		}
+		Config.require('localDataBase', {true: 'Yes', false: 'No'}, 'Setup and use a local database to save warnings and temperature information');
+		{
+			Config.require('dbUser', [], 'Database Username', ['localDataBase', true]);
+			Config.require('dbPass', [], 'Database Password', ['localDataBase', true]);
+			Config.require('dbPort', [], 'Database port', ['localDataBase', true]);
+			Config.require('dbHost', [], 'Database address', ['localDataBase', true]);
+			Config.require('dbName', [], 'Database name', ['localDataBase', true]);
+		}
+		Config.require('textsEnabled', {true: 'Yes', false: 'No'}, 'Use AWS to send texts when warnings are triggered');
+		{
+			Config.require('awsAccessKeyId', [], 'AWS access key for texts', ['textsEnabled', true]);
+			Config.require('awsSecretAccessKey', [], 'AWS Secret access key for texts', ['textsEnabled', true]);
+			Config.require('awsRegion', [], 'AWS region', ['textsEnabled', true]);
+		}
+		Config.require('loggingLevel', {'A':'All', 'D':'Debug', 'W':'Warnings', 'E':'Errors'}, 'Set logging level');
+		Config.require('createLogFile', {true: 'Yes', false: 'No'}, 'Save logs to local file');
+		Config.require('advancedConfig', {true: 'Yes', false: 'No'}, 'Show advanced config settings');
+		{
+			Config.require('debugLineNum', {true: 'Yes', false: 'No'}, 'Print line numbers', ['advancedConfig', true]);
+			Config.require('printPings', {true: 'Yes', false: 'No'}, 'Print pings', ['advancedConfig', true]);
+			Config.require('devMode', {true: 'Yes', false: 'No'}, 'Dev mode - Disables connections to devices', ['advancedConfig', true]);
+		}
+
+		Config.default('port', 8080);
+		Config.default('syslogPort', 514);
+		Config.default('systemName', 'Unknown');
+		Config.default('warningTemperature', 35);
+		Config.default('interfaceWarnings', false);
+		Config.default('webEnabled', false);
+		Config.default('localDataBase', false);
+		Config.default('dbPort', '3306');
+		Config.default('dbName', 'argosdata');
+		Config.default('dbHost', 'localhost');
+		Config.default('textsEnabled', false);
+		Config.default('loggingLevel', 'W');
+		Config.default('createLogFile', true);
+		Config.default('debugLineNum', false);
+		Config.default('printPings', false);
+		Config.default('advancedConfig', false);
+		Config.default('devMode', false);
+		Config.default('secureWebSocketEndpoint', true);
+		Config.default('bandwidthThreshold', 0.95);
+		Config.default('discardThreshold', 1000);
+		Config.default('errorThreshold', 1000);
+		Config.default('fibreThreshold', -10);
+
+		if (!await Config.fromFile(path.join(__data, 'config.conf'))) {
+			// await Config.fromCLI(path.join(__data, 'config.conf'));
+			await Config.fromAPI(path.join(__data, 'config.conf'), configQuestion, configDone);
+		}
+
+		thresholds.bandwidth = Config.get('bandwidthThreshold');
+		thresholds.discard = Config.get('discardThreshold');
+		thresholds.errors = Config.get('errorThreshold');
+		thresholds.fibre = Config.get('fibreThreshold');
+
+		Config.on('set', data => {
+			switch (data.property) {
+				case 'bandwidthThreshold': thresholds.bandwidth = data.value; break;
+				case 'discardThreshold': thresholds.discard = data.value; break;
+				case 'errorThreshold': thresholds.errors = data.value; break;
+				case 'fibreThreshold': thresholds.fibre = data.value; break;
+			}
+		})
+
+		if (Config.get('loggingLevel') == 'D' || Config.get('loggingLevel') == 'A') {
+			Config.set('debugLineNum', true);
+		}
+
+		if (Config.get('textsEnabled')) {
+			AWS.config.update({ region: Config.get('awsRegion')});
+			AWS.config.credentials = new AWS.Credentials(Config.get('awsAccessKeyId'), Config.get('awsSecretAccessKey'));
+		}
+
+		Logs.setConf({
+			'createLogFile': Config.get('createLogFile'),
+			'logsFileName': 'ArgosLogging',
+			'configLocation': __data,
+			'loggingLevel': Config.get('loggingLevel'),
+			'debugLineNum': Config.get('debugLineNum'),
+		});
+
+		Logs.log('Running version: v'+version, ['H', 'SERVER', Logs.g]);
+		Logs.log(`Logging to: ${path.join(__data, 'logs')}`, ['H', 'SERVER', Logs.g]);
+		Logs.log(`Config saved to: ${path.join(__data, 'config.conf')}`, ['H', 'SERVER', Logs.g]);
+		Config.print();
+		Config.userInput(async command => {
+			switch (command) {
+			case 'config':
+				await Config.fromCLI(path.join(__data, 'config.conf'));
+				if (Config.get('loggingLevel') == 'D' || Config.get('loggingLevel') == 'A') {
+					Config.set('debugLineNum', true);
+				}
+				Logs.setConf({
+					'createLogFile': Config.get('createLogFile'),
+					'logsFileName': 'ArgosLogging',
+					'configLocation': __data,
+					'loggingLevel': Config.get('loggingLevel'),
+					'debugLineNum': Config.get('debugLineNum')
+				});
+				return true;
+			}
+		});
+		configLoaded = true;
+	}
+
+	if (Config.get('localDataBase')) {
+		SQL = new _SQL(
+			Config.get('dbHost'),
+			Config.get('dbPort'),
+			Config.get('dbUser'),
+			Config.get('dbPass'),
+			Config.get('dbName'),
+			Logs
+		);
+		await SQL.init(tables);
+		const sensor = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'frame';");
+		if (sensor.length == 0) {
+			await SQL.query("ALTER TABLE `temperature` RENAME COLUMN frame TO sensor;");
+		}
+		const sensorType = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'sensorType';");
+		if (sensorType.length == 0) {
+			await SQL.query("ALTER TABLE `temperature` ADD COLUMN sensorType text NOT NULL;");
+			await SQL.query("UPDATE `temperature` SET sensorType = 'IQ Frame' WHERE 1=1;");
+		}
+	}
+
+	Server.start(Config.get('port'));
+	SyslogServer.start(Config.get('syslogPort'));
+
+	Logs.log(`Argos can be accessed at http://localhost:${Config.get('port')}`, 'C');
+	mainWindow.webContents.send('loaded', `http://localhost:${Config.get('port')}`);
+
+	connectToWebServer(true).then(()=>{
+		webLogBoot();
 	});
-}
 
-if (config.get('localDataBase')) {
-	SQL = new SQLSession(
-		config.get('dbHost'),
-		config.get('dbPort'),
-		config.get('dbUser'),
-		config.get('dbPass'),
-		config.get('dbName'),
-		logger
-	);
-	await SQL.init(tables);
-	const sensor = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'frame';");
-	if (sensor.length == 0) {
-		await SQL.query("ALTER TABLE `temperature` RENAME COLUMN frame TO sensor;");
-	}
-	const sensorType = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'sensorType';");
-	if (sensorType.length == 0) {
-		await SQL.query("ALTER TABLE `temperature` ADD COLUMN sensorType text NOT NULL;");
-		await SQL.query("UPDATE `temperature` SET sensorType = 'IQ Frame' WHERE 1=1;");
-	}
-}
+	// 1 Minute ping loop
+	setInterval(() => {
+		connectToWebServer(true);
+	}, 60*1000);
 
-webServer.start(config.get('port'));
-syslogServer.start(config.get('syslogPort'));
-
-logger.log(`Argos can be accessed at http://localhost:${config.get('port')}`, 'C');
-
-connectToWebServer(true).then(()=>{
-	webLogBoot();
+	await startLoopAfterDelay(logTemp, tempFrequency);
+	await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Media');
+	await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Media');
+	await startLoopAfterDelay(switchInterfaces, 5, 'Media', true);
+	await startLoopAfterDelay(switchFibre, 5, 'Media');
+	await startLoopAfterDelay(localPings, localPingFrequency);
+	await startLoopAfterDelay(connectToWebServer, 5);
+	await startLoopAfterDelay(webLogPing, pingFrequency);
+	await startLoopAfterDelay(switchEnv, envFrequency, 'Media');
+	await startLoopAfterDelay(checkDevices, devicesFrequency, 'Media', true);
+	await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Media');
+	//await startLoopAfterDelay(switchPhy, switchStatsFrequency, 'Media');
+	await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Control');
+	await startLoopAfterDelay(switchInterfaces, 5, 'Control', true);
+	await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Control');
+	await startLoopAfterDelay(switchEnv, envFrequency, 'Control');
+	await startLoopAfterDelay(checkDevices, devicesFrequency, 'Control', false);
+	await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Control');
+	await startLoopAfterDelay(checkUps, upsFrequency);
+})().catch(error => {
+	console.log(error);
 });
 
-// 1 Minute ping loop
-setInterval(() => {
-	connectToWebServer(true);
-}, 60*1000);
 
-await startLoopAfterDelay(logTemp, tempFrequency);
-await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Media');
-await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Control');
-await startLoopAfterDelay(switchInterfaces, 5, 'Media', true);
-await startLoopAfterDelay(switchInterfaces, 5, 'Control', true);
-await startLoopAfterDelay(localPings, localPingFrequency);
-await startLoopAfterDelay(connectToWebServer, 5);
-await startLoopAfterDelay(webLogPing, pingFrequency);
-await startLoopAfterDelay(switchEnv, envFrequency, 'Media');
-await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Media');
-await startLoopAfterDelay(checkDevices, devicesFrequency, 'Media', true);
-await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Media');
-//await startLoopAfterDelay(switchPhy, switchStatsFrequency, 'Media');
-await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Media');
-await startLoopAfterDelay(switchEnv, envFrequency, 'Control');
-await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Control');
-await startLoopAfterDelay(checkDevices, devicesFrequency, 'Control', false);
-await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Control');
-await startLoopAfterDelay(checkUps, upsFrequency);
+/* Electron */
 
+
+async function setUpApp() {
+	const tray = new Tray(path.join(__static, 'img/icon/network-96.png'));
+	tray.setContextMenu(Menu.buildFromTemplate([
+		{
+			label: 'Show App', click: function () {
+				mainWindow.show();
+			}
+		},
+		{
+			label: 'Exit', click: function () {
+				isQuiting = true;
+				app.quit();
+			}
+		}
+	]));
+
+	ipcMain.on('window', (event, message) => {
+		switch (message) {
+		case 'exit':
+			app.quit();
+			break;
+		case 'minimise':
+			mainWindow.hide();
+			break;
+		default:
+			break;
+		}
+	});
+
+	ipcMain.on('config', (event, message) => {
+		switch (message) {
+		case 'start':
+			Config.fromAPI(path.join(__data, 'config.conf'), configQuestion, configDone);
+			break;
+		case 'stop':
+			Logs.warn('Not implemeneted yet: Cancle config change');
+			break;
+		case 'show':
+			Config.print();
+			break;
+		default:
+			break;
+		}
+	});
+
+	const autoLaunch = new AutoLaunch({
+		name: 'Argos Monitoring',
+		isHidden: true,
+	});
+	autoLaunch.isEnabled().then(isEnabled => {
+		if (!isEnabled) autoLaunch.enable();
+	});
+
+	app.on('before-quit', function () {
+		isQuiting = true;
+	});
+
+	app.on('activate', async () => {
+		if (BrowserWindow.getAllWindows().length === 0) createWindow();
+	});
+
+	Logs.on('logSend', message => {
+		if (!isQuiting) mainWindow.webContents.send('log', message);
+	});
+}
+
+async function createWindow() {
+	const windowOptions = {
+		width: 1440,
+		height: 720,
+		autoHideMenuBar: true,
+		webPreferences: {
+			contextIsolation: true,
+			preload: path.resolve(__internal, 'preload.js')
+		},
+		icon: path.join(__static, 'img/icon/icon.png'),
+		show: false,
+		sensor: false,
+		titleBarStyle: 'hidden',
+		titleBarOverlay: {
+			color: '#313d48',
+			symbolColor: '#ffffff',
+			height: 49
+		}
+	}
+	
+	if (IS_WINDOWS_11) {
+		mainWindow = new MicaBrowserWindow(windowOptions);
+		mainWindow.setDarkTheme();
+		mainWindow.setMicaEffect();
+		const scale = screen.getPrimaryDisplay().scaleFactor;
+		mainWindow.setSize(1440 * scale, 720 * scale);
+	} else {
+		mainWindow = new BrowserWindow(windowOptions);
+	}
+
+	if (!app.commandLine.hasSwitch('hidden')) {
+		mainWindow.show();
+	} else {
+		mainWindow.hide();
+	}
+
+	mainWindow.on('close', function (event) {
+		if (!isQuiting) {
+			event.preventDefault();
+			mainWindow.webContents.send('requestExit');
+			event.returnValue = false;
+		}
+	});
+
+	mainWindow.on('minimize', function (event) {
+		event.preventDefault();
+		mainWindow.hide();
+	});
+
+	mainWindow.loadURL(path.resolve(__internal, 'views/app.ejs'));
+
+	await new Promise(resolve => {
+		ipcMain.on('ready', (event, ready) => {
+			if (configLoaded) {
+				mainWindow.webContents.send('loaded', `http://localhost:${Config.get('port')}`);
+			}
+			resolve();
+		});
+	});
+}
+
+function notification(title, text) {
+	new Notification({
+		'title': title,
+		'body': text
+	}).show()
+}
 
 /* Data */
 
 
 function loadData(file) {
 	try {
-		const dataRaw = fs.readFileSync(`${__dirname}/ArgosData/data/${file}.json`);
+		const dataRaw = fs.readFileSync(`${__data}/data/${file}.json`);
 		try {
 			return JSON.parse(dataRaw);
 		} catch (error) {
-			logger.object(`There is an error with the syntax of the JSON in ${file}.json file`, error, 'E');
+			Logs.error(`There is an error with the syntax of the JSON in ${file}.json file`, error);
 			return [];
 		}
 	} catch (error) {
-		logger.log(`Could not read the file ${file}.json, attempting to create new file`, 'W');
-		logger.debug('File error:', error);
+		Logs.warn(`Could not read the file ${file}.json, attempting to create new file`);
+		Logs.debug('File error:', error);
 		const fileData = [];
 		switch (file) {
 		case 'Devices':
@@ -669,18 +900,18 @@ function loadData(file) {
 			};
 			break;
 		}
-		if (!fs.existsSync(`${__dirname}/ArgosData/data/`)){
-			fs.mkdirSync(`${__dirname}/ArgosData/data/`);
+		if (!fs.existsSync(`${__data}/data/`)){
+			fs.mkdirSync(`${__data}/data/`);
 		}
-		fs.writeFileSync(`${__dirname}/ArgosData/data/${file}.json`, JSON.stringify(fileData, null, 4));
+		fs.writeFileSync(`${__data}/data/${file}.json`, JSON.stringify(fileData, null, 4));
 		return fileData;
 	}
 }
 function writeData(file, data) {
 	try {
-		fs.writeFileSync(`${__dirname}/ArgosData/data/${file}.json`, JSON.stringify(data, undefined, 2));
+		fs.writeFileSync(`${__data}/data/${file}.json`, JSON.stringify(data, undefined, 2));
 	} catch (error) {
-		logger.object(`Could not write the file ${file}.json, do we have permission to access the file?`, error, 'E');
+		Logs.error(`Could not write the file ${file}.json, do we have permission to access the file?`, error);
 	}
 }
 
@@ -741,51 +972,40 @@ function ports(type) {
 
 
 function expressRoutes(expressApp) {
-	expressApp.set('views', path.join(__dirname, 'views'));
+	expressApp.set('views', path.join(__internal, 'views'));
 	expressApp.set('view engine', 'ejs');
 	expressApp.use(express.json());
 	expressApp.use(express.static(__static));
 
 	expressApp.get('/',  (req, res) =>  {
-		logger.log('New client connected', 'A');
+		Logs.info('New client connected');
 		res.header('Content-type', 'text/html');
 		res.render('web', {
 			switches:switches('Media'),
 			controlSwitches:switches('Control'),
-			systemName:config.get('systemName'),
-			webSocketEndpoint:config.get('webSocketEndpoint'),
-			secureWebSocketEndpoint:config.get('secureWebSocketEndpoint'),
-			webEnabled:config.get('webEnabled'),
+			systemName:Config.get('systemName'),
+			webSocketEndpoint:Config.get('webSocketEndpoint'),
+			secureWebSocketEndpoint:Config.get('secureWebSocketEndpoint'),
+			webEnabled:Config.get('webEnabled'),
 			version: version,
 			pings:syslogSourceList(),
 			pingGroups:syslogSourceGroups(),
-			background:'bg-dark'
-		});
-	});
-
-	expressApp.get('/inApp',  (req, res) =>  {
-		logger.log('New client connected', 'A');
-		res.header('Content-type', 'text/html');
-		res.render('web', {
-			switches:switches('Media'),
-			controlSwitches:switches('Control'),
-			systemName:config.get('systemName'),
-			webSocketEndpoint:config.get('webSocketEndpoint'),
-			secureWebSocketEndpoint:config.get('secureWebSocketEndpoint'),
-			webEnabled:config.get('webEnabled'),
-			version: version,
-			pings:syslogSourceList(),
-			background:'micaActive'
+			background:'bg-dark',
+			thresholds: thresholds,
+			internal: __internal,
+			static: __static,
+			views: __views
 		});
 	});
 
 	expressApp.get('/about', (req, res) => {
-		logger.log('Collecting about information', 'A');
+		Logs.info('Collecting about information');
 		res.header('Content-type', 'text/html');
 		const aboutInfo = {
 			'aboutInfo': {
 				'Version': version,
-				'Config': config.all(),
+				'Config': Config.all(),
+				'Thresholds':thresholds,
 				'Switches':switches(),
 				'Temp Sensors':temps(),
 				'UPS':ups(),
@@ -793,42 +1013,78 @@ function expressRoutes(expressApp) {
 				'Pings':pings(),
 				'Port Monitoring':ports()
 			},
-			'systemName': config.get('systemName')
+			'systemName': Config.get('systemName'),
+			'background': 'bg-dark'
 		}
 		res.render('about', aboutInfo);
 	})
 
-	expressApp.get('/broken', (req, res) => {
-		res.send('no');
+	expressApp.get('/data', (req, res) => {
+		Logs.info('Collecting data');
+		res.header('Content-type', 'text/html');
+		const dataInfo = {
+			'data': data,
+			'systemName': Config.get('systemName'),
+			'background': 'bg-dark'
+		}
+		res.render('data', dataInfo);
+	})
+
+	expressApp.get('/app',  (req, res) =>  {
+		Logs.info('New client connected');
+		res.header('Content-type', 'text/html');
+		res.render('web', {
+			switches:switches('Media'),
+			controlSwitches:switches('Control'),
+			systemName:Config.get('systemName'),
+			webSocketEndpoint:Config.get('webSocketEndpoint'),
+			secureWebSocketEndpoint:Config.get('secureWebSocketEndpoint'),
+			webEnabled:Config.get('webEnabled'),
+			version: version,
+			pings:syslogSourceList(),
+			pingGroups:syslogSourceGroups(),
+			background:'micaActive',
+			thresholds: thresholds,
+			internal: __internal,
+			static: __static,
+			views: __views
+		});
 	});
 
-	expressApp.get('/fibre', (req, res) => {
-		logger.log('Request for fibre data', 'D');
-		res.send(JSON.stringify(data.fibre));
-	});
+	expressApp.get('/appAbout', (req, res) => {
+		Logs.info('Collecting about information');
+		res.header('Content-type', 'text/html');
+		const aboutInfo = {
+			'aboutInfo': {
+				'Version': version,
+				'Config': Config.all(),
+				'Thresholds':thresholds,
+				'Switches':switches(),
+				'Temp Sensors':temps(),
+				'UPS':ups(),
+				'Devices':devices(),
+				'Pings':pings(),
+				'Port Monitoring':ports()
+			},
+			'systemName': Config.get('systemName'),
+			'background': 'micaActive'
+		}
+		res.render('about', aboutInfo);
+	})
 
-	expressApp.get('/ups', (req, res) => {
-		logger.log('Request for UPS data', 'D');
-		res.send(JSON.stringify(data.ups));
-	});
-
-	expressApp.get('/phy', (req, res) => {
-		logger.log('Request for PHY/FEC data', 'D');
-		res.send(JSON.stringify(data.phy));
-	});
-
-	expressApp.get('/mac', (req, res) => {
-		logger.log('Request for mac/flap data', 'D');
-		res.send(JSON.stringify(data.mac));
-	});
-
-	expressApp.get('/devices', (req, res) => {
-		logger.log('Request for devices data', 'D');
-		res.send(JSON.stringify(data.devices.Media));
-	});
+	expressApp.get('/appData', (req, res) => {
+		Logs.info('Collecting data');
+		res.header('Content-type', 'text/html');
+		const dataInfo = {
+			'data': data,
+			'systemName': Config.get('systemName'),
+			'background': 'micaActive'
+		}
+		res.render('data', dataInfo);
+	})
 
 	expressApp.get('/getConfig', (req, res) => {
-		logger.log('Request for devices config', 'D');
+		Logs.debug('Request for devices config');
 		let catagory = req.query.catagory;
 		let data;
 		switch (catagory) {
@@ -857,42 +1113,41 @@ function expressRoutes(expressApp) {
 	});
 
 	expressApp.get('/config', (req, res) => {
-		logger.log('Requesting app config', 'A');
-		res.send(JSON.stringify(config.all()));
+		Logs.info('Requesting app config');
+		res.send(JSON.stringify(Config.all()));
 	});
 
 	expressApp.post('/setswitches', (req, res) => {
-		logger.log('Request to set switches config data', 'D');
+		Logs.debug('Request to set switches config data');
 		writeData('Switches', req.body);
 		res.send('Done');
 	});
 	expressApp.post('/setports', (req, res) => {
-		logger.log('Request to set ports config data', 'D');
+		Logs.debug('Request to set ports config data');
 		writeData('Ports', req.body);
 		res.send('Done');
 	});
 	expressApp.post('/setdevices', (req, res) => {
-		logger.log('Request to set devices config data', 'D');
+		Logs.debug('Request to set devices config data');
 		writeData('Devices', req.body);
 		res.send('Done');
 	});
 	expressApp.post('/setups', (req, res) => {
-		logger.log('Request to set ups config data', 'D');
+		Logs.debug('Request to set ups config data');
 		writeData('Ups', req.body);
 		res.send('Done');
 	});
 	expressApp.post('/settemps', (req, res) => {
-		logger.log('Request to set temps config data', 'D');
+		Logs.debug('Request to set temps config data');
 		writeData('Temps', req.body);
 		res.send('Done');
 	});
 	expressApp.post('/setpings', (req, res) => {
-		logger.log('Request to set pings config data', 'D');
+		Logs.debug('Request to set pings config data');
 		writeData('Pings', req.body);
 		res.send('Done');
 	});
 }
-
 
 async function doMessage(msgObj, socket) {
 	const payload = msgObj.payload;
@@ -902,7 +1157,7 @@ async function doMessage(msgObj, socket) {
 	}
 	switch (payload.command) {
 	case 'meta':
-		logger.object('Received', msgObj, 'D');
+		Logs.debug('Received', msgObj);
 		socket.send('Received meta');
 		break;
 	case 'register':
@@ -912,44 +1167,44 @@ async function doMessage(msgObj, socket) {
 		switch (payload.data) {
 			case 'temperature':
 				getTemperature(header, payload, 'IQ Frame').then(data => {
-					webServer.sendTo(socket, data);
+					Server.sendTo(socket, data);
 				});
 				break;
 			case 'temperatureGeneric':
 				getTemperature(header, payload, 'Will N Sensor').then(data => {
-					webServer.sendTo(socket, data);
+					Server.sendTo(socket, data);
 				});
 				break;
 			case 'syslog':
 				getSyslog(header, payload).then(data => {
-					logger.debug(`Retrieved ${data.logs.length} SYSLOG messages`);
-					webServer.sendTo(socket, data);
+					Logs.debug(`Retrieved ${data.logs.length} SYSLOG messages`);
+					Server.sendTo(socket, data);
 				})
 			default:
 				break;
 		}
 		break;
 	default:
-		logger.object('Unknown message', msgObj, 'W');
+		Logs.warn('Unknown message', msgObj);
 	}
 }
 
 async function doSysLogMessage(msg, info) {
 	const message = msg.toString().replace(/\'/g, '"');
-	if (config.get('localDataBase')) SQL.insert({
+	if (Config.get('localDataBase')) SQL.insert({
 		'message': message,
 		'ip': info.address,
-		'system': config.get('systemName')
+		'system': Config.get('systemName')
 	}, 'syslog');
-	webServer.sendToAll({
+	Server.sendToAll({
 		'command': 'data',
 		'data': 'syslog',
-		'system': config.get('systemName'),
+		'system': Config.get('systemName'),
 		'replace': false,
 		'logs': [{
 			'message': message,
 			'ip': info.address,
-			'system': config.get('systemName'),
+			'system': Config.get('systemName'),
 			'time': new Date()
 		}]
 	})
@@ -957,12 +1212,12 @@ async function doSysLogMessage(msg, info) {
 }
 
 async function getTemperature(header, payload, type) {
-	logger.log(`Getting temps for ${header.system}`, 'D');
+	Logs.debug(`Getting temps for ${header.system}`);
 	const from = payload.from;
 	const to = payload.to;
 	const dateQuery = `SELECT ROW_NUMBER() OVER (ORDER BY PK) AS Number, \`PK\`, \`time\` FROM \`temperature\` WHERE time BETWEEN FROM_UNIXTIME(${from}) AND FROM_UNIXTIME(${to}) AND \`system\` = '${header.system}' AND \`sensorType\` = '${type}' GROUP BY \`time\`; `;
 
-	if (!config.get('localDataBase')) return {
+	if (!Config.get('localDataBase')) return {
 		'command':'data',
 		'data':'temps',
 		'type': type,
@@ -1030,7 +1285,7 @@ async function getTemperature(header, payload, type) {
 }
 
 async function getSyslog(header, payload) {
-	//logger.log(`Getting syslogs for ${header.system}, ips: ${payload.ips.map(ip => `'${ip}'`).join(',')}`, 'D');
+	//Logs.debug(`Getting syslogs for ${header.system}, ips: ${payload.ips.map(ip => `'${ip}'`).join(',')}`);
 	const from = payload.from;
 	const to = payload.to;
 	let whereIP = '';
@@ -1050,10 +1305,10 @@ async function getSyslog(header, payload) {
 		})
 		whereIP += `AND \`ip\` NOT IN (${ipsEx.join(',')})`
 	}
-	logger.log(`Getting syslogs for ${header.system}, where: ${whereIP}`, 'D');
+	Logs.debug(`Getting syslogs for ${header.system}, where: ${whereIP}`);
 	const dateQuery = `SELECT * FROM \`syslog\` WHERE time BETWEEN FROM_UNIXTIME(${from}) AND FROM_UNIXTIME(${to}) AND \`system\` = '${header.system}' ${whereIP}; `;
 
-	if (!config.get('localDataBase')) return {
+	if (!Config.get('localDataBase')) return {
 		'command':'data',
 		'data':'syslog',
 		'system':header.system,
@@ -1098,12 +1353,12 @@ function coreDoRegister(socket, msgObj) {
 	}
 	if (header.version !== version) {
 		if (header.version.substr(0, header.version.indexOf('.')) != version.substr(0, version.indexOf('.'))) {
-			logger.log('Connected client has different major version, it will not work with this server!', 'E');
+			Logs.error('Connected client has different major version, it will not work with this server!');
 		} else {
-			logger.log('Connected client has differnet version, support not guaranteed', 'W');
+			Logs.warn('Connected client has differnet version, support not guaranteed');
 		}
 	}
-	logger.log(`${logger.g}${header.fromID}${logger.reset} Registered as new client`, 'D');
+	Logs.debug(`${Logs.g}${header.fromID}${Logs.reset} Registered as new client`);
 	socket.connected = true;
 }
 
@@ -1116,13 +1371,13 @@ function makeHeader() {
 	header.active = true;
 	header.messageID = header.timestamp;
 	header.recipients = [];
-	header.system = config.get('systemName');
+	header.system = Config.get('systemName');
 	return header;
 }
 
 function distributeData(type, data) {
-	sendCouldData({'command':'log', 'type':type, 'data':data});
-	webServer.sendToAll({'command':'log', 'type':type, 'data':data});
+	sendCloudData({'command':'log', 'type':type, 'data':data});
+	Server.sendToAll({'command':'log', 'type':type, 'data':data});
 }
 
 
@@ -1131,7 +1386,7 @@ function distributeData(type, data) {
 
 async function lldpLoop(switchType) {
 	const Switches = switches(switchType);
-	logger.log(`Getting LLDP neighbors for ${switchType} switches`, 'A');
+	Logs.info(`Getting LLDP neighbors for ${switchType} switches`);
 	const promisses = [];
 	for (let i = 0; i < Switches.length; i++) {
 		promisses.push(doApi('neighborRequest', Switches[i]));
@@ -1139,7 +1394,7 @@ async function lldpLoop(switchType) {
 	const values = await Promise.all(promisses);
 	for (let i = 0; i < values.length; i++) {
 		if (values[i] === undefined) {
-			logger.log(`(LLDP) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
+			Logs.warn(`(LLDP) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`);
 			continue;
 		}
 		switch (Switches[i].OS) {
@@ -1160,7 +1415,7 @@ async function lldpLoop(switchType) {
 
 async function switchFlap(switchType) {
 	const Switches = switches(switchType);
-	logger.log('Checking for recent interface dropouts', 'A');
+	Logs.info('Checking for recent interface dropouts');
 	const promisses = [];
 	for (let i = 0; i < Switches.length; i++) {
 		promisses.push(doApi('flapRequest', Switches[i]));
@@ -1168,8 +1423,10 @@ async function switchFlap(switchType) {
 	const values = await Promise.all(promisses);
 	const filteredDevices = [];
 	for (let i = 0; i < values.length; i++) {
-		if (values[i] === undefined) {
-			logger.log(`(FLAP) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
+		if (values[i] === 'APIERROR') {
+			continue;
+		} else if (values[i] === undefined) {
+			Logs.warn(`(FLAP) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`);
 			continue;
 		}
 		switch (Switches[i].OS) {
@@ -1191,9 +1448,9 @@ async function switchFlap(switchType) {
 }
 
 function switchPhy(switchType) {
-	if (config.get('devMode')) return;
+	if (Config.get('devMode')) return;
 	const Switches = switches('Media');
-	logger.log('Looking for high numbers of PHY/FEC errors', 'A');
+	Logs.info('Looking for high numbers of PHY/FEC errors');
 	function processSwitchPhy(response, devices) {
 		const statuses = response.result[1].interfacePhyStatuses;
 		const keys = Object.keys(devices);
@@ -1244,7 +1501,7 @@ function switchPhy(switchType) {
 					}
 				}
 			} else {
-				logger.log(`(PHY) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
+				Logs.warn(`(PHY) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`);
 			}
 		}
 		data.phy = filteredDevices;
@@ -1254,7 +1511,7 @@ function switchPhy(switchType) {
 
 async function switchFibre(switchType) {
 	const Switches = switches(switchType);
-	logger.log('Looking for low fibre levels in trancievers', 'A');
+	Logs.info('Looking for low fibre levels in trancievers');
 	const promisses = [];
 	for (let i = 0; i < Switches.length; i++) {
 		promisses.push(doApi('transRequest', Switches[i]));
@@ -1263,7 +1520,7 @@ async function switchFibre(switchType) {
 	const filteredDevices = [];
 	for (let i = 0; i < values.length; i++) {
 		if (values[i] === undefined) {
-			logger.log(`(TRANS) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
+			Logs.warn(`(TRANS) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`);
 			continue;
 		}
 		switch (Switches[i].OS) {
@@ -1286,7 +1543,7 @@ async function switchFibre(switchType) {
 
 async function switchEnv(switchType) {
 	const Switches = switches(switchType);
-	logger.log('Checking switch environment paramaters', 'A');
+	Logs.info('Checking switch environment paramaters');
 	const promissesP = [];
 	const promissesT = [];
 	const promissesF = [];
@@ -1302,7 +1559,7 @@ async function switchEnv(switchType) {
 		if (valuesP[i] === undefined
 		|| valuesT[i] === undefined
 		|| valuesF[i] === undefined) {
-			logger.log(`(ENV) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
+			Logs.warn(`(ENV) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`);
 			continue;
 		}
 		switch (Switches[i].OS) {
@@ -1332,7 +1589,7 @@ async function switchEnv(switchType) {
 
 async function switchInterfaces(switchType, monitoringOnly) {
 	const Switches = switches(switchType);
-	logger.log('Checking switch interfaces', 'A');
+	Logs.info('Checking switch interfaces');
 	const promisses = [];
 	for (let i = 0; i < Switches.length; i++) {
 		if (monitoringOnly) promisses.push(doApi('interfacesMonitoring', Switches[i]));
@@ -1342,7 +1599,7 @@ async function switchInterfaces(switchType, monitoringOnly) {
 	const filteredPorts = {};
 	for (let i = 0; i < Switches.length; i++) {
 		if (values[i] === undefined) {
-			logger.log(`(INT) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`, 'W');
+			Logs.warn(`(INT) Return data from switch: '${Switches[i].Name}' empty, is the switch online?`);
 			continue;
 		}
 		switch (Switches[i].OS) {
@@ -1358,6 +1615,9 @@ async function switchInterfaces(switchType, monitoringOnly) {
 				break;
 		}
 	}
+
+	const allIfaces = data.interfaces[switchType];
+
 	ports(switchType).forEach(port => {
 		try {
 			const group = port.Group ? port.Group : 'DEFAULT';
@@ -1367,34 +1627,38 @@ async function switchInterfaces(switchType, monitoringOnly) {
 			if (Object.keys(data.interfaces[switchType][port.Switch]).includes(port.Port)) {
 				filteredPorts[switchType][group][port.Switch][port.Port] = data.interfaces[switchType][port.Switch][port.Port];
 			}
+
+			if (!port.Alerts) return;
+			const iface = allIfaces[port.Switch][port.Port];
+			if (!data.ports[switchType][port.Switch]) data.ports[switchType][port.Switch] = {};
+			if (data.ports[switchType][port.Switch][port.Port] != iface.connected && !iface.connected) {
+				notification('Port Down', `Port: ${port.Port} - ${getDescription(port.Port, switchType, port.Switch)} on switch: ${port.Switch} is DOWN`);
+			}
+			data.ports[switchType][port.Switch][port.Port] = iface.connected;
 		} catch (error) {
-			logger.warn("Couldn't parse interfaces data", error);
+			Logs.warn("Couldn't parse interfaces data", error);
 		}
 
 	})
 
-	const allIfaces = data.interfaces[switchType];
-
 	for (const switchName in allIfaces) {
-		if (!Object.hasOwnProperty.call(allIfaces, switchName)) return;
+		if (!Object.hasOwnProperty.call(allIfaces, switchName)) continue;
 		const ifaces = allIfaces[switchName];
 		for (const ifaceName in ifaces) {
-			if (!Object.hasOwnProperty.call(ifaces, ifaceName)) return;
+			if (!Object.hasOwnProperty.call(ifaces, ifaceName)) continue;
+			if (!Config.get('interfaceWarnings')) continue;
 			const iface = ifaces[ifaceName];
-			const bandwidthThreshold = 0.95;
-			if ((iface.inRate/iface.maxRate > bandwidthThreshold) || (iface.outRate/iface.maxRate > bandwidthThreshold)) {
+			if ((iface.inRate/iface.maxRate > thresholds.bandwidth) || (iface.outRate/iface.maxRate > thresholds.bandwidth)) {
 				if (filteredPorts[switchType]['WARNING'] === undefined) filteredPorts[switchType]['WARNING'] = {};
 				if (filteredPorts[switchType]['WARNING'][switchName] === undefined) filteredPorts[switchType]['WARNING'][switchName] = {};
 				filteredPorts[switchType]['WARNING'][switchName][ifaceName] = iface;
 			}
-			const discardThreshold = 1000;
-			if ((iface.outDiscards > discardThreshold) || (iface.inDiscards > discardThreshold)) {
+			if ((iface.outDiscards > thresholds.discard) || (iface.inDiscards > thresholds.discard)) {
 				if (filteredPorts[switchType]['WARNING'] === undefined) filteredPorts[switchType]['WARNING'] = {};
 				if (filteredPorts[switchType]['WARNING'][switchName] === undefined) filteredPorts[switchType]['WARNING'][switchName] = {};
 				filteredPorts[switchType]['WARNING'][switchName][ifaceName] = iface;
 			}
-			const errorsThreshold = 1000;
-			if ((iface.outErrors > discardThreshold) || (iface.inErrors > discardThreshold)) {
+			if ((iface.outErrors > thresholds.errors) || (iface.inErrors > thresholds.errors)) {
 				if (filteredPorts[switchType]['WARNING'] === undefined) filteredPorts[switchType]['WARNING'] = {};
 				if (filteredPorts[switchType]['WARNING'][switchName] === undefined) filteredPorts[switchType]['WARNING'][switchName] = {};
 				filteredPorts[switchType]['WARNING'][switchName][ifaceName] = iface;
@@ -1407,9 +1671,9 @@ async function switchInterfaces(switchType, monitoringOnly) {
 }
 
 function checkUps() {
-	if (config.get('devMode')) return;
+	if (Config.get('devMode')) return;
 	let Ups = ups();
-	logger.log('Getting UPS status', 'A');
+	Logs.info('Getting UPS status');
 	function getUpsStatus(ip) {
 		return fetch('http://' + ip + '/json/live_data.json?_=' + Math.floor(Math.random() * 10000000), {
 			method: 'GET'
@@ -1431,7 +1695,7 @@ function checkUps() {
 				});
 			}
 		}).catch(error => {
-			logger.warn(`Cannot reach UPS on: ${ip}`, error);
+			Logs.warn(`Cannot reach UPS on: ${ip}`, error);
 		});
 	}
 
@@ -1464,7 +1728,7 @@ function checkUps() {
 }
 
 function checkDevices(switchType, fromList) {
-	logger.log('Checking device lists for missing devices', 'A');
+	Logs.info('Checking device lists for missing devices');
 	const Devices = devices();
 	const missingDevices = {};
 	let expectedDevices = [];
@@ -1573,17 +1837,21 @@ async function doApi(request, Switch) {
 		default:
 			break;
 	}
-	logger.log(`Polling switch API endpoint ${protocol}://${ip}/${endPoint} for ${request} data`, 'D');
+	Logs.debug(`Polling switch API endpoint ${protocol}://${ip}/${endPoint} for ${request} data`);
 
 	try {		
 		const response = await fetch(`${protocol}://${ip}/${endPoint}`, options);
 		if (response.status !== 200) throw new Error(`Error connection to server, repsonse code: ${response.status}`);
 		const jsonRpcResponse = await response.json();
-		if (jsonRpcResponse.error) throw new Error(JSON.stringify(jsonRpcResponse.error.data[1], null, 4))
+		if (jsonRpcResponse.error) {
+			jsonRpcResponse.error.data[1].errors.push('Command: '+command);
+			jsonRpcResponse.error.data[1].errors.push('Switch: '+Switch.Name);
+			Logs.warn('Issue with API request, try updating the swtich', jsonRpcResponse.error.data[1].errors);
+			return 'APIERROR';
+		}
 		return jsonRpcResponse
 	} catch (error) {
-		logger.log(`Failed to connect to switch on: ${ip}`, 'E');
-		logger.object(error, 'D');
+		Logs.error(`Failed to connect to switch on: ${ip}`, error,);
 	}
 }
 
@@ -1591,15 +1859,15 @@ async function doApi(request, Switch) {
 /* Control Functions */
 
 function localPings() {
-	if (config.get('devMode')) return;
+	if (Config.get('devMode')) return;
 	const hosts = pings();
 	hosts.forEach(async host => {
 		const response = await ping.promise.probe(host.IP, {
 			timeout: 10,
 			extra: ['-i', '2']
 		})
-		logger.log(`IP: ${host.IP}, Online: ${response.alive}`, 'A');
-		if (!response.alive) {
+		Logs.info(`IP: ${host.IP}, Online: ${response.alive}`);
+		if (!response.alive && host.TripleCheck) {
 			await sleep(2);
 			const recheckOne = await ping.promise.probe(host.IP, {
 				timeout: 10,
@@ -1619,6 +1887,7 @@ function localPings() {
 		if (localPingsData[host.IP].status != response.alive) {
 			localPingsData[host.IP].lastChange = Date.now();
 			localPingsData[host.IP].status = response.alive;
+			if (!response.alive && host.Alert) notification("Device Offline", `Device ${host.Name} being pinged at address ${host.IP} has gone offline`);
 		}
 		distributeData('localPing', {
 			'status':response.alive,
@@ -1638,9 +1907,9 @@ function localPings() {
 
 
 async function logTemp() {
-	if (config.get('devMode')) return;
+	if (Config.get('devMode')) return;
 	let Temps = temps();
-	logger.log('Getting temperatures', 'A');
+	Logs.info('Getting temperatures');
 
 	doIQTemps(Temps.filter(sensor => sensor.Type == 'IQ Frame'));
 	doGenericTemps(Temps.filter(sensor => sensor.Type == 'Will N Sensor'));
@@ -1655,13 +1924,13 @@ async function doIQTemps(Temps) {
 			const response = await fetch('http://'+sensor.IP);
 			promises.push(response.text());
 		} catch (error) {
-			logger.warn(`Cannot reach sensor on: ${sensor.IP}`, error);
+			Logs.warn(`Cannot reach sensor on: ${sensor.IP}`, error);
 		}
 	}
 
 	if (promises.length < 1) return;
 	const results = await Promise.allSettled(promises);
-	logger.log('Got temperature data, processing', 'D');
+	Logs.debug('Got temperature data, processing');
 	let tempSum = 0;
 	let tempValid = 0;
 	const socketSend = {};
@@ -1679,52 +1948,52 @@ async function doIQTemps(Temps) {
 					let unfilteredTemp = sensorData.value.split('<p><b>Temperature In:</b></p>')[1].slice(29,33);
 					temp = parseInt(unfilteredTemp.substring(0, unfilteredTemp.indexOf(')')));
 				} else {
-					logger.log(`${Temps[index].Name} sensor temperature is not OK`, 'W');
+					Logs.warn(`${Temps[index].Name} sensor temperature is not OK`);
 				}
 				Temps[index].Temp = temp;
 				tempSum += temp;
 				tempValid++;
-				logger.log(`${Temps[index].Name} temperature = ${temp} deg C`, 'D');
-				if (config.get('localDataBase')) SQL.insert({
+				Logs.debug(`${Temps[index].Name} temperature = ${temp} deg C`);
+				if (Config.get('localDataBase')) SQL.insert({
 					'sensor': Temps[index].Name,
 					'sensorType': 'IQ Frame',
 					'temperature': Temps[index].Temp,
-					'system': config.get('systemName')
+					'system': Config.get('systemName')
 				}, 'temperature');
 				socketSend[Temps[index].Name] = Temps[index].Temp;
 			} catch (error) {
-				logger.object(`Error processing data for from: '${Temps[index].Name}'`, error, 'W');
+				Logs.warn(`Error processing data for from: '${Temps[index].Name}'`, error);
 			}
 		} else {
-			logger.log(`Can't connect to sensor: '${Temps[index].Name}'`, 'W');
+			Logs.warn(`Can't connect to sensor: '${Temps[index].Name}'`);
 		}
 	}
 
 	let tempAvg;
 
 	if (tempValid == 0) {
-		logger.log('Invalid temperature measured connections must have failed', 'E');
+		Logs.error('Invalid temperature measured connections must have failed');
 		sendSms('Cannot connect to sensor, it haseither failed or the network is broken');
 	} else {
 		tempAvg = tempSum / tempValid;
-		logger.log(`Average temperature = ${tempAvg} deg C`, 'D');
-		logger.log(`Warning temperature = ${config.get('warningTemperature')} deg C`, 'D');
+		Logs.debug(`Average temperature = ${tempAvg} deg C`);
+		Logs.debug(`Warning temperature = ${Config.get('warningTemperature')} deg C`);
 
-		if (tempAvg > config.get('warningTemperature')) {
-			logger.log('Warning: Temperature over warning limit, sending SMS', 'W');
+		if (tempAvg > Config.get('warningTemperature')) {
+			Logs.warn('Warning: Temperature over warning limit, sending SMS');
 			sendSms(`Commitment to environment sustainability failed, MCR IS MELTING: ${tempAvg} deg C`);
 		}
-		sendCouldData({'command':'log', 'type':'temperature', 'data':Temps});
+		sendCloudData({'command':'log', 'type':'temperature', 'data':Temps});
 
 		socketSend.average = tempAvg;
 		const time = new Date().getTime();
 		const points = {};
 		points[time] = socketSend;
-		webServer.sendToAll({
+		Server.sendToAll({
 			'command': 'data',
 			'data': 'temps',
 			'type': 'IQ Frame',
-			'system': config.get('systemName'),
+			'system': Config.get('systemName'),
 			'replace': false,
 			'points': points
 		});
@@ -1740,7 +2009,7 @@ async function doGenericTemps(Temps) {
 			const response = await fetch('http://'+sensor.IP+'/temps');
 			promises.push(response.text());
 		} catch (error) {
-			logger.warn(`Cannot reach sensor on: ${sensor.IP}`, error);
+			Logs.warn(`Cannot reach sensor on: ${sensor.IP}`, error);
 		}
 	}
 
@@ -1748,7 +2017,7 @@ async function doGenericTemps(Temps) {
 	if (promises.length < 1 && cachedTemps.length < 1) return;
 
 	const results = await Promise.allSettled(promises);
-	logger.log('Got temperature data, processing', 'D');
+	Logs.debug('Got temperature data, processing');
 	let tempSum = 0;
 	let tempValid = 0;
 	const webTemps = [];
@@ -1770,31 +2039,31 @@ async function doGenericTemps(Temps) {
 					})
 					tempSum += Number(sensor.Temperature);
 					tempValid++;
-					logger.log(`${sensor.Location} temperature = ${Number(sensor.Temperature)} deg C`, 'D');
-					if (config.get('localDataBase')) SQL.insert({
+					Logs.debug(`${sensor.Location} temperature = ${Number(sensor.Temperature)} deg C`);
+					if (Config.get('localDataBase')) SQL.insert({
 						'sensor': sensor.Location,
 						'sensorType': 'Will N Sensor',
 						'temperature': Number(sensor.Temperature),
-						'system': config.get('systemName')
+						'system': Config.get('systemName')
 					}, 'temperature');
 					socketSend[sensor.Location] = Number(sensor.Temperature);
 				} catch (error) {
-					logger.object(`Error processing data for from: '${sensor.Location}'`, error, 'W');
+					Logs.warn(`Error processing data for from: '${sensor.Location}'`, error);
 				}
 			}
 		} else {
-			logger.log(`Can't connect to sensor: '${Temps[index].Name}'`, 'W');
+			Logs.warn(`Can't connect to sensor: '${Temps[index].Name}'`);
 		}
 	}
 
 	cachedTemps.forEach(upsName => {
 		tempValid++;
-		logger.log(`${upsName} temperature = ${Number(cachedUpsTemps[upsName])} deg C`, 'D');
-		if (config.get('localDataBase')) SQL.insert({
+		Logs.debug(`${upsName} temperature = ${Number(cachedUpsTemps[upsName])} deg C`);
+		if (Config.get('localDataBase')) SQL.insert({
 			'sensor': upsName,
 			'sensorType': 'Will N Sensor',
 			'temperature': Number(cachedUpsTemps[upsName]),
-			'system': config.get('systemName')
+			'system': Config.get('systemName')
 		}, 'temperature');
 		socketSend[upsName] = Number(cachedUpsTemps[upsName]);
 		webTemps.push({
@@ -1808,28 +2077,28 @@ async function doGenericTemps(Temps) {
 	let tempAvg;
 
 	if (tempValid == 0) {
-		logger.log('Invalid temperature measured connections must have failed', 'E');
+		Logs.error('Invalid temperature measured connections must have failed');
 		sendSms('Cannot connect to sensor, it haseither failed or the network is broken');
 	} else {
 		tempAvg = tempSum / tempValid;
-		logger.log(`Average temperature = ${tempAvg} deg C`, 'D');
-		logger.log(`Warning temperature = ${config.get('warningTemperature')} deg C`, 'D');
+		Logs.debug(`Average temperature = ${tempAvg} deg C`);
+		Logs.debug(`Warning temperature = ${Config.get('warningTemperature')} deg C`);
 
-		if (tempAvg > config.get('warningTemperature')) {
-			logger.log('Warning: Temperature over warning limit, sending SMS', 'W');
+		if (tempAvg > Config.get('warningTemperature')) {
+			Logs.warn('Warning: Temperature over warning limit, sending SMS');
 			sendSms(`Commitment to environment sustainability failed, MCR IS MELTING: ${tempAvg} deg C`);
 		}
-		sendCouldData({'command':'log', 'type':'temperature', 'data':webTemps});
+		sendCloudData({'command':'log', 'type':'temperature', 'data':webTemps});
 
 		socketSend.average = tempAvg;
 		const time = new Date().getTime();
 		const points = {};
 		points[time] = socketSend;
-		webServer.sendToAll({
+		Server.sendToAll({
 			'command': 'data',
 			'data': 'temps',
 			'type': 'Will N Sensor',
-			'system': config.get('systemName'),
+			'system': Config.get('systemName'),
 			'replace': false,
 			'points': points
 		});
@@ -1837,19 +2106,19 @@ async function doGenericTemps(Temps) {
 }
 
 function webLogPing() {
-	if (!config.get('webEnabled')) return;
-	logger.log('Pinging webserver', 'A');
-	sendCouldData({'command':'log', 'type':'ping'});
+	if (!Config.get('webEnabled')) return;
+	Logs.info('Pinging webserver');
+	sendCloudData({'command':'log', 'type':'ping'});
 }
 
 function webLogBoot() {
-	if (!config.get('webEnabled')) return;
-	logger.log('Sending boot');
-	sendCouldData({'command':'log', 'type':'boot'});
+	if (!Config.get('webEnabled')) return;
+	Logs.info('Sending boot');
+	sendCloudData({'command':'log', 'type':'boot'});
 }
 
 function sendSms(msg) {
-	if (!config.get('textsEnabled')) return;
+	if (!Config.get('textsEnabled')) return;
 
 	let params = {
 		Message: msg,
@@ -1858,28 +2127,28 @@ function sendSms(msg) {
 
 	let promise = new AWS.SNS({ apiVersion: '2010-03-31' }).publish(params).promise();
 	promise.then(function (data) {
-		logger.log(`Text message sent - messageId: ${data.MessageId}`);
+		Logs.log(`Text message sent - messageId: ${data.MessageId}`);
 	}).catch(function (err) {
-		logger.error(err, err.stack);
+		Logs.error(err, err.stack);
 	});
 }
 
 async function connectToWebServer(retry = false) {	
-	if(!config.get('webEnabled')) return;
+	if(!Config.get('webEnabled')) return;
 	let inError = false;
 	let promise;
 
-	if (cloudServer.address !== config.get('webSocketEndpoint')) {
-		cloudServer.address = config.get('webSocketEndpoint');
+	if (cloudServer.address !== Config.get('webSocketEndpoint')) {
+		cloudServer.address = Config.get('webSocketEndpoint');
 		cloudServer.conneceted = false;
 		if (typeof cloudServer.socket !== 'undefined') cloudServer.socket.close();
 		delete cloudServer.socket;
 	}
 
 	if ((!cloudServer.connected && cloudServer.active && cloudServer.attempts < 3) || (retry && !cloudServer.connected)) {
-		const protocol = config.get('secureWebSocketEndpoint') ? 'wss' : 'ws';
+		const protocol = Config.get('secureWebSocketEndpoint') ? 'wss' : 'ws';
 		if (retry) {
-			logger.log(`Retrying connection to dead server: ${logger.r}${protocol}://${cloudServer.address}${logger.reset}`, 'W');
+			Logs.warn(`Retrying connection to dead server: ${Logs.r}${protocol}://${cloudServer.address}${Logs.reset}`);
 		}
 		cloudServer.socket = new WebSocket(`${protocol}://${cloudServer.address}`);
 
@@ -1887,10 +2156,10 @@ async function connectToWebServer(retry = false) {
 			cloudServer.socket.on('open', function open() {
 				let payload = {};
 				payload.command = 'register';
-				payload.name = config.get('systemName');
-				sendCouldData(payload);
+				payload.name = Config.get('systemName');
+				sendCloudData(payload);
 				resolve();
-				logger.log(`${logger.g}${cloudServer.address}${logger.reset} Established a connection to webserver`, 'S');
+				Logs.log(`${Logs.g}${cloudServer.address}${Logs.reset} Established a connection to webserver`, 'S');
 				cloudServer.connected = true;
 				cloudServer.active = true;
 				cloudServer.attempts = 0;
@@ -1901,40 +2170,40 @@ async function connectToWebServer(retry = false) {
 			try {
 				const msgObj = JSON.parse(msgJSON);
 				if (msgObj.payload.command !== 'ping' && msgObj.payload.command !== 'pong') {
-					logger.object('Received from other server', msgObj, 'A');
-				} else if (config.get('printPings') == true) {
-					logger.object('Received from other server', msgObj, 'A');
+					Logs.info('Received from other server', msgObj);
+				} else if (Config.get('printPings') == true) {
+					Logs.info('Received from other server', msgObj);
 				}
 				switch (msgObj.payload.command) {
 				case 'ping':
-					sendCouldData({
+					sendCloudData({
 						'command': 'pong'
 					});
 					break;
 				case 'data':
-					logger.log('Recieved temp/ping data from server', 'D');
+					Logs.debug('Recieved temp/ping data from server');
 					break;
 				default:
-					logger.object('Received unknown from other server', msgObj, 'W');
+					Logs.warn('Received unknown from other server', msgObj);
 				}
 			} catch (e) {
 				try {
 					const msgObj = JSON.parse(msgJSON);
 					if (msgObj.payload.command !== 'ping' && msgObj.payload.command !== 'pong') {
-						logger.object('Received from other server', msgObj, 'A');
-					} else if (config.get('printPings') == true) {
-						logger.object('Received from other server', msgObj, 'A');
+						Logs.info('Received from other server', msgObj);
+					} else if (Config.get('printPings') == true) {
+						Logs.info('Received from other server', msgObj);
 					}
 					if (typeof msgObj.type == 'undefined') {
 						let stack = e.stack.toString().split(/\r\n|\n/);
 						stack = JSON.stringify(stack, null, 4);
-						logger.log(`Server error, stack trace: ${stack}`, 'E');
+						Logs.error(`Server error, stack trace: ${stack}`);
 					} else {
-						logger.log('A device is using old \'chiltv\' data format, upgrade it to v4.0 or above', 'E');
+						Logs.error('A device is using old \'chiltv\' data format, upgrade it to v4.0 or above');
 					}
 				} catch (e2) {
-					logger.log('Invalid JSON from other server- '+e, 'E');
-					logger.object('Received from other server', JSON.parse(msgJSON), 'A');
+					Logs.error('Invalid JSON from other server', e);
+					Logs.info('Received from other server', JSON.parse(msgJSON));
 				}
 			}
 		});
@@ -1944,29 +2213,74 @@ async function connectToWebServer(retry = false) {
 			delete cloudServer.socket;
 			cloudServer.attempts++;
 			if (!inError) {
-				logger.log(`${logger.r}${cloudServer.address}${logger.reset} Outbound webserver connection closed`, 'W');
+				Logs.warn(`${Logs.r}${cloudServer.address}${Logs.reset} Outbound webserver connection closed`);
 			}
 		});
 
 		cloudServer.socket.on('error', function error() {
 			inError = true;
-			logger.log(`Could not connect to server: ${logger.r}${cloudServer.address}${logger.reset}`, 'E');
+			Logs.error(`Could not connect to server: ${Logs.r}${cloudServer.address}${Logs.reset}`);
 		});
 		
 	} else if (!cloudServer.connected && cloudServer.active) {
 		cloudServer.active = false;
-		logger.log(`Server not responding, changing status to dead: ${logger.r}${cloudServer.address}${logger.reset}`, 'E');
+		Logs.error(`Server not responding, changing status to dead: ${Logs.r}${cloudServer.address}${Logs.reset}`);
 	}
 	return promise;
 }
 
-function sendCouldData(payload) {
-	if (!config.get('webEnabled')) return;
+function sendCloudData(payload) {
+	if (!Config.get('webEnabled')) return;
 	let packet = {};
 	packet.header = makeHeader();
 	packet.payload = payload;
 	if (cloudServer.connected) {
 		cloudServer.socket.send(JSON.stringify(packet));
+	}
+}
+
+
+/* Config Functions */
+
+
+async function configQuestion(question, current, options) {
+	mainWindow.webContents.send('configQuestion', JSON.stringify({
+		'question': question,
+		'current': current,
+		'options': options
+	}));
+	const awaitMessage = new Promise (resolve => {
+		ipcMain.once('configMessage', (event, value) => {
+			if (value == 'true') value = true;
+			if (value == 'false') value = false;
+			const newVal = parseFloat(value);
+			if (!isNaN(newVal)) value = newVal;
+			resolve(value);
+		});
+	});
+	return awaitMessage;
+}
+
+async function configDone() {
+	mainWindow.webContents.send('configDone', true);
+	Logs.setConf({
+		'createLogFile': Config.get('createLogFile'),
+		'logsFileName': 'ArgosLogging',
+		'configLocation': __data,
+		'loggingLevel': Config.get('loggingLevel'),
+		'debugLineNum': Config.get('debugLineNum'),
+	});
+	if (configLoaded) mainWindow.webContents.send('loaded', `http://localhost:${Config.get('port')}`);
+	if (Config.get('localDataBase')) {
+		SQL = new _SQL(
+			Config.get('dbHost'),
+			Config.get('dbPort'),
+			Config.get('dbUser'),
+			Config.get('dbPass'),
+			Config.get('dbName'),
+			Logs
+		);
+		await SQL.init(tables);
 	}
 }
 
@@ -2040,7 +2354,7 @@ function clearEmpties(object) {
 async function startLoopAfterDelay(callback, seconds, ...args) {
 	setInterval(callback, seconds * 1000, ...args);
 	callback(...args);
-	logger.log('Starting '+callback.name, 'A');
+	Logs.info('Starting '+callback.name);
 	await sleep(1);
 }
 
@@ -2058,13 +2372,13 @@ const oids = ["1.3.6.1.2.1.1.5.0", "1.3.6.1.2.1.1.6.0"];
 
 session.get(oids, function (error, varbinds) {
     if (error) {
-        logger.error(error);
+        Logs.error(error);
     } else {
         for (var i = 0; i < varbinds.length; i++) {
             if (snmp.isVarbindError(varbinds[i])) {
-                logger.error(snmp.varbindError(varbinds[i]));
+                Logs.error(snmp.varbindError(varbinds[i]));
             } else {
-                logger.log(varbinds[i].oid + " = " + varbinds[i].value);
+                Logs.log(varbinds[i].oid + " = " + varbinds[i].value);
             }
         }
     }
