@@ -25,6 +25,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron .",
     "build": "electron-builder --win",
+    "buildlinux": "electron-builder --linux",
     "package": "electron-forge package",
     "make": "electron-forge make"
   },
@@ -37,19 +38,30 @@
       "static/*",
       "**/*.js"
     ],
+
+
     "win": {
       "icon": "static/img/icon/icon.ico",
+      "asarUnpack": "**/lib/*.exe",
+      "requestedExecutionLevel": "requireAdministrator",
+      "target": [
+        "portable"
+      ]
+    },
+    "portable": {
+      "artifactName": "Argos-v${version}.exe",
+      "requestExecutionLevel": "admin"
+    },
+    "linux": {
+      "icon": "static/img/icon/icon.png",
       "target": [
         {
-          "target": "nsis",
+          "target": "AppImage",
           "arch": [
             "x64"
           ]
         }
       ]
-    },
-    "nsis": {
-      "artifactName": "Argos-v${version}.exe"
     },
     "extraResources": [
       {

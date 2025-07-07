@@ -1011,7 +1011,8 @@ function expressRoutes(expressApp) {
 				'UPS':ups(),
 				'Devices':devices(),
 				'Pings':pings(),
-				'Port Monitoring':ports()
+				'Port Monitoring':ports(),
+				'Data': data
 			},
 			'systemName': Config.get('systemName'),
 			'background': 'bg-dark'
