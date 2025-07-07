@@ -1734,7 +1734,7 @@ function checkDevices(switchType, fromList) {
 	let expectedDevices = [];
 	if (fromList) {
 		for (let i in Devices) {
-			expectedDevices = [...new Set([...expectedDevices, ...parseTempalteString(Devices[i].name)])];
+			expectedDevices = [...new Set([...expectedDevices, ...parseTemplateString(Devices[i].name)])];
 		}
 	} else {
 		for (const switchName in data.neighbors[switchType]) {
@@ -2288,7 +2288,7 @@ async function configDone() {
 /* Utility Functions */
 
 
-function parseTempalteString(string) {
+function parseTemplateString(string) {
 
 	function paternDecompose(patern) {
 		const paternArray = patern.split(',');
