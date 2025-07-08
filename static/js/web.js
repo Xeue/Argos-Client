@@ -1429,12 +1429,18 @@ $(document).ready(function() {
 		} else if ($trg.hasClass('clearPing')) {
 			$trg.closest('tr').remove();
 		} else if ($trg.is('#fullscreen')) {
-			document.getElementById('mainCont').parentElement.requestFullscreen();
+			if (document.fullscreenElement) {
+				document.exitFullscreen();
+			} else {
+				document.getElementById('mainCont').parentElement.requestFullscreen();
+			}
+		} else if ($trg.is('#refresh')) {
+			window.location.reload();
 		} else if ($trg.hasClass('chilton')) {
 			e.preventDefault();
 			const audio = new Audio('/media/CHILTON.wav');
 			audio.play();
-			setTimeout(()=>{window.location = window.location;}, 3000);
+			setTimeout(()=>{window.location.reload()}, 3000);
 		}
 	});
 
