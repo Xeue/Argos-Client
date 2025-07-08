@@ -646,6 +646,7 @@ await startLoopAfterDelay(webLogPing, pingFrequency);
 await startLoopAfterDelay(switchEnv, envFrequency, 'Media');
 await startLoopAfterDelay(checkDevices, devicesFrequency, 'Media', true);
 await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Media');
+await startLoopAfterDelay(checkEmbrionix, devicesFrequency, 'Media');
 //await startLoopAfterDelay(switchPhy, switchStatsFrequency, 'Media');
 await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Control');
 await startLoopAfterDelay(switchInterfaces, 5, 'Control', true);
@@ -678,7 +679,8 @@ function loadData(file) {
 		case 'Devices':
 			fileData[0] = {
 				'name':'Placeholder',
-				'description':'Placeholder'
+				'description':'Placeholder',
+				'deviceType': 'General'
 			};
 			break;
 		case 'Switches':
@@ -823,7 +825,8 @@ function expressRoutes(expressApp) {
 				'UPS':ups(),
 				'Devices':devices(),
 				'Pings':pings(),
-				'Port Monitoring':ports()
+				'Port Monitoring':ports(),
+				'Data': data
 			},
 			'systemName': Config.get('systemName'),
 			'background': 'bg-dark'
@@ -1578,6 +1581,51 @@ function checkDevices(switchType, fromList) {
 	const type = switchType == 'Media' ? 'devices' : 'devices_control';
 	distributeData(type, data.devices[switchType]);
 }
+
+function checkEmbrionix() {
+	Logs.info('Checking Embrionix\'s Fiber Levels');
+	const Devices = devices();
+
+	Devices.forEach(async (device) => {
+		if (device.deviceType != 'Embrionix') return;
+		
+		const response = await fetch(`http://${device.IP}/emsfp/node/v1/telemetry/ports`);
+
+		if (response.status !== 200) {
+			Logs.warn(`Failed to connect to Embrionix device at ${device.IP}, status code: ${response.status}`);
+			return;
+		};
+
+		const body = await response.json();
+
+		const ports = body.ports;
+		const red = ports[2];
+		const blue = ports[4];
+
+		// mw to dBw : 10*log10( mw / 1000)
+		
+		red.txPowerdB = mwTodBw(red.tx_power);
+		red.rxPowerdB = mwTodBw(red.rx_power);
+
+		blue.txPowerdB = mwTodBw(blue.tx_power);
+		blue.rxPowerdB = mwTodBw(blue.rx_power);
+
+		if (data.embrionix == undefined) data.embrionix = {};
+
+	});
+
+	
+
+}
+
+function mwTodBw(mw) {
+	if(parseInt(mw) == null) {
+		return null;
+	}
+
+	return (10 * Math.log10(mw / 1000)).toFixed(2);
+}
+
 
 async function doApi(request, Switch) {
 	const ip = Switch.IP;

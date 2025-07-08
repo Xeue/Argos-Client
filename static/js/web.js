@@ -72,6 +72,8 @@ templates.devices = `<% for(i = 0; i < devices.length; i++) { %>
   <tr data-index="<%=i%>" data-template="devices">
     <td data-type="text" data-key="name" data-value="<%-devices[i].name%>"><%-devices[i].name%></td>
     <td data-type="text" data-key="description" data-value="<%-devices[i].description%>"><%-devices[i].description%></td>
+	<td data-type="select" data-key="deviceType" data-value="<%-devices[i].deviceType%>" data-options="General,Embrionix"><%-devices[i].deviceType%></td>
+	<td data-type="text" data-key="IP" data-value="<%-devices[i].IP%>"><%-devices[i].IP%></td>
     <td class="d-flex gap-1">
       <button type="button" class="btn btn-primary editConfig btn-sm flex-grow-1">Edit</button>
       <button type="button" class="btn btn-danger deleteRow btn-sm flex-grow-1">Delete</button>
@@ -230,6 +232,10 @@ function socketDoMessage(header, payload) {
 		case 'interfaces_control':
 			handleInterfaces(payload.data, 'Control');
 			$('#lastInterfacesCont').attr('data-last-update', Date.now());
+			break;
+		case 'embrionix':
+			handleEmbrionix(payload.data, 'Media');
+			$('#lastEmbrionix').attr('data-last-update', Date.now());
 			break;
 		default:
 			break;
@@ -1057,6 +1063,18 @@ function handleInterfaces(data, type) {
 	}
 	lastSwitchTemperature = Date.now();
 }
+
+function handleEmbrionix(data, type) {
+	if(data == undefined) return;
+	
+	const table = `[data-type="${type}"] table[data-catagory="embrionixs"]`;
+	const _table = document.querySelector(table);
+	_table.replaceChildren();
+
+
+
+}
+
 
 function updateLast() {
 	$('[data-last-update]').each(function(i, element) {
