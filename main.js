@@ -610,15 +610,15 @@ if (Config.get('localDataBase')) {
 		Logs
 	);
 	await SQL.init(tables);
-	const sensor = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'frame';");
-	if (sensor.length == 0) {
-		await SQL.query("ALTER TABLE `temperature` RENAME COLUMN frame TO sensor;");
-	}
-	const sensorType = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'sensorType';");
-	if (sensorType.length == 0) {
-		await SQL.query("ALTER TABLE `temperature` ADD COLUMN sensorType text NOT NULL;");
-		await SQL.query("UPDATE `temperature` SET sensorType = 'IQ Frame' WHERE 1=1;");
-	}
+	// const sensor = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'frame';");
+	// if (sensor.length == 0) {
+	// 	await SQL.query("ALTER TABLE `temperature` RENAME COLUMN frame TO sensor;");
+	// }
+	// const sensorType = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'sensorType';");
+	// if (sensorType.length == 0) {
+	// 	await SQL.query("ALTER TABLE `temperature` ADD COLUMN sensorType text NOT NULL;");
+	// 	await SQL.query("UPDATE `temperature` SET sensorType = 'IQ Frame' WHERE 1=1;");
+	// }
 }
 
 Server.start(Config.get('port'));
@@ -637,6 +637,7 @@ setInterval(() => {
 
 await startLoopAfterDelay(logTemp, tempFrequency);
 await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Media');
+await startLoopAfterDelay(checkEmbrionix, devicesFrequency, 'Media');
 await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Media');
 await startLoopAfterDelay(switchInterfaces, 5, 'Media', true);
 await startLoopAfterDelay(switchFibre, 5, 'Media');
@@ -646,7 +647,6 @@ await startLoopAfterDelay(webLogPing, pingFrequency);
 await startLoopAfterDelay(switchEnv, envFrequency, 'Media');
 await startLoopAfterDelay(checkDevices, devicesFrequency, 'Media', true);
 await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Media');
-await startLoopAfterDelay(checkEmbrionix, devicesFrequency, 'Media');
 //await startLoopAfterDelay(switchPhy, switchStatsFrequency, 'Media');
 await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Control');
 await startLoopAfterDelay(switchInterfaces, 5, 'Control', true);
@@ -1510,7 +1510,7 @@ function checkUps() {
 				});
 			}
 		}).catch(error => {
-			Logs.warn(`Cannot reach UPS on: ${ip}`, error);
+			Logs.warn(`Cannot reach UPS on: ${ip}`);
 		});
 	}
 
@@ -1582,23 +1582,32 @@ function checkDevices(switchType, fromList) {
 	distributeData(type, data.devices[switchType]);
 }
 
-function checkEmbrionix() {
+async function checkEmbrionix() {
 	Logs.info('Checking Embrionix\'s Fiber Levels');
 	const Devices = devices();
-
+	const requests = [];
 	Devices.forEach(async (device) => {
 		if (device.deviceType != 'Embrionix') return;
-		
-		const response = await fetch(`http://${device.IP}/emsfp/node/v1/telemetry/ports`);
+		requests.push(new Promise(async (resolve, reject) => {
+			const response = await fetch(`http://${device.IP}/emsfp/node/v1/telemetry/ports`);
+			if (response.status !== 200) {
+				Logs.warn(`Failed to connect to Embrionix device at ${device.IP}, status code: ${response.status}`);
+				return reject(`Failed to connect to Embrionix device at ${device.IP}, status code: ${response.status}`);
+			};
+			const json = await response.json()
+			resolve([device, json]);
+		}));
+	});
 
-		if (response.status !== 200) {
-			Logs.warn(`Failed to connect to Embrionix device at ${device.IP}, status code: ${response.status}`);
+	const results = await Promise.allSettled(requests);
+	results.forEach(result => {
+		const [device, response] = result.value;
+		if (response == undefined || response.ports == undefined) {
+			Logs.warn('Embrionix response is empty or malformed');
 			return;
-		};
+		}
 
-		const body = await response.json();
-
-		const ports = body.ports;
+		const ports = response.ports;
 		const red = ports[2];
 		const blue = ports[4];
 
@@ -1611,11 +1620,17 @@ function checkEmbrionix() {
 		blue.rxPowerdB = mwTodBw(blue.rx_power);
 
 		if (data.embrionix == undefined) data.embrionix = {};
-
+		if (data.embrionix[device.name] == undefined) {
+			data.embrionix[device.name] = {
+				'red': red,
+				'blue': blue
+			}
+		} else {
+			data.embrionix[device.name].red = red;
+			data.embrionix[device.name].blue = blue;
+		};
+		distributeData('embrionix', data.embrionix);
 	});
-
-	
-
 }
 
 function mwTodBw(mw) {
@@ -2043,8 +2058,10 @@ async function connectToWebServer(retry = false) {
 				case 'data':
 					Logs.debug('Recieved temp/ping data from server');
 					break;
+				case 'add':
+					break;
 				default:
-					Logs.warn('Received unknown from other server', msgObj);
+					Logs.warn('Recieved unknown from other server', msgObj);
 				}
 			} catch (e) {
 				try {

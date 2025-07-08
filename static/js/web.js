@@ -1066,13 +1066,22 @@ function handleInterfaces(data, type) {
 
 function handleEmbrionix(data, type) {
 	if(data == undefined) return;
-	
-	const table = `[data-type="${type}"] table[data-catagory="embrionixs"]`;
+	const table = `[data-type="${type}"] table[data-catagory="embrionix"]`;
 	const _table = document.querySelector(table);
 	_table.replaceChildren();
 
-
-
+	for (const deviceName in data) {
+		const device = data[deviceName];
+		_table.insertAdjacentHTML('beforeend', `<div class="emCont">
+			<div class="emHead">
+				<div class="emName">${deviceName}</div>
+				<div class="emDesc">${device.description}</div>
+			</div>
+			<div class="emIP">${device.red.ip}</div><div class="emIP">${device.blue.ip}</div>
+			<div class="fibreLevel"></div><div class="fibreLevel"></div>
+			<div class="fibreLevel" style="--dbs: ${device.red.rxPowerdB}">${device.red.rxPowerdB}</div><div class="fibreLevel" style="--dbs: ${device.blue.rxPowerdB}">${device.blue.rxPowerdB}</div>
+		</div>`);
+	}
 }
 
 
