@@ -637,7 +637,6 @@ setInterval(() => {
 
 await startLoopAfterDelay(logTemp, tempFrequency);
 await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Media');
-await startLoopAfterDelay(checkEmbrionix, devicesFrequency, 'Media');
 await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Media');
 await startLoopAfterDelay(switchInterfaces, 5, 'Media', true);
 await startLoopAfterDelay(switchFibre, 5, 'Media');
@@ -646,6 +645,7 @@ await startLoopAfterDelay(connectToWebServer, 5);
 await startLoopAfterDelay(webLogPing, pingFrequency);
 await startLoopAfterDelay(switchEnv, envFrequency, 'Media');
 await startLoopAfterDelay(checkDevices, devicesFrequency, 'Media', true);
+await startLoopAfterDelay(checkEmbrionix, devicesFrequency, 'Media');
 await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Media');
 //await startLoopAfterDelay(switchPhy, switchStatsFrequency, 'Media');
 await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Control');
@@ -1582,53 +1582,135 @@ function checkDevices(switchType, fromList) {
 	distributeData(type, data.devices[switchType]);
 }
 
+async function doEmbrionixApi(device, request, side)  {
+	const promise = new Promise(async (resolve, reject) => {
+		const ip = side == 'red' ? device.redIP : device.blueIP;
+
+		const response = await fetch(`http://${ip}/emsfp/node/v1/${request}`, {
+			method: 'GET',
+			headers: {
+				'Accept': 'application/json'
+			}
+		}).catch(error => {
+
+			Logs.error(`Error connecting to Embrionix device at ${ip}`, error);
+			return reject(`Error connecting to Embrionix device at ${ip}: ${error.message}`);
+		});
+
+		if (response == undefined) { 
+			Logs.warn(`No response from Embrionix device at ${ip}`);
+			return reject(`No response from Embrionix device at ${ip}`); 
+		}
+
+		if (response.status !== 200) {
+			Logs.warn(`Failed to connect to Embrionix device at ${ip}, status code: ${response.status}`);
+			return reject(`Failed to connect to Embrionix device at ${ip}, status code: ${response.status}`);
+		};
+		const json = await response.json();
+		resolve([device, json]);
+	});
+
+	return promise;
+}
+
+
+
 async function checkEmbrionix() {
 	Logs.info('Checking Embrionix\'s Fiber Levels');
 	const Devices = devices();
 	const requests = [];
 	Devices.forEach(async (device) => {
 		if (device.deviceType != 'Embrionix') return;
-		requests.push(new Promise(async (resolve, reject) => {
-			const response = await fetch(`http://${device.IP}/emsfp/node/v1/telemetry/ports`);
-			if (response.status !== 200) {
-				Logs.warn(`Failed to connect to Embrionix device at ${device.IP}, status code: ${response.status}`);
-				return reject(`Failed to connect to Embrionix device at ${device.IP}, status code: ${response.status}`);
-			};
-			const json = await response.json()
-			resolve([device, json]);
-		}));
+
+		// Try and get fiber data on both sides of the Embrionix device (Red/Blue IPs)
+		requests.push(doEmbrionixApi(device, 'telemetry/ports', 'red'));
+		requests.push(doEmbrionixApi(device, 'telemetry/ports', 'blue'));
+
+		requests.push(doEmbrionixApi(device, 'lldp', 'red'));
+		requests.push(doEmbrionixApi(device, 'lldp', 'blue'));
 	});
 
 	const results = await Promise.allSettled(requests);
 	results.forEach(result => {
+		if (result.status != 'fulfilled') return;
+
 		const [device, response] = result.value;
-		if (response == undefined || response.ports == undefined) {
-			Logs.warn('Embrionix response is empty or malformed');
+		if (response == undefined) {
+			Logs.warn('Embrionix response is empty');
 			return;
 		}
-
-		const ports = response.ports;
-		const red = ports[2];
-		const blue = ports[4];
-
-		// mw to dBw : 10*log10( mw / 1000)
 		
-		red.txPowerdB = mwTodBw(red.tx_power);
-		red.rxPowerdB = mwTodBw(red.rx_power);
+		// Getting fiber data from Embrionix devices
+		if (response.ports) {
+			const ports = response.ports;
+			const red = ports[2];
+			const blue = ports[4];
+			
+			red.txPowerdB = mwTodBw(red.tx_power);
+			red.rxPowerdB = mwTodBw(red.rx_power);
 
-		blue.txPowerdB = mwTodBw(blue.tx_power);
-		blue.rxPowerdB = mwTodBw(blue.rx_power);
+			red.ip = device.redIP;
+	
+			blue.txPowerdB = mwTodBw(blue.tx_power);
+			blue.rxPowerdB = mwTodBw(blue.rx_power);
 
-		if (data.embrionix == undefined) data.embrionix = {};
-		if (data.embrionix[device.name] == undefined) {
-			data.embrionix[device.name] = {
-				'red': red,
-				'blue': blue
-			}
-		} else {
-			data.embrionix[device.name].red = red;
-			data.embrionix[device.name].blue = blue;
-		};
+			blue.ip = device.blueIP;
+	
+			if (data.embrionix == undefined) data.embrionix = {};
+			if (data.embrionix[device.name] == undefined) {
+				data.embrionix[device.name] = {
+					'red': red,
+					'blue': blue,
+					'description': device.description,
+				}
+			} else {
+				data.embrionix[device.name].red = red;
+				data.embrionix[device.name].blue = blue;
+				data.embrionix[device.name].description = device.description;
+			};
+		} else if (response.neighbor) { // Getting LLDP data from Embrionix devices
+			const lldp = response.neighbor;
+
+			const red = lldp[0];
+
+			const blue = lldp[1];
+
+			const redPortMatch = device.switchport.toLowerCase() == red.port.toLowerCase();
+			const bluePortMatch = device.switchport.toLowerCase() == blue.port.toLowerCase();
+
+			red.switchPort = data.interfaces['Media']['Media A'][device.switchport];
+
+			blue.switchPort = data.interfaces['Media']['Media B'][device.switchport];
+
+			if (data.embrionix[device.name] == undefined) {
+				data.embrionix[device.name] = {
+					'red': red,
+					'blue': blue,
+					'redMatch': redPortMatch,
+					'blueMatch': bluePortMatch,
+				}
+			} else {
+				if (data.embrionix[device.name].red) {
+					data.embrionix[device.name].red = {...data.embrionix[device.name].red, ...red};
+				} else {
+					data.embrionix[device.name].red = red;
+				}
+				data.embrionix[device.name].redMatch = redPortMatch;
+
+				if (data.embrionix[device.name].blue) {
+					data.embrionix[device.name].blue = {...data.embrionix[device.name].blue, ...blue};
+				} else {
+					data.embrionix[device.name].blue = blue;
+				}
+				data.embrionix[device.name].blueMatch = bluePortMatch;
+			};
+
+			
+
+		}
+
+
+
 		distributeData('embrionix', data.embrionix);
 	});
 }

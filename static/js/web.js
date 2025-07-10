@@ -73,7 +73,9 @@ templates.devices = `<% for(i = 0; i < devices.length; i++) { %>
     <td data-type="text" data-key="name" data-value="<%-devices[i].name%>"><%-devices[i].name%></td>
     <td data-type="text" data-key="description" data-value="<%-devices[i].description%>"><%-devices[i].description%></td>
 	<td data-type="select" data-key="deviceType" data-value="<%-devices[i].deviceType%>" data-options="General,Embrionix"><%-devices[i].deviceType%></td>
-	<td data-type="text" data-key="IP" data-value="<%-devices[i].IP%>"><%-devices[i].IP%></td>
+	<td data-type="text" data-key="switchport" data-value="<%-devices[i].switchport%>"><%-devices[i].switchport%></td>
+	<td data-type="text" data-key="redIP" data-value="<%-devices[i].redIP%>"><%-devices[i].redIP%></td>
+	<td data-type="text" data-key="blueIP" data-value="<%-devices[i].blueIP%>"><%-devices[i].blueIP%></td>
     <td class="d-flex gap-1">
       <button type="button" class="btn btn-primary editConfig btn-sm flex-grow-1">Edit</button>
       <button type="button" class="btn btn-danger deleteRow btn-sm flex-grow-1">Delete</button>
@@ -1070,17 +1072,25 @@ function handleEmbrionix(data, type) {
 	const _table = document.querySelector(table);
 	_table.replaceChildren();
 
+
+
 	for (const deviceName in data) {
 		const device = data[deviceName];
-		_table.insertAdjacentHTML('beforeend', `<div class="emCont">
+
+		const redIPColour = device.redMatch ? 'isValid' : '';
+		const blueIPColour = device.blueMatch ? 'isValid' : '';
+		
+		_table.insertAdjacentHTML('beforeend', `<div class="emCont" id='${deviceName}'>
 			<div class="emHead">
 				<div class="emName">${deviceName}</div>
 				<div class="emDesc">${device.description}</div>
 			</div>
-			<div class="emIP">${device.red.ip}</div><div class="emIP">${device.blue.ip}</div>
-			<div class="fibreLevel"></div><div class="fibreLevel"></div>
+			<div class="emIP ${redIPColour}">${device.red.ip}</div><div class="emIP ${blueIPColour}"">${device.blue.ip}</div>
+			<div class="emPort">${device.red.port}</div><div class="emPort">${device.blue.port}</div>
+			<div class="fibreLevel" style="--dbs: ${device.red.switchPort.rxPower[0]}">${device.red.switchPort.rxPower[0]}</div><div class="fibreLevel" style="--dbs: ${device.blue.switchPort.rxPower[0]}">${device.blue.switchPort.rxPower[0]}</div>
 			<div class="fibreLevel" style="--dbs: ${device.red.rxPowerdB}">${device.red.rxPowerdB}</div><div class="fibreLevel" style="--dbs: ${device.blue.rxPowerdB}">${device.blue.rxPowerdB}</div>
 		</div>`);
+		
 	}
 }
 
