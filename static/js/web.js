@@ -1079,6 +1079,10 @@ function handleEmbrionix(data, type) {
 
 		const redIPColour = device.redMatch ? 'isValid' : '';
 		const blueIPColour = device.blueMatch ? 'isValid' : '';
+
+		const redPortColor = device.redPhyiscalMatch ? 'isValid' : '';
+		const bluePortColor = device.bluePhyiscalMatch ? 'isValid' : '';
+
 		
 		_table.insertAdjacentHTML('beforeend', `<div class="emCont" id='${deviceName}'>
 			<div class="emHead">
@@ -1086,7 +1090,7 @@ function handleEmbrionix(data, type) {
 				<div class="emDesc">${device.description}</div>
 			</div>
 			<div class="emIP ${redIPColour}">${device.red.ip}</div><div class="emIP ${blueIPColour}"">${device.blue.ip}</div>
-			<div class="emPort">${device.red.port}</div><div class="emPort">${device.blue.port}</div>
+			<div class="emPort ${redPortColor}">${device.red.port}</div><div class="emPort ${bluePortColor}">${device.blue.port}</div>
 			<div class="fibreLevel" style="--dbs: ${device.red.switchPort.rxPower[0]}">${device.red.switchPort.rxPower[0]}</div><div class="fibreLevel" style="--dbs: ${device.blue.switchPort.rxPower[0]}">${device.blue.switchPort.rxPower[0]}</div>
 			<div class="fibreLevel" style="--dbs: ${device.red.rxPowerdB}">${device.red.rxPowerdB}</div><div class="fibreLevel" style="--dbs: ${device.blue.rxPowerdB}">${device.blue.rxPowerdB}</div>
 		</div>`);

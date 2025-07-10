@@ -296,7 +296,8 @@ const EOS = {
 					"outErrors": iface.interfaceCounters.totalOutErrors,
 					"outDiscards": iface.interfaceCounters.outDiscards,
 					"inErrors": iface.interfaceCounters.totalInErrors,
-					"inDiscards": iface.interfaceCounters.inDiscards
+					"inDiscards": iface.interfaceCounters.inDiscards,
+					"physicalAddress": iface.physicalAddress
 				}
 			} else {
 				ifaceData.connected = iface.interfaceStatus == "connected" ? true : false;
@@ -1586,28 +1587,25 @@ async function doEmbrionixApi(device, request, side)  {
 	const promise = new Promise(async (resolve, reject) => {
 		const ip = side == 'red' ? device.redIP : device.blueIP;
 
-		const response = await fetch(`http://${ip}/emsfp/node/v1/${request}`, {
-			method: 'GET',
-			headers: {
-				'Accept': 'application/json'
+		try {
+			const response = await fetch(`http://${ip}/emsfp/node/v1/${request}`, {
+				method: 'GET',
+				headers: {
+					'Accept': 'application/json'
+				}
+			});
+
+			if (!response.ok) {
+				Logs.warn(`Failed to connect to Embrionix device at ${ip}, status code: ${response.status}`);
+				return resolve([device, { error: `Failed to connect, status code: ${response.status}` }]);
 			}
-		}).catch(error => {
 
+			const json = await response.json();
+			resolve([device, json]);
+		} catch (error) {
 			Logs.error(`Error connecting to Embrionix device at ${ip}`, error);
-			return reject(`Error connecting to Embrionix device at ${ip}: ${error.message}`);
-		});
-
-		if (response == undefined) { 
-			Logs.warn(`No response from Embrionix device at ${ip}`);
-			return reject(`No response from Embrionix device at ${ip}`); 
+			resolve([device, { error: `Error connecting: ${error.message}` }]);
 		}
-
-		if (response.status !== 200) {
-			Logs.warn(`Failed to connect to Embrionix device at ${ip}, status code: ${response.status}`);
-			return reject(`Failed to connect to Embrionix device at ${ip}, status code: ${response.status}`);
-		};
-		const json = await response.json();
-		resolve([device, json]);
 	});
 
 	return promise;
@@ -1633,6 +1631,11 @@ async function checkEmbrionix() {
 	const results = await Promise.allSettled(requests);
 	results.forEach(result => {
 		if (result.status != 'fulfilled') return;
+
+		if(result.error) {
+			Logs.error('Error in Embrionix API request:', result.error);
+			return;
+		}
 
 		const [device, response] = result.value;
 		if (response == undefined) {
@@ -1678,9 +1681,14 @@ async function checkEmbrionix() {
 			const redPortMatch = device.switchport.toLowerCase() == red.port.toLowerCase();
 			const bluePortMatch = device.switchport.toLowerCase() == blue.port.toLowerCase();
 
+			const redPhyiscalMatch = data.interfaces['Media']['Media A']["Ethernet8/2/1"].physicalAddress == red.chassis;
+
+			const bluePhyiscalMatch = data.interfaces['Media']['Media B']["Ethernet8/2/1"].physicalAddress == blue.chassis;
+
 			red.switchPort = data.interfaces['Media']['Media A'][device.switchport];
 
 			blue.switchPort = data.interfaces['Media']['Media B'][device.switchport];
+
 
 			if (data.embrionix[device.name] == undefined) {
 				data.embrionix[device.name] = {
@@ -1688,6 +1696,8 @@ async function checkEmbrionix() {
 					'blue': blue,
 					'redMatch': redPortMatch,
 					'blueMatch': bluePortMatch,
+					'redPhysicalMatch': redPhyiscalMatch,
+					'bluePhysicalMatch': bluePhyiscalMatch,
 				}
 			} else {
 				if (data.embrionix[device.name].red) {
@@ -1696,6 +1706,7 @@ async function checkEmbrionix() {
 					data.embrionix[device.name].red = red;
 				}
 				data.embrionix[device.name].redMatch = redPortMatch;
+				data.embrionix[device.name].redPhysicalMatch = redPhyiscalMatch;
 
 				if (data.embrionix[device.name].blue) {
 					data.embrionix[device.name].blue = {...data.embrionix[device.name].blue, ...blue};
@@ -1703,6 +1714,8 @@ async function checkEmbrionix() {
 					data.embrionix[device.name].blue = blue;
 				}
 				data.embrionix[device.name].blueMatch = bluePortMatch;
+				data.embrionix[device.name].bluePhysicalMatch = bluePhyiscalMatch;
+
 			};
 
 			
