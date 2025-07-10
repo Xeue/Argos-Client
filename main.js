@@ -632,30 +632,32 @@ connectToWebServer(true).then(()=>{
 });
 
 // 1 Minute ping loop
-setInterval(() => {
-	connectToWebServer(true);
-}, 60*1000);
+// setInterval(() => {
+// 	connectToWebServer(true);
+// }, 60*1000);
 
-await startLoopAfterDelay(logTemp, tempFrequency);
-await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Media');
-await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Media');
-await startLoopAfterDelay(switchInterfaces, 5, 'Media', true);
-await startLoopAfterDelay(switchFibre, 5, 'Media');
-await startLoopAfterDelay(localPings, localPingFrequency);
-await startLoopAfterDelay(connectToWebServer, 5);
-await startLoopAfterDelay(webLogPing, pingFrequency);
-await startLoopAfterDelay(switchEnv, envFrequency, 'Media');
-await startLoopAfterDelay(checkDevices, devicesFrequency, 'Media', true);
-await startLoopAfterDelay(checkEmbrionix, devicesFrequency, 'Media');
-await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Media');
+startLoopAfterDelay(logTemp, tempFrequency);
+startLoopAfterDelay(localPings, localPingFrequency);
+// startLoopAfterDelay(connectToWebServer, 5);
+startLoopAfterDelay(webLogPing, pingFrequency);
+startLoopAfterDelay(checkUps, upsFrequency);
+startLoopAfterDelay(lldpLoop, lldpFrequency, 'Media').then(async () => {
+	await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Media');
+	await startLoopAfterDelay(switchInterfaces, 5, 'Media', true);
+	await startLoopAfterDelay(switchFibre, 5, 'Media');
+	await startLoopAfterDelay(switchEnv, envFrequency, 'Media');
+	await startLoopAfterDelay(checkDevices, devicesFrequency, 'Media', true);
+	await startLoopAfterDelay(checkEmbrionix, devicesFrequency, 'Media');
+	await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Media');
+});
 //await startLoopAfterDelay(switchPhy, switchStatsFrequency, 'Media');
-await startLoopAfterDelay(lldpLoop, lldpFrequency, 'Control');
-await startLoopAfterDelay(switchInterfaces, 5, 'Control', true);
-await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Control');
-await startLoopAfterDelay(switchEnv, envFrequency, 'Control');
-await startLoopAfterDelay(checkDevices, devicesFrequency, 'Control', false);
-await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Control');
-await startLoopAfterDelay(checkUps, upsFrequency);
+startLoopAfterDelay(lldpLoop, lldpFrequency, 'Control').then(async () => {
+	await startLoopAfterDelay(switchInterfaces, 5, 'Control', true);
+	await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Control');
+	await startLoopAfterDelay(switchEnv, envFrequency, 'Control');
+	await startLoopAfterDelay(checkDevices, devicesFrequency, 'Control', false);
+	await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Control');
+})
 
 function notification(title, text) {
 }
@@ -1584,31 +1586,28 @@ function checkDevices(switchType, fromList) {
 }
 
 async function doEmbrionixApi(device, request, side)  {
-	const promise = new Promise(async (resolve, reject) => {
+	return new Promise(async (resolve, reject) => {
 		const ip = side == 'red' ? device.redIP : device.blueIP;
-
 		try {
 			const response = await fetch(`http://${ip}/emsfp/node/v1/${request}`, {
 				method: 'GET',
 				headers: {
 					'Accept': 'application/json'
-				}
+				},
+				signal: AbortSignal.timeout(2000) // 2 seconds timeout
 			});
-
+			Logs.debug(`Embrionix API request to ${ip} for ${request} returned status: ${response.status}`);
 			if (!response.ok) {
 				Logs.warn(`Failed to connect to Embrionix device at ${ip}, status code: ${response.status}`);
-				return resolve([device, { error: `Failed to connect, status code: ${response.status}` }]);
+				resolve({ error: `Failed to connect, status code: ${response.status}` });
+			} else {
+				const json = await response.json();
+				resolve(json);
 			}
-
-			const json = await response.json();
-			resolve([device, json]);
 		} catch (error) {
-			Logs.error(`Error connecting to Embrionix device at ${ip}`, error);
-			resolve([device, { error: `Error connecting: ${error.message}` }]);
+			reject({ error: `Error connecting: ${error.message}` });
 		}
 	});
-
-	return promise;
 }
 
 
@@ -1616,126 +1615,111 @@ async function doEmbrionixApi(device, request, side)  {
 async function checkEmbrionix() {
 	Logs.debug('Checking Embrionix\'s Fiber Levels');
 	const Devices = devices();
-	const requests = [];
+
 	Devices.forEach(async (device) => {
 		if (device.deviceType != 'Embrionix') return;
-
 		// Try and get fiber data on both sides of the Embrionix device (Red/Blue IPs)
-		requests.push(doEmbrionixApi(device, 'telemetry/ports', 'red'));
-		requests.push(doEmbrionixApi(device, 'telemetry/ports', 'blue'));
 
-		requests.push(doEmbrionixApi(device, 'lldp', 'red'));
-		requests.push(doEmbrionixApi(device, 'lldp', 'blue'));
-	});
+		const portRequest = new Promise(async (resolve) => {
+			// Do API request for both sides and resolve when the first one finishes
+			doEmbrionixApi(device, 'telemetry/ports', 'red').then(response => {
+				resolve(response);
+			}).catch(error => {
+				resolve({'error':error});
+			});
+			doEmbrionixApi(device, 'telemetry/ports', 'blue').then(response => {
+				resolve(response);
+			}).catch(error => {
+				resolve({'error':error});
+			});
+		});
 
-	const results = await Promise.allSettled(requests);
-	results.forEach(result => {
-		if (result.status != 'fulfilled') return;
+		const lldpRequest = new Promise(async (resolve) => {
+			doEmbrionixApi(device, 'lldp', 'red').then(response => {
+				resolve(response);
+			}).catch(error => {
+				resolve({'error':error});
+			});
+			doEmbrionixApi(device, 'lldp', 'blue').then(response => {
+				resolve(response);
+			}).catch(error => {
+				resolve({'error':error});
+			});
+		});
 
-		if(result.error) {
-			Logs.error('Error in Embrionix API request:', result.error);
+		const results = await Promise.allSettled([portRequest, lldpRequest]);
+
+		const [ports, neighbor] = results;
+
+		if (ports.status != 'fulfilled' || neighbor.status != 'fulfilled') return;
+	
+		if (ports.value.error) {
+			Logs.warn('Error in Embrionix API request', ports.value.error);
+			return;
+		}
+		if (neighbor.value.error) {
+			Logs.warn('Error in Embrionix API request', neighbor.value.error);
 			return;
 		}
 
-		const [device, response] = result.value;
-		if (response == undefined) {
+		if (ports.value == undefined) {
 			Logs.warn('Embrionix response is empty');
 			return;
 		}
-		
-		// Getting fiber data from Embrionix devices
-		if (response.ports) {
-			const ports = response.ports;
-			const red = ports[2];
-			const blue = ports[4];
-			
-			red.txPowerdB = mwTodBw(red.tx_power);
-			red.rxPowerdB = mwTodBw(red.rx_power);
-
-			red.ip = device.redIP;
-	
-			blue.txPowerdB = mwTodBw(blue.tx_power);
-			blue.rxPowerdB = mwTodBw(blue.rx_power);
-
-			blue.ip = device.blueIP;
-	
-			if (data.embrionix == undefined) data.embrionix = {};
-			if (data.embrionix[device.name] == undefined) {
-				data.embrionix[device.name] = {
-					'red': red,
-					'blue': blue,
-					'description': device.description,
-				}
-			} else {
-				data.embrionix[device.name].red = red;
-				data.embrionix[device.name].blue = blue;
-				data.embrionix[device.name].description = device.description;
-			};
-		} else if (response.neighbor) { // Getting LLDP data from Embrionix devices
-			const lldp = response.neighbor;
-
-			const red = lldp[0];
-
-			const blue = lldp[1];
-
-			const redPortMatch = device.switchport.toLowerCase() == red.port.toLowerCase();
-			const bluePortMatch = device.switchport.toLowerCase() == blue.port.toLowerCase();
-
-			const redPhysicalMatch = data.interfaces['Media']['Media A']["Ethernet8/2/1"].physicalAddress == red.chassis;
-
-			const bluePhysicalMatch = data.interfaces['Media']['Media B']["Ethernet8/2/1"].physicalAddress == blue.chassis;
-
-			red.switchPort = data.interfaces['Media']['Media A'][device.switchport];
-
-			blue.switchPort = data.interfaces['Media']['Media B'][device.switchport];
-
-
-			if (data.embrionix[device.name] == undefined) {
-				data.embrionix[device.name] = {
-					'red': red,
-					'blue': blue,
-					'redMatch': redPortMatch,
-					'blueMatch': bluePortMatch,
-					'redPhysicalMatch': redPhysicalMatch,
-					'bluePhysicalMatch': bluePhysicalMatch,
-				}
-			} else {
-				if (data.embrionix[device.name].red) {
-					data.embrionix[device.name].red = {...data.embrionix[device.name].red, ...red};
-				} else {
-					data.embrionix[device.name].red = red;
-				}
-				data.embrionix[device.name].redMatch = redPortMatch;
-				data.embrionix[device.name].redPhysicalMatch = redPhysicalMatch;
-
-				if (data.embrionix[device.name].blue) {
-					data.embrionix[device.name].blue = {...data.embrionix[device.name].blue, ...blue};
-				} else {
-					data.embrionix[device.name].blue = blue;
-				}
-				data.embrionix[device.name].blueMatch = bluePortMatch;
-				data.embrionix[device.name].bluePhysicalMatch = bluePhysicalMatch;
-
-			};
-
-			
-
+		if (neighbor.value == undefined) {
+			Logs.warn('Embrionix response is empty');
+			return;
 		}
 
+		const lldp = neighbor.value.neighbor;
 
+		const red = {...ports.value.ports[2], ...lldp[0]};
+		const blue = {...ports.value.ports[4], ...lldp[1]};
+		
+		red.txPowerdB = mwTodBw(red.tx_power);
+		red.rxPowerdB = mwTodBw(red.rx_power);
+		red.ip = device.redIP;
+		red.switchPort = data.interfaces['Media']['Media A'][device.switchport];
+		const redPortMatch = device.switchport.toLowerCase() == red.port.toLowerCase();
+		const redPhysicalMatch = data.interfaces['Media']['Media A']["Ethernet8/2/1"].physicalAddress == red.chassis;
+		
+		blue.txPowerdB = mwTodBw(blue.tx_power);
+		blue.rxPowerdB = mwTodBw(blue.rx_power);
+		blue.ip = device.blueIP;
+		blue.switchPort = data.interfaces['Media']['Media B'][device.switchport];
+		const bluePortMatch = device.switchport.toLowerCase() == blue.port.toLowerCase();
+		const bluePhysicalMatch = data.interfaces['Media']['Media B']["Ethernet8/2/1"].physicalAddress == blue.chassis;
+	
+		if (data.embrionix == undefined) data.embrionix = {};
+		if (data.embrionix[device.name] == undefined) {
+			data.embrionix[device.name] = {
+				'red': red,
+				'blue': blue,
+				'redMatch': redPortMatch,
+				'blueMatch': bluePortMatch,
+				'redPhysicalMatch': redPhysicalMatch,
+				'bluePhysicalMatch': bluePhysicalMatch,
+				'description': device.description,
+				'group': device.group,
+			}
+		} else {
+			data.embrionix[device.name].red = red;
+			data.embrionix[device.name].redMatch = redPortMatch;
+			data.embrionix[device.name].redPhysicalMatch = redPhysicalMatch;
 
+			data.embrionix[device.name].blue = blue;
+			data.embrionix[device.name].blueMatch = bluePortMatch;
+			data.embrionix[device.name].bluePhysicalMatch = bluePhysicalMatch;
+
+			data.embrionix[device.name].description = device.description;
+			data.embrionix[device.name].group = device.group;
+		};
+
+		Logs.debug('Sending Embrionix Data to Frontend');
 		distributeData('embrionix', data.embrionix);
 	});
+
 }
-
-function mwTodBw(mw) {
-	if(parseInt(mw) == null) {
-		return null;
-	}
-
-	return (10 * Math.log10(mw / 1000)).toFixed(2);
-}
-
 
 async function doApi(request, Switch) {
 	const ip = Switch.IP;
@@ -2262,6 +2246,14 @@ function getDescription(portName, switchType, switchName) {
 	} else {
 		return undefined;
 	}
+}
+
+function mwTodBw(mw) {
+	if(parseInt(mw) == null) {
+		return null;
+	}
+
+	return (10 * Math.log10(mw / 1000)).toFixed(2);
 }
 
 function minutes(mins) {

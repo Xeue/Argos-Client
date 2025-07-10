@@ -48,6 +48,12 @@ html {
   max-height: 100%;
 }
 
+#config .modal-dialog {
+  width: 100%;
+  max-width: 100%;
+  margin-top: 0rem;
+}
+
 #config.hidden {
   opacity: 0;
   pointer-events: none;
@@ -420,18 +426,31 @@ div.jsoneditor-tree {
   place-items: center;
   grid-template-areas: "head         head         " "red blue" "redport        blueport       " "redip        blueip       " "switch switch" "fibRedSwitch fibBlueSwitch" "self self" "fibRedEm     fibBlueEm    ";
   grid-template-columns: 1fr 1fr;
-  column-gap: 0.3rem;
   width: fit-content;
   border-radius: 10px;
   overflow: hidden;
-  /*! padding: 5px; */
   color: white;
 }
 
+.embrionixGroup:before {
+  content: attr(data-group);
+  background: #1987545e;
+  color: white;
+  padding: 0.5rem;
+  text-align: center;
+  font-weight: bold;
+  display: block;
+  width: 100%;
+}
 #embTable {
-  gap: 0.5rem;
+  width: 100%;
+}
+
+.embrionixGroup {
+  gap: 1rem;
   display: flex;
   flex-wrap: wrap;
+  padding: 0.5rem;
 }
 
 .isValid {
@@ -443,21 +462,20 @@ div.jsoneditor-tree {
   width: 100%;
   place-items: center;
   text-align: center;
-  background-color: #a20000;
+  background-color: #a2000075;
 }
 .emBlue {
   grid-area: blue;
   width: 100%;
   place-items: center;
   text-align: center;
-  background-color: #000073;
+  background-color: #000073a8;
 }
 .emSwitch {
   grid-area: switch;
   background: #313d48;
   padding: 0.1rem 0.5rem;
   border-radius: 5px;
-  margin-top: 5px;
 }
 .emSelf {
   grid-area: self;
@@ -476,7 +494,7 @@ div.jsoneditor-tree {
 .emBlueFibEm{grid-area:fibBlueEm;}
 
 .emRedBG {
-  background: #ff000045;
+  background: #ff000024;
   grid-column: 1/2;
   grid-row: 2/9;
   height: 100%;
@@ -484,7 +502,7 @@ div.jsoneditor-tree {
 }
 
 .emBlueBG {
-  background: #0000ff45;
+  background: #0000ff0f;
   grid-column: 2/3;
   grid-row: 2/9;
   height: 100%;

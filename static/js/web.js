@@ -74,6 +74,7 @@ templates.devices = `<% for(i = 0; i < devices.length; i++) { %>
   <tr data-index="<%=i%>" data-template="devices">
     <td data-type="text" data-key="name" data-value="<%-devices[i].name%>"><%-devices[i].name%></td>
     <td data-type="text" data-key="description" data-value="<%-devices[i].description%>"><%-devices[i].description%></td>
+	<td data-type="text" data-key="group" data-value="<%-devices[i].group%>"><%-devices[i].group%></td>
 	<td data-type="select" data-key="deviceType" data-value="<%-devices[i].deviceType%>" data-options="General,Embrionix"><%-devices[i].deviceType%></td>
 	<td data-type="text" data-key="switchport" data-value="<%-devices[i].switchport%>"><%-devices[i].switchport%></td>
 	<td data-type="text" data-key="redIP" data-value="<%-devices[i].redIP%>"><%-devices[i].redIP%></td>
@@ -1075,7 +1076,17 @@ function handleEmbrionix(data, type) {
 	const _table = document.querySelector(table);
 	_table.replaceChildren();
 
-
+	// Generate a list of groups from those present in the data
+	const groups = [...new Set(Object.values(data).map(d=>d.group))];
+	const groupEls = {};
+	// Loop through the groups and create a tbody for each
+	groups.forEach(group => {
+		const _tbody = document.createElement('tbody');
+		_tbody.classList.add('embrionixGroup');
+		_tbody.setAttribute('data-group', group);
+		groupEls[group] = _tbody;
+		_table.append(_tbody);
+	})
 
 	for (const deviceName in data) {
 		const device = data[deviceName];
@@ -1086,8 +1097,13 @@ function handleEmbrionix(data, type) {
 		const redPortColor = device.redPhysicalMatch ? 'isValid' : '';
 		const bluePortColor = device.bluePhysicalMatch ? 'isValid' : '';
 
-		
-		_table.insertAdjacentHTML('beforeend', `<div class="emCont" id='${deviceName}'>
+		const redRxSw = device.red.switchPort?.rxPower ? device.red.switchPort.rxPower[0] : '0';
+		const redRxEm = device.red.rxPowerdB? device.red.rxPowerdB : '0';
+
+		const blueRxSw = device.blue.switchPort?.rxPower? device.blue.switchPort.rxPower : '0';
+		const blueRxEm = device.blue.rxPowerdB? device.blue.rxPowerdB : '0';
+
+		const html = `<div class="emCont" id='${deviceName}'>
 			<div class="emHead">
 				<div class="emName">${deviceName}</div>
 				<div class="emDesc">${device.description}</div>
@@ -1100,12 +1116,19 @@ function handleEmbrionix(data, type) {
 			<div class="emPort emRedPort ${redPortColor}">${device.red.port}</div>
 			<div class="emPort emBluePort ${bluePortColor}">${device.blue.port}</div>
 			<div class="emSwitch">Switch</div>
-			<div class="fibreLevel emRedFibSw" style="--dbs: ${device.red.switchPort.rxPower[0]}">${device.red.switchPort.rxPower[0]}</div>
-			<div class="fibreLevel emBlueFibSw" style="--dbs: ${device.blue.switchPort.rxPower[0]}">${device.blue.switchPort.rxPower[0]}</div>
+			<div class="fibreLevel emRedFibSw" style="--dbs: ${redRxSw}">${redRxSw}</div>
+			<div class="fibreLevel emBlueFibSw" style="--dbs: ${blueRxSw}">${blueRxSw}</div>
 			<div class="emSelf">Embrionix</div>
-			<div class="fibreLevel emRedFibEm" style="--dbs: ${device.red.rxPowerdB}">${device.red.rxPowerdB}</div>
-			<div class="fibreLevel emBlueFibEm" style="--dbs: ${device.blue.rxPowerdB}">${device.blue.rxPowerdB}</div>
-		</div>`);
+			<div class="fibreLevel emRedFibEm" style="--dbs: ${redRxEm}">${redRxEm}</div>
+			<div class="fibreLevel emBlueFibEm" style="--dbs: ${blueRxEm}">${blueRxEm}</div>
+		</div>`
+
+		// If the group element exists, insert the HTML into it, otherwise insert into the main table
+		if (groupEls[device.group]) {
+			groupEls[device.group].insertAdjacentHTML('beforeend', html);
+		} else {
+			_table.insertAdjacentHTML('beforeend', html);
+		}
 	}
 }
 
