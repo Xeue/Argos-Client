@@ -1614,7 +1614,7 @@ async function doEmbrionixApi(device, request, side)  {
 
 
 async function checkEmbrionix() {
-	Logs.info('Checking Embrionix\'s Fiber Levels');
+	Logs.debug('Checking Embrionix\'s Fiber Levels');
 	const Devices = devices();
 	const requests = [];
 	Devices.forEach(async (device) => {
@@ -1681,9 +1681,9 @@ async function checkEmbrionix() {
 			const redPortMatch = device.switchport.toLowerCase() == red.port.toLowerCase();
 			const bluePortMatch = device.switchport.toLowerCase() == blue.port.toLowerCase();
 
-			const redPhyiscalMatch = data.interfaces['Media']['Media A']["Ethernet8/2/1"].physicalAddress == red.chassis;
+			const redPhysicalMatch = data.interfaces['Media']['Media A']["Ethernet8/2/1"].physicalAddress == red.chassis;
 
-			const bluePhyiscalMatch = data.interfaces['Media']['Media B']["Ethernet8/2/1"].physicalAddress == blue.chassis;
+			const bluePhysicalMatch = data.interfaces['Media']['Media B']["Ethernet8/2/1"].physicalAddress == blue.chassis;
 
 			red.switchPort = data.interfaces['Media']['Media A'][device.switchport];
 
@@ -1696,8 +1696,8 @@ async function checkEmbrionix() {
 					'blue': blue,
 					'redMatch': redPortMatch,
 					'blueMatch': bluePortMatch,
-					'redPhysicalMatch': redPhyiscalMatch,
-					'bluePhysicalMatch': bluePhyiscalMatch,
+					'redPhysicalMatch': redPhysicalMatch,
+					'bluePhysicalMatch': bluePhysicalMatch,
 				}
 			} else {
 				if (data.embrionix[device.name].red) {
@@ -1706,7 +1706,7 @@ async function checkEmbrionix() {
 					data.embrionix[device.name].red = red;
 				}
 				data.embrionix[device.name].redMatch = redPortMatch;
-				data.embrionix[device.name].redPhysicalMatch = redPhyiscalMatch;
+				data.embrionix[device.name].redPhysicalMatch = redPhysicalMatch;
 
 				if (data.embrionix[device.name].blue) {
 					data.embrionix[device.name].blue = {...data.embrionix[device.name].blue, ...blue};
@@ -1714,7 +1714,7 @@ async function checkEmbrionix() {
 					data.embrionix[device.name].blue = blue;
 				}
 				data.embrionix[device.name].blueMatch = bluePortMatch;
-				data.embrionix[device.name].bluePhysicalMatch = bluePhyiscalMatch;
+				data.embrionix[device.name].bluePhysicalMatch = bluePhysicalMatch;
 
 			};
 

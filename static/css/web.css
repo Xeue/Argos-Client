@@ -383,36 +383,31 @@ div.jsoneditor-tree {
   background-color: transparent !important;
 }
 
-
-.emIP {
-  width: 100%;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-  height: 5rem;
-  font-weight: bold;
-}
-
-.emPort {
-  width: 100%;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-  height: 5rem;
-  font-weight: bold;
-}
-
 .fibreLevel {
-  width: 100%;
-  aspect-ratio: 1;
-  background: #4a4a4a;
-  background-image: linear-gradient(transparent var(--level), oklch(0.65 0.296 var(--hue)) var(--level));
+  width: calc(100% - 10px);
+  aspect-ratio: 16/6;
+  background: #212529;
+  background-image: linear-gradient(270deg, transparent var(--level), oklch(0.552 0.1234 var(--hue)) var(--level));
   --level: calc(100% * (var(--dbs) / -30));
   --dbs: -30;
-  --hue: calc(150 - (100 * (var(--dbs) / -30)));
+  --hue: calc(157 - (180 * (var(--dbs) / -30)));
   place-items: center;
   display: grid;
+  border-radius: 5px;
+  margin-block: 5px;
 }
+
+.emPort,
+.emIP {
+  width: calc(100% - 10px);
+  display: grid;
+  place-items: center;
+  padding: 0.1rem 0.5rem;
+  margin: 5px;
+  border-radius: 5px;
+  background: rgba(var(--bs-danger-rgb),var(--bs-bg-opacity)) !important;
+}
+
 .emHead {
   grid-area: head;
   padding: 0.5rem 1rem;
@@ -423,12 +418,14 @@ div.jsoneditor-tree {
   background: rgb(49, 61, 72);
   display: grid;
   place-items: center;
-  grid-template-areas: "head         head         " "redport        blueport       " "redip        blueip       " "fibRedSwitch fibBlueSwitch" "fibRedEm     fibBlueEm    ";
+  grid-template-areas: "head         head         " "red blue" "redport        blueport       " "redip        blueip       " "switch switch" "fibRedSwitch fibBlueSwitch" "self self" "fibRedEm     fibBlueEm    ";
   grid-template-columns: 1fr 1fr;
-  gap: 0.3rem;
+  column-gap: 0.3rem;
   width: fit-content;
-  border-radius: 5px;
+  border-radius: 10px;
   overflow: hidden;
+  /*! padding: 5px; */
+  color: white;
 }
 
 #embTable {
@@ -438,6 +435,58 @@ div.jsoneditor-tree {
 }
 
 .isValid {
-  color: green;
+  background-color: rgba(var(--bs-success-rgb),var(--bs-bg-opacity)) !important;
 }
 
+.emRed {
+  grid-area: red;
+  width: 100%;
+  place-items: center;
+  text-align: center;
+  background-color: #a20000;
+}
+.emBlue {
+  grid-area: blue;
+  width: 100%;
+  place-items: center;
+  text-align: center;
+  background-color: #000073;
+}
+.emSwitch {
+  grid-area: switch;
+  background: #313d48;
+  padding: 0.1rem 0.5rem;
+  border-radius: 5px;
+  margin-top: 5px;
+}
+.emSelf {
+  grid-area: self;
+  background: #313d48;
+  padding: 0.1rem 0.5rem;
+  border-radius: 5px;
+}
+
+.emRedIP{grid-area:redip;}
+.emBlueIP{grid-area:blueip;}
+.emRedPort{grid-area:redport;}
+.emBluePort{grid-area:blueport;}
+.emRedFibSw{grid-area:fibRedSwitch;}
+.emBlueFibSw{grid-area:fibBlueSwitch;}
+.emRedFibEm{grid-area:fibRedEm;}
+.emBlueFibEm{grid-area:fibBlueEm;}
+
+.emRedBG {
+  background: #ff000045;
+  grid-column: 1/2;
+  grid-row: 2/9;
+  height: 100%;
+  width: 100%;
+}
+
+.emBlueBG {
+  background: #0000ff45;
+  grid-column: 2/3;
+  grid-row: 2/9;
+  height: 100%;
+  width: 100%;
+}

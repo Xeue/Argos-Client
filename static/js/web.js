@@ -11,6 +11,8 @@ let syslogHistogram;
 let pings = {};
 let boots = {};
 
+window.pause = false;
+
 const templates = {};
 
 templates.nameIP = `<% for(i = 0; i < devices.length; i++) { %>
@@ -118,6 +120,7 @@ function socketDoOpen(socket) {
 }
 
 function socketDoMessage(header, payload) {
+	if (window.pause) return;
 	switch (payload.command) {
 	case 'data':
 		if (payload.system === currentSystem) {
@@ -1080,8 +1083,8 @@ function handleEmbrionix(data, type) {
 		const redIPColour = device.redMatch ? 'isValid' : '';
 		const blueIPColour = device.blueMatch ? 'isValid' : '';
 
-		const redPortColor = device.redPhyiscalMatch ? 'isValid' : '';
-		const bluePortColor = device.bluePhyiscalMatch ? 'isValid' : '';
+		const redPortColor = device.redPhysicalMatch ? 'isValid' : '';
+		const bluePortColor = device.bluePhysicalMatch ? 'isValid' : '';
 
 		
 		_table.insertAdjacentHTML('beforeend', `<div class="emCont" id='${deviceName}'>
@@ -1089,12 +1092,20 @@ function handleEmbrionix(data, type) {
 				<div class="emName">${deviceName}</div>
 				<div class="emDesc">${device.description}</div>
 			</div>
-			<div class="emIP ${redIPColour}">${device.red.ip}</div><div class="emIP ${blueIPColour}"">${device.blue.ip}</div>
-			<div class="emPort ${redPortColor}">${device.red.port}</div><div class="emPort ${bluePortColor}">${device.blue.port}</div>
-			<div class="fibreLevel" style="--dbs: ${device.red.switchPort.rxPower[0]}">${device.red.switchPort.rxPower[0]}</div><div class="fibreLevel" style="--dbs: ${device.blue.switchPort.rxPower[0]}">${device.blue.switchPort.rxPower[0]}</div>
-			<div class="fibreLevel" style="--dbs: ${device.red.rxPowerdB}">${device.red.rxPowerdB}</div><div class="fibreLevel" style="--dbs: ${device.blue.rxPowerdB}">${device.blue.rxPowerdB}</div>
+			<div class="emRedBG"></div>
+			<div class="emBlueBG"></div>
+			<div class="emRed">Red</div><div class="emBlue">Blue</div>
+			<div class="emIP ${redIPColour} emRedIP">${device.red.ip}</div>
+			<div class="emIP ${blueIPColour} emBlueIP">${device.blue.ip}</div>
+			<div class="emPort emRedPort ${redPortColor}">${device.red.port}</div>
+			<div class="emPort emBluePort ${bluePortColor}">${device.blue.port}</div>
+			<div class="emSwitch">Switch</div>
+			<div class="fibreLevel emRedFibSw" style="--dbs: ${device.red.switchPort.rxPower[0]}">${device.red.switchPort.rxPower[0]}</div>
+			<div class="fibreLevel emBlueFibSw" style="--dbs: ${device.blue.switchPort.rxPower[0]}">${device.blue.switchPort.rxPower[0]}</div>
+			<div class="emSelf">Embrionix</div>
+			<div class="fibreLevel emRedFibEm" style="--dbs: ${device.red.rxPowerdB}">${device.red.rxPowerdB}</div>
+			<div class="fibreLevel emBlueFibEm" style="--dbs: ${device.blue.rxPowerdB}">${device.blue.rxPowerdB}</div>
 		</div>`);
-		
 	}
 }
 
