@@ -1091,6 +1091,22 @@ function handleEmbrionix(data, type) {
 	for (const deviceName in data) {
 		const device = data[deviceName];
 
+		if(device.error) {
+			const html = `<div class="emCont emError" id='${deviceName}'>
+				<div class="emHead">
+					<div class="emName">${deviceName}</div>
+					<div class="emDesc">${device.description}</div>
+				</div>
+				<div class="emErrorMessage">${device.error}</div>
+			</div>`;
+			if (groupEls[device.group]) {
+				groupEls[device.group].insertAdjacentHTML('beforeend', html);
+			} else {
+				_table.insertAdjacentHTML('beforeend', html);
+			}
+			continue;
+		}
+
 		const redIPColour = device.redMatch ? 'isValid' : '';
 		const blueIPColour = device.blueMatch ? 'isValid' : '';
 
@@ -1103,6 +1119,12 @@ function handleEmbrionix(data, type) {
 		const blueRxSw = device.blue.switchPort?.rxPower? device.blue.switchPort.rxPower : '0';
 		const blueRxEm = device.blue.rxPowerdB? device.blue.rxPowerdB : '0';
 
+		const redSameSwitch = (device.red.switchPort.physicalAddress == device.red.chassis) ? '' : 'sameSwitch';
+		const blueSameSwitch = (device.blue.switchPort.physicalAddress == device.blue.chassis) ? '' : 'sameSwitch';
+
+		// If the ports are crossed, add the crossed arrow
+		const crossed = (device.red.switchPort.physicalAddress == device.red.chassis) && (device.blue.switchPort.physicalAddress == device.blue.chassis) ? '' : '&#8596;';
+
 		const html = `<div class="emCont" id='${deviceName}'>
 			<div class="emHead">
 				<div class="emName">${deviceName}</div>
@@ -1113,14 +1135,18 @@ function handleEmbrionix(data, type) {
 			<div class="emRed">Red</div><div class="emBlue">Blue</div>
 			<div class="emIP ${redIPColour} emRedIP">${device.red.ip}</div>
 			<div class="emIP ${blueIPColour} emBlueIP">${device.blue.ip}</div>
-			<div class="emPort emRedPort ${redPortColor}">${device.red.port}</div>
-			<div class="emPort emBluePort ${bluePortColor}">${device.blue.port}</div>
+			<div class="emPortRow">
+				<div class="emPort emRedPort ${redPortColor} ${redSameSwitch}">${device.red.port}</div>
+				<div class="cross-arrow" title="Crossed">${crossed}</div>
+				<div class="emPort emBluePort ${bluePortColor} ${blueSameSwitch}">${device.blue.port}</div>
+			</div>
 			<div class="emSwitch">Switch</div>
 			<div class="fibreLevel emRedFibSw" style="--dbs: ${redRxSw}">${redRxSw}</div>
 			<div class="fibreLevel emBlueFibSw" style="--dbs: ${blueRxSw}">${blueRxSw}</div>
 			<div class="emSelf">Embrionix</div>
 			<div class="fibreLevel emRedFibEm" style="--dbs: ${redRxEm}">${redRxEm}</div>
 			<div class="fibreLevel emBlueFibEm" style="--dbs: ${blueRxEm}">${blueRxEm}</div>
+			<div class="emTemp">${device.temperature}C</div>
 		</div>`
 
 		// If the group element exists, insert the HTML into it, otherwise insert into the main table

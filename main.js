@@ -72,6 +72,7 @@ const data = {
 		'Control':{},
 		'Media':{}
 	},
+	'embrionix': {},
 	'ups': {},
 	'phy': {},
 	'ports': {
@@ -644,18 +645,18 @@ startLoopAfterDelay(checkUps, upsFrequency);
 startLoopAfterDelay(lldpLoop, lldpFrequency, 'Media').then(async () => {
 	await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Media');
 	await startLoopAfterDelay(switchInterfaces, 5, 'Media', true);
+	startLoopAfterDelay(checkEmbrionix, 5); // Doesn't do switch requests, so can run immediately
+	startLoopAfterDelay(checkDevices, devicesFrequency, 'Media', true); // Doesn't do switch requests, so can run immediately
 	await startLoopAfterDelay(switchFibre, 5, 'Media');
 	await startLoopAfterDelay(switchEnv, envFrequency, 'Media');
-	await startLoopAfterDelay(checkDevices, devicesFrequency, 'Media', true);
-	await startLoopAfterDelay(checkEmbrionix, devicesFrequency, 'Media');
 	await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Media');
 });
 //await startLoopAfterDelay(switchPhy, switchStatsFrequency, 'Media');
 startLoopAfterDelay(lldpLoop, lldpFrequency, 'Control').then(async () => {
 	await startLoopAfterDelay(switchInterfaces, 5, 'Control', true);
 	await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Control');
+	startLoopAfterDelay(checkDevices, devicesFrequency, 'Control', false); // Doesn't do switch requests, so can run immediately
 	await startLoopAfterDelay(switchEnv, envFrequency, 'Control');
-	await startLoopAfterDelay(checkDevices, devicesFrequency, 'Control', false);
 	await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Control');
 })
 
@@ -1585,27 +1586,24 @@ function checkDevices(switchType, fromList) {
 	distributeData(type, data.devices[switchType]);
 }
 
-async function doEmbrionixApi(device, request, side)  {
+async function doEmbrionixApi(request, ip)  {
 	return new Promise(async (resolve, reject) => {
-		const ip = side == 'red' ? device.redIP : device.blueIP;
 		try {
 			const response = await fetch(`http://${ip}/emsfp/node/v1/${request}`, {
 				method: 'GET',
 				headers: {
 					'Accept': 'application/json'
 				},
-				signal: AbortSignal.timeout(2000) // 2 seconds timeout
+				// signal: AbortSignal.timeout(5000) // 2 seconds timeout
 			});
-			Logs.debug(`Embrionix API request to ${ip} for ${request} returned status: ${response.status}`);
 			if (!response.ok) {
-				Logs.warn(`Failed to connect to Embrionix device at ${ip}, status code: ${response.status}`);
-				resolve({ error: `Failed to connect, status code: ${response.status}` });
+				reject(`Failed to connect, status code: ${response.status}`);
 			} else {
 				const json = await response.json();
 				resolve(json);
 			}
 		} catch (error) {
-			reject({ error: `Error connecting: ${error.message}` });
+			reject(`Error connecting: ${error.message}`);
 		}
 	});
 }
@@ -1616,50 +1614,73 @@ async function checkEmbrionix() {
 	Logs.debug('Checking Embrionix\'s Fiber Levels');
 	const Devices = devices();
 
+	data.embrionix = {};
+
 	Devices.forEach(async (device) => {
 		if (device.deviceType != 'Embrionix') return;
 		// Try and get fiber data on both sides of the Embrionix device (Red/Blue IPs)
 
-		const portRequest = new Promise(async (resolve) => {
+		const portRequest = new Promise(resolve => {
 			// Do API request for both sides and resolve when the first one finishes
-			doEmbrionixApi(device, 'telemetry/ports', 'red').then(response => {
-				resolve(response);
-			}).catch(error => {
-				resolve({'error':error});
+			doEmbrionixApi('telemetry/ports', device.redIP).then(response => resolve(response)).catch(error => {
+				Logs.info(`Error connecting to Embrionix device at ${device.redIP}: ${error}`);
 			});
-			doEmbrionixApi(device, 'telemetry/ports', 'blue').then(response => {
-				resolve(response);
-			}).catch(error => {
-				resolve({'error':error});
+			doEmbrionixApi('telemetry/ports', device.blueIP).then(response => resolve(response)).catch(error => {
+				Logs.info(`Error connecting to Embrionix device at ${device.blueIP}: ${error}`);
+			});
+		});
+		const lldpRequest = new Promise(resolve => {
+			doEmbrionixApi('lldp', device.redIP).then(response => resolve(response)).catch(error => {
+				Logs.info(`Error connecting to Embrionix device at ${device.redIP}: ${error}`);
+			});
+			doEmbrionixApi('lldp', device.blueIP).then(response => resolve(response)).catch(error => {
+				Logs.info(`Error connecting to Embrionix device at ${device.blueIP}: ${error}`);
+			});
+		});
+		const systemRequest = new Promise(resolve => {
+			doEmbrionixApi('self/system', device.redIP).then(response => resolve(response)).catch(error => {
+				Logs.info(`Error connecting to Embrionix device at ${device.redIP}: ${error}`);
+			});
+			doEmbrionixApi('self/system', device.blueIP).then(response => resolve(response)).catch(error => {
+				Logs.info(`Error connecting to Embrionix device at ${device.blueIP}: ${error}`);
 			});
 		});
 
-		const lldpRequest = new Promise(async (resolve) => {
-			doEmbrionixApi(device, 'lldp', 'red').then(response => {
-				resolve(response);
-			}).catch(error => {
-				resolve({'error':error});
-			});
-			doEmbrionixApi(device, 'lldp', 'blue').then(response => {
-				resolve(response);
-			}).catch(error => {
-				resolve({'error':error});
-			});
-		});
+		const results = await Promise.allSettled([portRequest, lldpRequest, systemRequest]);
 
-		const results = await Promise.allSettled([portRequest, lldpRequest]);
+		const [ports, neighbor, system] = results;
 
-		const [ports, neighbor] = results;
+		if (ports.status != 'fulfilled' || neighbor.status != 'fulfilled' || system.status != 'fulfilled') return Logs.error('Embrionix API request failed', [ports, neighbor, system]);
 
-		if (ports.status != 'fulfilled' || neighbor.status != 'fulfilled') return;
-	
 		if (ports.value.error) {
 			Logs.warn('Error in Embrionix API request', ports.value.error);
-			return;
 		}
 		if (neighbor.value.error) {
 			Logs.warn('Error in Embrionix API request', neighbor.value.error);
+		}
+		if (system.value.error) {
+			Logs.warn('Error in Embrionix API request', neighbor.value.error);
+		}
+
+		if(ports.value.error || neighbor.value.error || system.value.error) {
+			if(data.embrionix && data.embrionix[device.name] === undefined) {
+				data.embrionix[device.name] = {
+					'error': 'No data received from Embrionix device',
+					'description': device.description,
+					'group': device.group,
+				};
+			} else {
+				data.embrionix[device.name].error = 'No data received from Embrionix device';
+				data.embrionix[device.name].description = device.description;
+				data.embrionix[device.name].group = device.group;
+			}
+			distributeData('embrionix', data.embrionix);
 			return;
+		} else {
+			if(data.embrionix && data.embrionix[device.name] && data.embrionix[device.name].error) {
+				delete data.embrionix[device.name].error;
+			}
+
 		}
 
 		if (ports.value == undefined) {
@@ -1670,6 +1691,7 @@ async function checkEmbrionix() {
 			Logs.warn('Embrionix response is empty');
 			return;
 		}
+		
 
 		const lldp = neighbor.value.neighbor;
 
@@ -1681,15 +1703,15 @@ async function checkEmbrionix() {
 		red.ip = device.redIP;
 		red.switchPort = data.interfaces['Media']['Media A'][device.switchport];
 		const redPortMatch = device.switchport.toLowerCase() == red.port.toLowerCase();
-		const redPhysicalMatch = data.interfaces['Media']['Media A']["Ethernet8/2/1"].physicalAddress == red.chassis;
+		const redPhysicalMatch = (red.switchPort.physicalAddress == red.chassis) && (device.switchport == red.port) && (red.switchPort.description.replace(/_A$/, '') == device.name);
 		
 		blue.txPowerdB = mwTodBw(blue.tx_power);
 		blue.rxPowerdB = mwTodBw(blue.rx_power);
 		blue.ip = device.blueIP;
 		blue.switchPort = data.interfaces['Media']['Media B'][device.switchport];
 		const bluePortMatch = device.switchport.toLowerCase() == blue.port.toLowerCase();
-		const bluePhysicalMatch = data.interfaces['Media']['Media B']["Ethernet8/2/1"].physicalAddress == blue.chassis;
-	
+		const bluePhysicalMatch = (blue.switchPort.physicalAddress == blue.chassis) && (device.switchport == blue.port) && (blue.switchPort.description.replace(/_B$/, '') == device.name);
+
 		if (data.embrionix == undefined) data.embrionix = {};
 		if (data.embrionix[device.name] == undefined) {
 			data.embrionix[device.name] = {
@@ -1701,6 +1723,7 @@ async function checkEmbrionix() {
 				'bluePhysicalMatch': bluePhysicalMatch,
 				'description': device.description,
 				'group': device.group,
+				'temperature': system.value.core_temp,
 			}
 		} else {
 			data.embrionix[device.name].red = red;
@@ -1713,6 +1736,8 @@ async function checkEmbrionix() {
 
 			data.embrionix[device.name].description = device.description;
 			data.embrionix[device.name].group = device.group;
+
+			data.embrionix[device.name].temperature = system.value.core_temp;
 		};
 
 		Logs.debug('Sending Embrionix Data to Frontend');
@@ -1791,7 +1816,7 @@ async function doApi(request, Switch) {
 		default:
 			break;
 	}
-	Logs.debug(`Polling switch API endpoint ${protocol}://${ip}/${endPoint} for ${request} data`);
+	Logs.info(`Polling switch API endpoint ${protocol}://${ip}/${endPoint} for ${request} data`);
 
 	try {		
 		const response = await fetch(`${protocol}://${ip}/${endPoint}`, options);

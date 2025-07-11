@@ -419,17 +419,27 @@ div.jsoneditor-tree {
   padding: 0.5rem 1rem;
   font-size: 110%;
   font-weight: bold;
+  text-align: center;
 }
 .emCont {
   background: rgb(49, 61, 72);
   display: grid;
   place-items: center;
-  grid-template-areas: "head         head         " "red blue" "redport        blueport       " "redip        blueip       " "switch switch" "fibRedSwitch fibBlueSwitch" "self self" "fibRedEm     fibBlueEm    ";
+  grid-template-areas:
+    "head         head         "
+    "red blue"
+    "port port"
+    "redip        blueip       "
+    "switch switch"
+    "fibRedSwitch fibBlueSwitch"
+    "self self"
+    "fibRedEm     fibBlueEm    ";
   grid-template-columns: 1fr 1fr;
   width: fit-content;
   border-radius: 10px;
   overflow: hidden;
   color: white;
+  position: relative;
 }
 
 .embrionixGroup:before {
@@ -486,8 +496,8 @@ div.jsoneditor-tree {
 
 .emRedIP{grid-area:redip;}
 .emBlueIP{grid-area:blueip;}
-.emRedPort{grid-area:redport;}
-.emBluePort{grid-area:blueport;}
+.emRedPort{/* grid-area:redport; */}
+.emBluePort{/* grid-area:blueport; */}
 .emRedFibSw{grid-area:fibRedSwitch;}
 .emBlueFibSw{grid-area:fibBlueSwitch;}
 .emRedFibEm{grid-area:fibRedEm;}
@@ -507,4 +517,42 @@ div.jsoneditor-tree {
   grid-row: 2/9;
   height: 100%;
   width: 100%;
+}
+
+.sameSwitch {
+    text-decoration: line-through;
+    background-color: rgba(var(--bs-danger-rgb),var(--bs-bg-opacity)) !important;
+}
+
+.emPortRow {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    /* gap: 0.3em; */
+    grid-area: port;
+}
+.cross-arrow {
+    font-size: 1.5em;
+    color: #d9534f;
+    text-align: center;
+    user-select: none;
+    pointer-events: none;
+    line-height: 1;
+}
+
+.emError {
+    grid-template-areas:
+        "head head"
+        "error error" !important;
+}
+
+.emErrorMessage {
+    grid-area: error;
+    margin: 0.5rem;
+}
+
+.emTemp {
+    position: absolute;
+    top: 0.2rem;
+    right: 0.5rem;
 }
