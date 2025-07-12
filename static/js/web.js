@@ -1074,25 +1074,34 @@ function handleEmbrionix(data, type) {
 	if(data == undefined) return;
 	const table = `[data-type="${type}"] table[data-catagory="embrionix"]`;
 	const _table = document.querySelector(table);
-	_table.replaceChildren();
 
 	// Generate a list of groups from those present in the data
 	const groups = [...new Set(Object.values(data).map(d=>d.group))];
 	const groupEls = {};
 	// Loop through the groups and create a tbody for each
 	groups.forEach(group => {
-		const _tbody = document.createElement('tbody');
-		_tbody.classList.add('embrionixGroup');
-		_tbody.setAttribute('data-group', group);
-		groupEls[group] = _tbody;
-		_table.append(_tbody);
+		const _group = _table.querySelector(`.embrionixGroup[data-group="${group}"]`);
+		if (!_group) {
+			const _tbody = document.createElement('tbody');
+			_tbody.classList.add('embrionixGroup');
+			_tbody.setAttribute('data-group', group);
+			groupEls[group] = _tbody;
+			_table.append(_tbody);
+		} else {
+			groupEls[group] = _group;
+		}
 	})
 
 	for (const deviceName in data) {
 		const device = data[deviceName];
 
-		if(device.error) {
-			const html = `<div class="emCont emError" id='${deviceName}'>
+		const _emb = _table.querySelector(`#emb_${deviceName}.emCont`);
+
+		if (device.error) {
+			if (_emb) {
+				_emb.remove();
+			}
+			const html = `<div class="emCont emError" id='emb_${deviceName}'>
 				<div class="emHead">
 					<div class="emName">${deviceName}</div>
 					<div class="emDesc">${device.description}</div>
@@ -1106,12 +1115,21 @@ function handleEmbrionix(data, type) {
 			}
 			continue;
 		}
+		const redIPMatch = device.red.ip == device.redIP;
+		const blueIPMatch = device.blue.ip == device.blueIP;
 
-		const redIPColour = device.redMatch ? 'isValid' : '';
-		const blueIPColour = device.blueMatch ? 'isValid' : '';
+		const redIPColour = redIPMatch ? 'isValid' : '';
+		const blueIPColour = blueIPMatch ? 'isValid' : '';
 
-		const redPortColor = device.redPhysicalMatch ? 'isValid' : '';
-		const bluePortColor = device.bluePhysicalMatch ? 'isValid' : '';
+		let redPortColor = '';
+		if (device.red.switchPort.connected && device.redPhysicalMatch) {
+			redPortColor = 'isValid';
+		}
+
+		let bluePortColor = '';
+		if (device.blue.switchPort.connected && device.bluePhysicalMatch) {
+			bluePortColor = 'isValid';
+		}
 
 		const redRxSw = device.red.switchPort?.rxPower ? device.red.switchPort.rxPower[0] : '0';
 		const redRxEm = device.red.rxPowerdB? device.red.rxPowerdB : '0';
@@ -1123,38 +1141,77 @@ function handleEmbrionix(data, type) {
 		const blueSameSwitch = (device.blue.switchPort.physicalAddress == device.blue.chassis) ? '' : 'sameSwitch';
 
 		// If the ports are crossed, add the crossed arrow
-		const crossed = (device.red.switchPort.physicalAddress == device.red.chassis) && (device.blue.switchPort.physicalAddress == device.blue.chassis) ? '' : '&#8596;';
 
-		const html = `<div class="emCont" id='${deviceName}'>
-			<div class="emHead">
-				<div class="emName">${deviceName}</div>
-				<div class="emDesc">${device.description}</div>
-			</div>
-			<div class="emRedBG"></div>
-			<div class="emBlueBG"></div>
-			<div class="emRed">Red</div><div class="emBlue">Blue</div>
-			<div class="emIP ${redIPColour} emRedIP">${device.red.ip}</div>
-			<div class="emIP ${blueIPColour} emBlueIP">${device.blue.ip}</div>
-			<div class="emPortRow">
-				<div class="emPort emRedPort ${redPortColor} ${redSameSwitch}">${device.red.port}</div>
-				<div class="cross-arrow" title="Crossed">${crossed}</div>
-				<div class="emPort emBluePort ${bluePortColor} ${blueSameSwitch}">${device.blue.port}</div>
-			</div>
-			<div class="emSwitch">Switch</div>
-			<div class="fibreLevel emRedFibSw" style="--dbs: ${redRxSw}">${redRxSw}</div>
-			<div class="fibreLevel emBlueFibSw" style="--dbs: ${blueRxSw}">${blueRxSw}</div>
-			<div class="emSelf">Embrionix</div>
-			<div class="fibreLevel emRedFibEm" style="--dbs: ${redRxEm}">${redRxEm}</div>
-			<div class="fibreLevel emBlueFibEm" style="--dbs: ${blueRxEm}">${blueRxEm}</div>
-			<div class="emTemp">${device.temperature}C</div>
-		</div>`
-
-		// If the group element exists, insert the HTML into it, otherwise insert into the main table
-		if (groupEls[device.group]) {
-			groupEls[device.group].insertAdjacentHTML('beforeend', html);
+		let crossed = ''
+		if (!device.red.switchPort.connected || !device.blue.switchPort.connected) {
+			crossed = '';
+		} else if  ((device.red.switchPort.physicalAddress == device.red.chassis) && (device.blue.switchPort.physicalAddress == device.blue.chassis)) {
+			crossed = '';
 		} else {
-			_table.insertAdjacentHTML('beforeend', html);
+			crossed = '&#8596;';
 		}
+		if (_emb) {
+			// If the element already exists, update its content
+			_emb.querySelector('.emName').textContent = deviceName;
+			_emb.querySelector('.emDesc').textContent = device.description;
+			const _emRedIP = _emb.querySelector('.emRedIP');
+			const _emBlueIP = _emb.querySelector('.emBlueIP')
+			_emRedIP.textContent = device.red.ip;
+			_emBlueIP.textContent = device.blue.ip;
+			_emRedIP.className = `emIP ${redIPColour} emRedIP`;
+			_emBlueIP.className = `emIP ${blueIPColour} emBlueIP`;
+
+			const _emRedPort = _emb.querySelector('.emRedPort');
+			const _emBluePort = _emb.querySelector('.emBluePort');
+			_emRedPort.textContent = device.red.port || '-';
+			_emBluePort.textContent = device.blue.port || '-';
+			_emRedPort.className = `emPort emRedPort ${redPortColor} ${redSameSwitch}`;
+			_emBluePort.className = `emPort emBluePort ${bluePortColor} ${blueSameSwitch}`;
+
+			_emb.querySelector('.fibreLevel.emRedFibSw').textContent = redRxSw;
+			_emb.querySelector('.fibreLevel.emRedFibSw').style.setProperty('--dbs', redRxSw);
+			_emb.querySelector('.fibreLevel.emBlueFibSw').textContent = blueRxSw;
+			_emb.querySelector('.fibreLevel.emBlueFibSw').style.setProperty('--dbs', blueRxSw);
+			_emb.querySelector('.fibreLevel.emRedFibEm').textContent = redRxEm;
+			_emb.querySelector('.fibreLevel.emRedFibEm').style.setProperty('--dbs', redRxEm);
+			_emb.querySelector('.fibreLevel.emBlueFibEm').textContent = blueRxEm;
+			_emb.querySelector('.fibreLevel.emBlueFibEm').style.setProperty('--dbs', blueRxEm);
+			_emb.querySelector('.emTemp').textContent = `${device.temperature}C`;
+			_emb.querySelector('.cross-arrow').textContent = crossed;
+		} else {
+			// If the element does not exist, create it
+			const html = `<div class="emCont" id='emb_${deviceName}'>
+				<div class="emHead">
+					<div class="emName">${deviceName}</div>
+					<div class="emDesc">${device.description}</div>
+				</div>
+				<div class="emRedBG"></div>
+				<div class="emBlueBG"></div>
+				<div class="emRed">Red</div><div class="emBlue">Blue</div>
+				<div class="emIP ${redIPColour} emRedIP">${device.red.ip}</div>
+				<div class="emIP ${blueIPColour} emBlueIP">${device.blue.ip}</div>
+				<div class="emPortRow">
+					<div class="emPort emRedPort ${redPortColor} ${redSameSwitch}">${device.red.port || "-"}</div>
+					<div class="cross-arrow" title="Crossed">${crossed}</div>
+					<div class="emPort emBluePort ${bluePortColor} ${blueSameSwitch}">${device.blue.port || "-"}</div>
+				</div>
+				<div class="emSwitch">Switch</div>
+				<div class="fibreLevel emRedFibSw" style="--dbs: ${redRxSw}">${redRxSw}</div>
+				<div class="fibreLevel emBlueFibSw" style="--dbs: ${blueRxSw}">${blueRxSw}</div>
+				<div class="emSelf">Embrionix</div>
+				<div class="fibreLevel emRedFibEm" style="--dbs: ${redRxEm}">${redRxEm}</div>
+				<div class="fibreLevel emBlueFibEm" style="--dbs: ${blueRxEm}">${blueRxEm}</div>
+				<div class="emTemp">${device.temperature}C</div>
+			</div>`
+	
+			// If the group element exists, insert the HTML into it, otherwise insert into the main table
+			if (groupEls[device.group]) {
+				groupEls[device.group].insertAdjacentHTML('beforeend', html);
+			} else {
+				_table.insertAdjacentHTML('beforeend', html);
+			}
+		}
+
 	}
 }
 

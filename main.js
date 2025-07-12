@@ -1645,12 +1645,20 @@ async function checkEmbrionix() {
 				Logs.info(`Error connecting to Embrionix device at ${device.blueIP}: ${error}`);
 			});
 		});
+		const interfacesRequest = new Promise(resolve => {
+			doEmbrionixApi('self/interfaces', device.redIP).then(response => resolve(response)).catch(error => {
+				Logs.info(`Error connecting to Embrionix device at ${device.redIP}: ${error}`);
+			});
+			doEmbrionixApi('self/interfaces', device.blueIP).then(response => resolve(response)).catch(error => {
+				Logs.info(`Error connecting to Embrionix device at ${device.blueIP}: ${error}`);
+			});
+		});
 
-		const results = await Promise.allSettled([portRequest, lldpRequest, systemRequest]);
+		const results = await Promise.allSettled([portRequest, lldpRequest, systemRequest, interfacesRequest]);
 
-		const [ports, neighbor, system] = results;
+		const [ports, neighbor, system, interfaces] = results;
 
-		if (ports.status != 'fulfilled' || neighbor.status != 'fulfilled' || system.status != 'fulfilled') return Logs.error('Embrionix API request failed', [ports, neighbor, system]);
+		if (ports.status != 'fulfilled' || neighbor.status != 'fulfilled' || system.status != 'fulfilled' || interfaces.status != 'fulfilled') return Logs.error('Embrionix API request failed', [ports, neighbor, system, interfaces]);
 
 		if (ports.value.error) {
 			Logs.warn('Error in Embrionix API request', ports.value.error);
@@ -1659,10 +1667,22 @@ async function checkEmbrionix() {
 			Logs.warn('Error in Embrionix API request', neighbor.value.error);
 		}
 		if (system.value.error) {
-			Logs.warn('Error in Embrionix API request', neighbor.value.error);
+			Logs.warn('Error in Embrionix API request', system.value.error);
+		}
+		if (interfaces.value.error) {
+			Logs.warn('Error in Embrionix API request', interfaces.value.error);
 		}
 
-		if(ports.value.error || neighbor.value.error || system.value.error) {
+		if (
+			ports.value.error ||
+			neighbor.value.error ||
+			system.value.error ||
+			interfaces.value.error ||
+			ports.value == undefined ||
+			neighbor.value == undefined ||
+			system.value == undefined ||
+			interfaces.value == undefined
+		) {
 			if(data.embrionix && data.embrionix[device.name] === undefined) {
 				data.embrionix[device.name] = {
 					'error': 'No data received from Embrionix device',
@@ -1683,16 +1703,6 @@ async function checkEmbrionix() {
 
 		}
 
-		if (ports.value == undefined) {
-			Logs.warn('Embrionix response is empty');
-			return;
-		}
-		if (neighbor.value == undefined) {
-			Logs.warn('Embrionix response is empty');
-			return;
-		}
-		
-
 		const lldp = neighbor.value.neighbor;
 
 		const red = {...ports.value.ports[2], ...lldp[0]};
@@ -1700,44 +1710,48 @@ async function checkEmbrionix() {
 		
 		red.txPowerdB = mwTodBw(red.tx_power);
 		red.rxPowerdB = mwTodBw(red.rx_power);
-		red.ip = device.redIP;
+		red.ip = interfaces.value['e1'].current_ip.split('/')[0];
 		red.switchPort = data.interfaces['Media']['Media A'][device.switchport];
 		const redPortMatch = device.switchport.toLowerCase() == red.port.toLowerCase();
-		const redPhysicalMatch = (red.switchPort.physicalAddress == red.chassis) && (device.switchport == red.port) && (red.switchPort.description.replace(/_A$/, '') == device.name);
-		
+		const redPhysicalMatch = (red.switchPort.physicalAddress == red.chassis) && (device.switchport.toLowerCase() == red.port.toLowerCase()) && (red.switchPort.description.replace(/_A$/, '').toLowerCase() == device.name.toLowerCase());
+
 		blue.txPowerdB = mwTodBw(blue.tx_power);
 		blue.rxPowerdB = mwTodBw(blue.rx_power);
-		blue.ip = device.blueIP;
+		blue.ip = interfaces.value['e2'].current_ip.split('/')[0];
 		blue.switchPort = data.interfaces['Media']['Media B'][device.switchport];
 		const bluePortMatch = device.switchport.toLowerCase() == blue.port.toLowerCase();
-		const bluePhysicalMatch = (blue.switchPort.physicalAddress == blue.chassis) && (device.switchport == blue.port) && (blue.switchPort.description.replace(/_B$/, '') == device.name);
+		const bluePhysicalMatch = (blue.switchPort.physicalAddress == blue.chassis) && (device.switchport.toLowerCase() == blue.port.toLowerCase()) && (blue.switchPort.description.replace(/_B$/, '').toLowerCase() == device.name.toLowerCase());
 
 		if (data.embrionix == undefined) data.embrionix = {};
 		if (data.embrionix[device.name] == undefined) {
 			data.embrionix[device.name] = {
 				'red': red,
 				'blue': blue,
-				'redMatch': redPortMatch,
-				'blueMatch': bluePortMatch,
+				'redPortMatch': redPortMatch,
+				'bluePortMatch': bluePortMatch,
 				'redPhysicalMatch': redPhysicalMatch,
 				'bluePhysicalMatch': bluePhysicalMatch,
 				'description': device.description,
 				'group': device.group,
 				'temperature': system.value.core_temp,
+				'redIP': device.redIP,
+				'blueIP': device.blueIP
 			}
 		} else {
 			data.embrionix[device.name].red = red;
-			data.embrionix[device.name].redMatch = redPortMatch;
+			data.embrionix[device.name].redPortMatch = redPortMatch;
 			data.embrionix[device.name].redPhysicalMatch = redPhysicalMatch;
 
 			data.embrionix[device.name].blue = blue;
-			data.embrionix[device.name].blueMatch = bluePortMatch;
+			data.embrionix[device.name].bluePortMatch = bluePortMatch;
 			data.embrionix[device.name].bluePhysicalMatch = bluePhysicalMatch;
 
 			data.embrionix[device.name].description = device.description;
 			data.embrionix[device.name].group = device.group;
 
 			data.embrionix[device.name].temperature = system.value.core_temp;
+			data.embrionix[device.name].redIP = device.redIP;
+			data.embrionix[device.name].blueIP = device.blueIP;
 		};
 
 		Logs.debug('Sending Embrionix Data to Frontend');
