@@ -1451,7 +1451,13 @@ $(document).ready(function() {
 			const headers = [...new Set(editorJSON.map(v=>Object.keys(v)).flat())]
 			let csv = headers.join(',') + '\n';
 			for (let index = 0; index < editorJSON.length; index++) {
-				const values = Object.values(editorJSON[index]).map(v => v.replaceAll(',',';'));
+				const values = Object.values(editorJSON[index]).map(v => {
+					try {
+						return v.replaceAll(',',';')
+					} catch (error) {
+						return v
+					}
+				});
 				csv += values.join(',') + '\n';
 			}
 			download(`${editor}.csv`,csv);
