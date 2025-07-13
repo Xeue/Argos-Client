@@ -1448,9 +1448,11 @@ $(document).ready(function() {
 			const $table = $active.find('table');
 			const editor = $table.data('editor');
 			const editorJSON = editors[editor].get();
-			let csv = Object.keys(editorJSON[0]).join(',') + '\n';
+			const headers = [...new Set(editorJSON.map(v=>Object.keys(v)).flat())]
+			let csv = headers.join(',') + '\n';
 			for (let index = 0; index < editorJSON.length; index++) {
-				csv += Object.values(editorJSON[index]).join(',') + '\n';
+				const values = Object.values(editorJSON[index]).map(v => v.replaceAll(',',';'));
+				csv += values.join(',') + '\n';
 			}
 			download(`${editor}.csv`,csv);
 		} else if ($trg.hasClass('tableImport')) {
@@ -1468,7 +1470,7 @@ $(document).ready(function() {
 					const row = rows[index].split(',');
 					const item = {};
 					for (let i = 0; i < headers.length; i++) {
-						item[headers[i].replace('\r','')] = row[i].replace('\r','');
+						if (row[i]) item[headers[i].replaceAll('\r','')] = row[i]?.replaceAll(';',',').replaceAll('\r','');
 					}
 					newEditor.push(item);
 				}
