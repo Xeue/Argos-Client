@@ -1,5 +1,5 @@
 <article id="config" class="modal fade">
-    <section class="modal-dialog modal-xl">
+    <section class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
                 <h3 class="w-50">Config</h3>
@@ -62,9 +62,14 @@
                         <table class="table table-sm table-borderless table-striped" data-editor="devices">
                             <thead class="position-sticky top-0">
                                 <tr>
-                                    <th class="w-25">Hostname</th>
-                                    <th class="w-25">Description</th>
-                                    <th class="w-25"></th>
+                                    <th>Hostname</th>
+                                    <th>Description</th>
+                                    <th>Group</th>
+                                    <th>Device Type</th>
+                                    <th>Switch Port</th>
+                                    <th>IP Red</th>
+                                    <th>IP Blue</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody id="configDevices" data-template="devices"></tbody>
@@ -80,9 +85,9 @@
                         <table class="table table-sm table-borderless table-striped" data-editor="ups">
                             <thead class="position-sticky top-0">
                                 <tr>
-                                    <th class="w-25">Name</th>
-                                    <th class="w-25">IP</th>
-                                    <th class="w-25">
+                                    <th>Name</th>
+                                    <th>IP</th>
+                                    <th>
                                     </th>
                                 </tr>
                             </thead>
@@ -99,10 +104,10 @@
                         <table class="table table-sm table-borderless table-striped" data-editor="temps">
                             <thead class="position-sticky top-0">
                                 <tr>
-                                    <th class="w-25">Name</th>
-                                    <th class="w-25">IP</th>
-                                    <th class="w-25">Type</th>
-                                    <th class="w-25"></th>
+                                    <th>Name</th>
+                                    <th>IP</th>
+                                    <th>Type</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody id="configTemps" data-template="sensors"></tbody>
@@ -118,15 +123,15 @@
                         <table class="table table-sm table-borderless table-striped" data-editor="pings">
                             <thead class="position-sticky top-0">
                                 <tr>
-                                    <th class="">Name</th>
-                                    <th class="">IP</th>
-                                    <th class="">Group</th>
-                                    <th class="">SSH</th>
-                                    <th class="">HTTP</th>
-                                    <th class="">HTTPS</th>
-                                    <th class="">Alerts</th>
-                                    <th class="">Triple Check</th>
-                                    <th class=""></th>
+                                    <th>Name</th>
+                                    <th>IP</th>
+                                    <th>Group</th>
+                                    <th>SSH</th>
+                                    <th>HTTP</th>
+                                    <th>HTTPS</th>
+                                    <th>Alerts</th>
+                                    <th>Triple Check</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody id="configPings" data-template="pings"></tbody>
