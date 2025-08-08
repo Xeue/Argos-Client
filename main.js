@@ -1960,10 +1960,11 @@ async function doApi(request, Switch) {
 		}
 	}
 
+
 	const options = {
 		method: 'POST',
 		headers: {
-			'content-type': 'application/json-rpc',
+			'Content-Type': 'application/json-rpc',
 			'Authorization': 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64')
 		},
 		body: JSON.stringify(body[OS]),
@@ -1976,16 +1977,17 @@ async function doApi(request, Switch) {
 			break;
 		case 'NXOS':
 			endPoint = 'ins'
-			protocol = 'https';
-			options.agent = httpsAgent;
+			protocol = 'http';
+			// options.agent = httpsAgent;
 			break;
 		default:
 			break;
 	}
 	Logs.info(`Polling switch API endpoint ${protocol}://${ip}/${endPoint} for ${request} data`);
 
-	try {		
+	try {
 		const response = await fetch(`${protocol}://${ip}/${endPoint}`, options);
+		Logs.object('Response from switch', response);
 		if (response.status !== 200) throw new Error(`Error connection to server, repsonse code: ${response.status}`);
 		const jsonRpcResponse = await response.json();
 		if (jsonRpcResponse.error) {
@@ -2009,21 +2011,18 @@ function localPings() {
 	hosts.forEach(async host => {
 		const response = await ping.promise.probe(host.IP, {
 			timeout: 10,
-			extra: ['-i', '2']
 		})
 		Logs.info(`IP: ${host.IP}, Online: ${response.alive}`);
 		if (!response.alive && host.TripleCheck) {
 			await sleep(2);
 			const recheckOne = await ping.promise.probe(host.IP, {
 				timeout: 10,
-				extra: ['-i', '2']
 			})
 			if (recheckOne.alive) response.alive = true;
 			else {
 				await sleep(2);
 				const recheckTwo = await ping.promise.probe(host.IP, {
 					timeout: 10,
-					extra: ['-i', '2']
 				})
 				if (recheckTwo.alive) response.alive = true;
 			}
