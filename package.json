@@ -1,6 +1,6 @@
 {
   "name": "argos",
-  "version": "3.14.1",
+  "version": "3.15.0",
   "description": "OB/Flypack Monitoring",
   "main": "main.js",
   "type": "module",
@@ -11,10 +11,7 @@
     "electron-ejs": "^1.2.1",
     "express": "^4.18.2",
     "mica-electron": "^1.5.16",
-    "net-snmp": "^3.9.7",
-    "node-fetch": "^2.6.7",
     "ping": "^0.4.4",
-    "source-map-support": "^0.5.21",
     "ws": "^8.13.0",
     "xeue-config": "^2.2.4",
     "xeue-logs": "^2.3.1",
@@ -38,8 +35,6 @@
       "static/*",
       "**/*.js"
     ],
-
-
     "win": {
       "icon": "static/img/icon/icon.ico",
       "asarUnpack": "**/lib/*.exe",

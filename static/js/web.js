@@ -11,6 +11,8 @@ let syslogHistogram;
 let pings = {};
 let boots = {};
 
+window.pause = false;
+
 const templates = {};
 
 templates.nameIP = `<% for(i = 0; i < devices.length; i++) { %>
@@ -72,6 +74,11 @@ templates.devices = `<% for(i = 0; i < devices.length; i++) { %>
   <tr data-index="<%=i%>" data-template="devices">
     <td data-type="text" data-key="name" data-value="<%-devices[i].name%>"><%-devices[i].name%></td>
     <td data-type="text" data-key="description" data-value="<%-devices[i].description%>"><%-devices[i].description%></td>
+	<td data-type="text" data-key="group" data-value="<%-devices[i].group%>"><%-devices[i].group%></td>
+	<td data-type="select" data-key="deviceType" data-value="<%-devices[i].deviceType%>" data-options="General,Embrionix"><%-devices[i].deviceType%></td>
+	<td data-type="text" data-key="switchport" data-value="<%-devices[i].switchport%>"><%-devices[i].switchport%></td>
+	<td data-type="text" data-key="redIP" data-value="<%-devices[i].redIP%>"><%-devices[i].redIP%></td>
+	<td data-type="text" data-key="blueIP" data-value="<%-devices[i].blueIP%>"><%-devices[i].blueIP%></td>
     <td class="d-flex gap-1">
       <button type="button" class="btn btn-primary editConfig btn-sm flex-grow-1">Edit</button>
       <button type="button" class="btn btn-danger deleteRow btn-sm flex-grow-1">Delete</button>
@@ -114,6 +121,7 @@ function socketDoOpen(socket) {
 }
 
 function socketDoMessage(header, payload) {
+	if (window.pause) return;
 	switch (payload.command) {
 	case 'data':
 		if (payload.system === currentSystem) {
@@ -230,6 +238,10 @@ function socketDoMessage(header, payload) {
 		case 'interfaces_control':
 			handleInterfaces(payload.data, 'Control');
 			$('#lastInterfacesCont').attr('data-last-update', Date.now());
+			break;
+		case 'embrionix':
+			handleEmbrionix(payload.data, 'Media');
+			$('#lastEmbrionix').attr('data-last-update', Date.now());
 			break;
 		default:
 			break;
@@ -1058,6 +1070,152 @@ function handleInterfaces(data, type) {
 	lastSwitchTemperature = Date.now();
 }
 
+function handleEmbrionix(data, type) {
+	if(data == undefined) return;
+	const table = `[data-type="${type}"] table[data-catagory="embrionix"]`;
+	const _table = document.querySelector(table);
+
+	// Generate a list of groups from those present in the data
+	const groups = [...new Set(Object.values(data).map(d=>d.group))];
+	const groupEls = {};
+	// Loop through the groups and create a tbody for each
+	groups.forEach(group => {
+		const _group = _table.querySelector(`.embrionixGroup[data-group="${group}"]`);
+		if (!_group) {
+			const _tbody = document.createElement('tbody');
+			_tbody.classList.add('embrionixGroup');
+			_tbody.setAttribute('data-group', group);
+			groupEls[group] = _tbody;
+			_table.append(_tbody);
+		} else {
+			groupEls[group] = _group;
+		}
+	})
+
+	for (const deviceName in data) {
+		const device = data[deviceName];
+
+		const _emb = _table.querySelector(`#emb_${deviceName}.emCont`);
+
+		if (device.error) {
+			if (_emb) {
+				_emb.remove();
+			}
+			const html = `<div class="emCont emError" id='emb_${deviceName}'>
+				<div class="emHead">
+					<div class="emName">${deviceName}</div>
+					<div class="emDesc">${device.description}</div>
+				</div>
+				<div class="emErrorMessage">${device.error}</div>
+			</div>`;
+			if (groupEls[device.group]) {
+				groupEls[device.group].insertAdjacentHTML('beforeend', html);
+			} else {
+				_table.insertAdjacentHTML('beforeend', html);
+			}
+			continue;
+		}
+		const redIPMatch = device.red.ip == device.redIP;
+		const blueIPMatch = device.blue.ip == device.blueIP;
+
+		const redIPColour = redIPMatch ? 'isValid' : '';
+		const blueIPColour = blueIPMatch ? 'isValid' : '';
+
+		let redPortColor = '';
+		if (device.red.switchPort.connected && device.redPhysicalMatch) {
+			redPortColor = 'isValid';
+		}
+
+		let bluePortColor = '';
+		if (device.blue.switchPort.connected && device.bluePhysicalMatch) {
+			bluePortColor = 'isValid';
+		}
+
+		const redRxSw = device.red.switchPort?.rxPower ? device.red.switchPort.rxPower[0] : '0';
+		const redRxEm = device.red.rxPowerdB? device.red.rxPowerdB : '0';
+
+		const blueRxSw = device.blue.switchPort?.rxPower? device.blue.switchPort.rxPower : '0';
+		const blueRxEm = device.blue.rxPowerdB? device.blue.rxPowerdB : '0';
+
+		const redSameSwitch = (device.red.switchPort.physicalAddress == device.red.chassis) ? '' : 'sameSwitch';
+		const blueSameSwitch = (device.blue.switchPort.physicalAddress == device.blue.chassis) ? '' : 'sameSwitch';
+
+		// If the ports are crossed, add the crossed arrow
+
+		let crossed = ''
+		if (!device.red.switchPort.connected || !device.blue.switchPort.connected) {
+			crossed = '';
+		} else if  ((device.red.switchPort.physicalAddress == device.red.chassis) && (device.blue.switchPort.physicalAddress == device.blue.chassis)) {
+			crossed = '';
+		} else {
+			crossed = '&#8596;';
+		}
+		if (_emb) {
+			// If the element already exists, update its content
+			_emb.querySelector('.emName').textContent = deviceName;
+			_emb.querySelector('.emDesc').textContent = device.description;
+			const _emRedIP = _emb.querySelector('.emRedIP');
+			const _emBlueIP = _emb.querySelector('.emBlueIP')
+			_emRedIP.textContent = device.red.ip;
+			_emBlueIP.textContent = device.blue.ip;
+			_emRedIP.className = `emIP ${redIPColour} emRedIP`;
+			_emBlueIP.className = `emIP ${blueIPColour} emBlueIP`;
+
+			const _emRedPort = _emb.querySelector('.emRedPort');
+			const _emBluePort = _emb.querySelector('.emBluePort');
+			_emRedPort.textContent = device.red.port || '-';
+			_emBluePort.textContent = device.blue.port || '-';
+			_emRedPort.className = `emPort emRedPort ${redPortColor} ${redSameSwitch}`;
+			_emBluePort.className = `emPort emBluePort ${bluePortColor} ${blueSameSwitch}`;
+
+			_emb.querySelector('.fibreLevel.emRedFibSw').textContent = redRxSw;
+			_emb.querySelector('.fibreLevel.emRedFibSw').style.setProperty('--dbs', redRxSw);
+			_emb.querySelector('.fibreLevel.emBlueFibSw').textContent = blueRxSw;
+			_emb.querySelector('.fibreLevel.emBlueFibSw').style.setProperty('--dbs', blueRxSw);
+			_emb.querySelector('.fibreLevel.emRedFibEm').textContent = redRxEm;
+			_emb.querySelector('.fibreLevel.emRedFibEm').style.setProperty('--dbs', redRxEm);
+			_emb.querySelector('.fibreLevel.emBlueFibEm').textContent = blueRxEm;
+			_emb.querySelector('.fibreLevel.emBlueFibEm').style.setProperty('--dbs', blueRxEm);
+			_emb.querySelector('.emTemp').textContent = `${device.temperature}C`;
+			_emb.querySelector('.cross-arrow').textContent = crossed;
+		} else {
+			// If the element does not exist, create it
+			const html = `<div class="emCont" id='emb_${deviceName}'>
+				<div class="emHead">
+					<div class="emName">${deviceName}</div>
+					<div class="emDesc">${device.description}</div>
+				</div>
+				<div class="emRedBG"></div>
+				<div class="emBlueBG"></div>
+				<div class="emRed">Red</div><div class="emBlue">Blue</div>
+				<div class="emIP ${redIPColour} emRedIP">${device.red.ip}</div>
+				<div class="emIP ${blueIPColour} emBlueIP">${device.blue.ip}</div>
+				<div class="emPortRow">
+					<div class="emPort emRedPort ${redPortColor} ${redSameSwitch}">${device.red.port || "-"}</div>
+					<div class="cross-arrow" title="Crossed">${crossed}</div>
+					<div class="emPort emBluePort ${bluePortColor} ${blueSameSwitch}">${device.blue.port || "-"}</div>
+				</div>
+				<div class="emSwitch">Switch</div>
+				<div class="fibreLevel emRedFibSw" style="--dbs: ${redRxSw}">${redRxSw}</div>
+				<div class="fibreLevel emBlueFibSw" style="--dbs: ${blueRxSw}">${blueRxSw}</div>
+				<div class="emSelf">Embrionix</div>
+				<div class="fibreLevel emRedFibEm" style="--dbs: ${redRxEm}">${redRxEm}</div>
+				<div class="fibreLevel emBlueFibEm" style="--dbs: ${blueRxEm}">${blueRxEm}</div>
+				<div class="emTemp">${device.temperature}C</div>
+			</div>`
+	
+			// If the group element exists, insert the HTML into it, otherwise insert into the main table
+			if (groupEls[device.group]) {
+				groupEls[device.group].insertAdjacentHTML('beforeend', html);
+			} else {
+				_table.insertAdjacentHTML('beforeend', html);
+			}
+		}
+
+	}
+}
+
+
 function updateLast() {
 	$('[data-last-update]').each(function(i, element) {
 		const $element = $(element);
@@ -1290,9 +1448,17 @@ $(document).ready(function() {
 			const $table = $active.find('table');
 			const editor = $table.data('editor');
 			const editorJSON = editors[editor].get();
-			let csv = Object.keys(editorJSON[0]).join(',') + '\n';
+			const headers = [...new Set(editorJSON.map(v=>Object.keys(v)).flat())]
+			let csv = headers.join(',') + '\n';
 			for (let index = 0; index < editorJSON.length; index++) {
-				csv += Object.values(editorJSON[index]).join(',') + '\n';
+				const values = Object.values(editorJSON[index]).map(v => {
+					try {
+						return v.replaceAll(',',';')
+					} catch (error) {
+						return v
+					}
+				});
+				csv += values.join(',') + '\n';
 			}
 			download(`${editor}.csv`,csv);
 		} else if ($trg.hasClass('tableImport')) {
@@ -1310,7 +1476,7 @@ $(document).ready(function() {
 					const row = rows[index].split(',');
 					const item = {};
 					for (let i = 0; i < headers.length; i++) {
-						item[headers[i].replace('\r','')] = row[i].replace('\r','');
+						if (row[i]) item[headers[i].replaceAll('\r','')] = row[i]?.replaceAll(';',',').replaceAll('\r','');
 					}
 					newEditor.push(item);
 				}
@@ -1402,12 +1568,18 @@ $(document).ready(function() {
 		} else if ($trg.hasClass('clearPing')) {
 			$trg.closest('tr').remove();
 		} else if ($trg.is('#fullscreen')) {
-			document.getElementById('mainCont').parentElement.requestFullscreen();
+			if (document.fullscreenElement) {
+				document.exitFullscreen();
+			} else {
+				document.getElementById('mainCont').parentElement.requestFullscreen();
+			}
+		} else if ($trg.is('#refresh')) {
+			window.location.reload();
 		} else if ($trg.hasClass('chilton')) {
 			e.preventDefault();
 			const audio = new Audio('/media/CHILTON.wav');
 			audio.play();
-			setTimeout(()=>{window.location = window.location;}, 3000);
+			setTimeout(()=>{window.location.reload()}, 3000);
 		}
 	});
 
