@@ -615,26 +615,26 @@ const SyslogServer = new _SysLogServer(
 		configLoaded = true;
 	}
 
-if (Config.get('localDataBase')) {
-	SQL = new _SQL(
-		Config.get('dbHost'),
-		Config.get('dbPort'),
-		Config.get('dbUser'),
-		Config.get('dbPass'),
-		Config.get('dbName'),
-		Logs
-	);
-	await SQL.init(tables);
-	// const sensor = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'frame';");
-	// if (sensor.length == 0) {
-	// 	await SQL.query("ALTER TABLE `temperature` RENAME COLUMN frame TO sensor;");
-	// }
-	// const sensorType = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'sensorType';");
-	// if (sensorType.length == 0) {
-	// 	await SQL.query("ALTER TABLE `temperature` ADD COLUMN sensorType text NOT NULL;");
-	// 	await SQL.query("UPDATE `temperature` SET sensorType = 'IQ Frame' WHERE 1=1;");
-	// }
-}
+	if (Config.get('localDataBase')) {
+		SQL = new _SQL(
+			Config.get('dbHost'),
+			Config.get('dbPort'),
+			Config.get('dbUser'),
+			Config.get('dbPass'),
+			Config.get('dbName'),
+			Logs
+		);
+		await SQL.init(tables);
+		// const sensor = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'frame';");
+		// if (sensor.length == 0) {
+		// 	await SQL.query("ALTER TABLE `temperature` RENAME COLUMN frame TO sensor;");
+		// }
+		// const sensorType = await SQL.query("SHOW COLUMNS FROM `temperature` LIKE 'sensorType';");
+		// if (sensorType.length == 0) {
+		// 	await SQL.query("ALTER TABLE `temperature` ADD COLUMN sensorType text NOT NULL;");
+		// 	await SQL.query("UPDATE `temperature` SET sensorType = 'IQ Frame' WHERE 1=1;");
+		// }
+	}
 
 	Server.start(Config.get('port'));
 	SyslogServer.start(Config.get('syslogPort'));
@@ -646,33 +646,167 @@ if (Config.get('localDataBase')) {
 		webLogBoot();
 	});
 
-// 1 Minute ping loop
-// setInterval(() => {
-// 	connectToWebServer(true);
-// }, 60*1000);
+	// 1 Minute ping loop
+	// setInterval(() => {
+	// 	connectToWebServer(true);
+	// }, 60*1000);
 
-startLoopAfterDelay(logTemp, tempFrequency);
-startLoopAfterDelay(localPings, localPingFrequency);
-// startLoopAfterDelay(connectToWebServer, 5);
-startLoopAfterDelay(webLogPing, pingFrequency);
-startLoopAfterDelay(checkUps, upsFrequency);
-startLoopAfterDelay(lldpLoop, lldpFrequency, 'Media').then(async () => {
-	await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Media');
-	await startLoopAfterDelay(switchInterfaces, 5, 'Media', true);
-	startLoopAfterDelay(checkEmbrionix, 5); // Doesn't do switch requests, so can run immediately
-	startLoopAfterDelay(checkDevices, devicesFrequency, 'Media', true); // Doesn't do switch requests, so can run immediately
-	await startLoopAfterDelay(switchFibre, 5, 'Media');
-	await startLoopAfterDelay(switchEnv, envFrequency, 'Media');
-	await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Media');
+	startLoopAfterDelay(logTemp, tempFrequency);
+	startLoopAfterDelay(localPings, localPingFrequency);
+	// startLoopAfterDelay(connectToWebServer, 5);
+	startLoopAfterDelay(webLogPing, pingFrequency);
+	startLoopAfterDelay(checkUps, upsFrequency);
+	startLoopAfterDelay(lldpLoop, lldpFrequency, 'Media').then(async () => {
+		await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Media');
+		await startLoopAfterDelay(switchInterfaces, 5, 'Media', true);
+		startLoopAfterDelay(checkEmbrionix, 5); // Doesn't do switch requests, so can run immediately
+		startLoopAfterDelay(checkDevices, devicesFrequency, 'Media', true); // Doesn't do switch requests, so can run immediately
+		await startLoopAfterDelay(switchFibre, 5, 'Media');
+		await startLoopAfterDelay(switchEnv, envFrequency, 'Media');
+		await startLoopAfterDelay(switchFlap, switchStatsFrequency, 'Media');
+	});
+	//await startLoopAfterDelay(switchPhy, switchStatsFrequency, 'Media');
+	startLoopAfterDelay(lldpLoop, lldpFrequency, 'Control').then(async () => {
+		await startLoopAfterDelay(switchInterfaces, 5, 'Control', true);
+		await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Control');
+		startLoopAfterDelay(checkDevices, devicesFrequency, 'Control', false); // Doesn't do switch requests, so can run immediately
+		await startLoopAfterDelay(switchEnv, envFrequency, 'Control');
+		await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Control');
+	})
+})().catch(error => {
+	console.log(error);
 });
-//await startLoopAfterDelay(switchPhy, switchStatsFrequency, 'Media');
-startLoopAfterDelay(lldpLoop, lldpFrequency, 'Control').then(async () => {
-	await startLoopAfterDelay(switchInterfaces, 5, 'Control', true);
-	await startLoopAfterDelay(switchInterfaces, interfaceFrequency, 'Control');
-	startLoopAfterDelay(checkDevices, devicesFrequency, 'Control', false); // Doesn't do switch requests, so can run immediately
-	await startLoopAfterDelay(switchEnv, envFrequency, 'Control');
-	await startLoopAfterDelay(switchFibre, switchStatsFrequency, 'Control');
-})
+
+
+/* Electron */
+
+
+async function setUpApp() {
+	const tray = new Tray(path.join(__static, 'img/icon/network-96.png'));
+	tray.setContextMenu(Menu.buildFromTemplate([
+		{
+			label: 'Show App', click: function () {
+				mainWindow.show();
+			}
+		},
+		{
+			label: 'Exit', click: function () {
+				isQuiting = true;
+				app.quit();
+			}
+		}
+	]));
+
+	ipcMain.on('window', (event, message) => {
+		switch (message) {
+		case 'exit':
+			app.quit();
+			break;
+		case 'minimise':
+			mainWindow.hide();
+			break;
+		default:
+			break;
+		}
+	});
+
+	ipcMain.on('config', (event, message) => {
+		switch (message) {
+		case 'start':
+			Config.fromAPI(path.join(__data, 'config.conf'), configQuestion, configDone);
+			break;
+		case 'stop':
+			Logs.warn('Not implemeneted yet: Cancle config change');
+			break;
+		case 'show':
+			Config.print();
+			break;
+		default:
+			break;
+		}
+	});
+
+	const autoLaunch = new AutoLaunch({
+		name: 'Argos Monitoring',
+		isHidden: true,
+	});
+	autoLaunch.isEnabled().then(isEnabled => {
+		if (!isEnabled) autoLaunch.enable();
+	});
+
+	app.on('before-quit', function () {
+		isQuiting = true;
+	});
+
+	app.on('activate', async () => {
+		if (BrowserWindow.getAllWindows().length === 0) createWindow();
+	});
+
+	Logs.on('logSend', message => {
+		if (!isQuiting) mainWindow.webContents.send('log', message);
+	});
+}
+
+async function createWindow() {
+	const windowOptions = {
+		width: 1440,
+		height: 720,
+		autoHideMenuBar: true,
+		webPreferences: {
+			contextIsolation: true,
+			preload: path.resolve(__internal, 'preload.js')
+		},
+		icon: path.join(__static, 'img/icon/icon.png'),
+		show: false,
+		sensor: false,
+		titleBarStyle: 'hidden',
+		titleBarOverlay: {
+			color: '#313d48',
+			symbolColor: '#ffffff',
+			height: 49
+		}
+	}
+	
+	if (IS_WINDOWS_11) {
+		mainWindow = new MicaBrowserWindow(windowOptions);
+		mainWindow.setDarkTheme();
+		mainWindow.setMicaEffect();
+		const scale = screen.getPrimaryDisplay().scaleFactor;
+		mainWindow.setSize(1440 * scale, 720 * scale);
+	} else {
+		mainWindow = new BrowserWindow(windowOptions);
+	}
+
+	if (!app.commandLine.hasSwitch('hidden')) {
+		mainWindow.show();
+	} else {
+		mainWindow.hide();
+	}
+
+	mainWindow.on('close', function (event) {
+		if (!isQuiting) {
+			event.preventDefault();
+			mainWindow.webContents.send('requestExit');
+			event.returnValue = false;
+		}
+	});
+
+	mainWindow.on('minimize', function (event) {
+		event.preventDefault();
+		mainWindow.hide();
+	});
+
+	mainWindow.loadURL(path.resolve(__internal, 'views/app.ejs'));
+
+	await new Promise(resolve => {
+		ipcMain.on('ready', (event, ready) => {
+			if (configLoaded) {
+				mainWindow.webContents.send('loaded', `http://localhost:${Config.get('port')}`);
+			}
+			resolve();
+		});
+	});
+}
 
 function notification(title, text) {
 	new Notification({
